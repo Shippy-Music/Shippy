@@ -13,7 +13,6 @@ import java.nio.charset.StandardCharsets
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
-import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 import org.oxycblt.auxio.shippy.crew.invite.CrewInvite
 import org.oxycblt.auxio.shippy.crew.invite.CrewInviteId
@@ -162,17 +161,3 @@ object CrewRejoinRestorePolicy {
             else -> CrewRejoinRestoreDecision.RESTORE
         }
 }
-
-internal fun CrewSnapshot.toCrewState() =
-    CrewState(
-        sessionId = sessionId,
-        protocolVersion = protocolVersion,
-        term = term,
-        lastSequence = lastSequence,
-        coordinatorMemberId = coordinatorMemberId,
-        members = members,
-        queue = queue,
-        playback = playback,
-        shuffleEnabled = shuffleEnabled,
-        repeatMode = repeatMode,
-    )

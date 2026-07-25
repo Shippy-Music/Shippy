@@ -110,6 +110,21 @@ fun CrewState.toSnapshot() =
         repeatMode = repeatMode,
     )
 
+/** Restores the canonical in-memory state represented by this complete checkpoint. */
+fun CrewSnapshot.toCrewState() =
+    CrewState(
+        sessionId = sessionId,
+        protocolVersion = protocolVersion,
+        term = term,
+        lastSequence = lastSequence,
+        coordinatorMemberId = coordinatorMemberId,
+        members = members,
+        queue = queue,
+        playback = playback,
+        shuffleEnabled = shuffleEnabled,
+        repeatMode = repeatMode,
+    )
+
 fun CrewState.toElectionCheckpoint() =
     CrewElectionCheckpoint(
         sessionId = sessionId,
