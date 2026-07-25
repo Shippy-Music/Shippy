@@ -54,6 +54,15 @@ import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFramer
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlMessage
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlReassembler
 import org.oxycblt.auxio.shippy.crew.protocol.CrewSnapshotRequest
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionCodec
+import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionDecodeResult
+import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionEvent
+import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionId
+import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionPolicy
+import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionReducer
+import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionResult
+import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionState
 import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
@@ -65,6 +74,12 @@ private const val OUTBOUND_CONTROL_CAPACITY = 32
 private const val CONTROL_SEND_TIMEOUT_MS = 10_000L
 private const val CONTROL_RETRY_DELAY_MS = 20L
 private const val LIVENESS_RECONCILE_INTERVAL_MS = 1_000L
+val CREW_ALLOWED_REACTIONS: List<String> = listOf("❤️", "🔥", "😂", "😢", "✨", "👍")
+
+sealed interface CrewReactionSendResult {
+    data class Accepted(val reaction: ActiveCrewReaction) : CrewReactionSendResult
+    data object Rejected : CrewReactionSendResult
+}
 
 private enum class CrewRouteResult {
     ROUTED,
@@ -208,11 +223,23 @@ class CrewSessionEngine(
             extraBufferCapacity = 64,
             onBufferOverflow = BufferOverflow.DROP_OLDEST,
         )
+    private val reactionReducer =
+        CrewReactionReducer(
+            CrewReactionPolicy(CREW_ALLOWED_REACTIONS.toSet(), 3_000L, 250L, 32)
+        )
+    private var reactionState = CrewReactionState()
+    private val mutableReactions =
+        MutableSharedFlow<ActiveCrewReaction>(
+            extraBufferCapacity = 32,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
 
     val state: StateFlow<CrewState> = mutableState.asStateFlow()
     val peerStates: StateFlow<Map<CrewMemberId, CrewTransportState>> =
         mutablePeerStates.asStateFlow()
     val notices: SharedFlow<CrewSessionNotice> = mutableNotices.asSharedFlow()
+    val reactions: SharedFlow<ActiveCrewReaction> = mutableReactions.asSharedFlow()
+    val allowedReactions: List<String> = CREW_ALLOWED_REACTIONS
 
     init {
         require(localMemberId.protocolVersion == initialState.protocolVersion) {
@@ -511,6 +538,11 @@ class CrewSessionEngine(
         try {
             peer.transport.incoming.collect { frame ->
                 liveness.connected(peer.transport.remoteMemberId, nowMonotonicMs())
+                if (frame.channel == CrewTransportChannel.REACTION) {
+                    (CrewReactionCodec.decode(frame.copyPayload()) as? CrewReactionDecodeResult.Decoded)
+                        ?.let { handleReaction(peer.transport.remoteMemberId, it.event) }
+                    return@collect
+                }
                 if (frame.channel == CrewTransportChannel.MEDIA) {
                     val result =
                         try {
@@ -766,6 +798,66 @@ class CrewSessionEngine(
             is CrewSnapshotResult.StaleRejected -> Unit
         }
     }
+
+    private suspend fun handleReaction(
+        authenticatedMemberId: CrewMemberId,
+        event: CrewReactionEvent,
+    ) {
+        stateMutex.withLock {
+            val current = mutableState.value
+            when (val result = applyReactionLocked(event, authenticatedMemberId)) {
+                is CrewReactionResult.Rejected -> Unit
+                is CrewReactionResult.Accepted -> {
+                    reactionState = result.state
+                    mutableReactions.tryEmit(result.state.active.last())
+                    if (current.coordinatorMemberId == localMemberId) {
+                        broadcastReactionLocked(event, authenticatedMemberId)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun applyReactionLocked(
+        event: CrewReactionEvent,
+        authenticatedMemberId: CrewMemberId,
+    ) =
+        reactionReducer.apply(
+            reactionState,
+            event,
+            authenticatedMemberId,
+            mutableState.value.sessionId,
+            mutableState.value.members.map { it.id }.toSet(),
+            nowMonotonicMs(),
+            mutableState.value.coordinatorMemberId,
+            localMemberId,
+        )
+
+    suspend fun sendReaction(emoji: String): CrewReactionSendResult =
+        stateMutex.withLock {
+            if (closed.get()) return@withLock CrewReactionSendResult.Rejected
+            val current = mutableState.value
+            val event = CrewReactionEvent(
+                current.sessionId,
+                localMemberId,
+                CrewReactionId(UUID.randomUUID().toString()),
+                emoji,
+            )
+            when (val result = applyReactionLocked(event, localMemberId)) {
+                is CrewReactionResult.Rejected -> CrewReactionSendResult.Rejected
+                is CrewReactionResult.Accepted -> {
+                    reactionState = result.state
+                    val accepted = result.state.active.last()
+                    mutableReactions.tryEmit(accepted)
+                    if (current.coordinatorMemberId == localMemberId) {
+                        broadcastReactionLocked(event)
+                    } else {
+                        sendReactionLocked(current.coordinatorMemberId, event)
+                    }
+                    CrewReactionSendResult.Accepted(accepted)
+                }
+            }
+        }
 
     private suspend fun handleElectionVoteLocked(
         authenticatedMemberId: CrewMemberId,
@@ -1191,5 +1283,24 @@ class CrewSessionEngine(
         electionVotes.reset()
         livenessJob = null
         scope.cancel()
+    }
+
+    private fun broadcastReactionLocked(
+        event: CrewReactionEvent,
+        exceptMemberId: CrewMemberId? = null,
+    ) {
+        peers.keys.filter { it != exceptMemberId }.forEach { sendReactionLocked(it, event) }
+    }
+
+    private fun sendReactionLocked(memberId: CrewMemberId, event: CrewReactionEvent) {
+        val peer = peers[memberId] ?: return
+        val payload = runCatching { CrewReactionCodec.encode(event) }.getOrNull() ?: return
+        // Intentionally lossy: a reaction never detaches a peer or changes durable state.
+        peer.transport.trySend(
+            org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame(
+                CrewTransportChannel.REACTION,
+                payload,
+            )
+        )
     }
 }

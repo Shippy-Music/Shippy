@@ -626,6 +626,15 @@ state: the exact owned session constructs an issuer-bound request and delegates
 to `CrewSessionEngine`, while generation checks reject results from a session
 that ended or changed during suspension.
 
+Transient reactions use the dedicated lossy reaction channel and never enter
+the durable reducer, checkpoint, or replay log. The session engine validates a
+bounded versioned payload against the active session and membership, applies
+receiver-local expiry/rate limits, and emits accepted reactions through one
+ephemeral flow. In the current coordinator-centred topology, a joiner sends to
+the coordinator and the coordinator fans the authenticated original member's
+reaction to the other peers. `ActiveCrewRuntime` generation-checks the send
+surface and forwards only reactions from its exact owned session.
+
 The Crew fragment observes this owner through a thin Hilt ViewModel and never
 constructs or retains network/session resources. Its current production surface
 supports LAN host, pasted-link join, live canonical membership, host invite

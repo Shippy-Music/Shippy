@@ -177,6 +177,8 @@ code/test level, ready for later device verification.
 - [x] Implement bounded persistent active-session checkpoint format, Room store,
       encrypted rejoin credential lease, and restore orchestration seam.
 - [x] Implement ephemeral reactions.
+  - Bounded lossy codec, authenticated coordinator fan-out, active-runtime
+    gateway, compact Now Playing picker, and floating presentation are connected.
 
 **Validation:**
 

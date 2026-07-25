@@ -380,6 +380,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   same short-lived link. Joiners can scan QR-only camera input or use the
   existing pasted-link fallback; hidden/dismissed UI releases the bearer link
   listener and generated bitmap.
+- Crew reactions now cross the dedicated lossy channel with bounded decoding,
+  active-member authentication, coordinator fan-out, deduplication, rate
+  limiting, and receiver-local expiry. The active runtime exposes no transport,
+  and Now Playing shows a compact picker plus short floating emoji animation.
 
 ## In Progress
 
@@ -393,7 +397,7 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Hosted signaling and remaining transport lifecycle.
 - Transport migration after a reconnect.
 - Connecting Crew request scheduling and rolling prefetch to the active media
-  runtime, then adding reactions to the visible player/Crew flow.
+  runtime.
 
 ## Not Started
 
@@ -436,11 +440,12 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Add live Crew reactions to the active runtime and player surface.
-2. Connect the active Crew runtime to Push & Pull requests, suppliers, rolling
+1. Connect the active Crew runtime to Push & Pull requests, suppliers, rolling
    prefetch, cache overlays, the resolver, and the player.
-3. Complete unmanaged download-folder indexing, then wire secure rejoin and
+2. Complete unmanaged download-folder indexing, then wire secure rejoin and
    hosted signaling.
+3. Finish the remaining player/audio/widget action surfaces before relay
+   hardening.
 
 ## Verification Ledger
 

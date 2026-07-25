@@ -21,6 +21,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -44,6 +45,8 @@ import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
+import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewWebRtcRuntime
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
@@ -101,6 +104,8 @@ class CrewLanHostSession internal constructor(
     private var ended = false
 
     val state: StateFlow<CrewState> = engine.state
+    val reactions: SharedFlow<ActiveCrewReaction> = engine.reactions
+    val allowedReactions: List<String> = engine.allowedReactions
 
     override fun toString() = "CrewLanHostSession(identity=redacted, inviteLink=redacted)"
 
@@ -113,6 +118,8 @@ class CrewLanHostSession internal constructor(
                 action = action,
             ),
         )
+
+    suspend fun sendReaction(emoji: String): CrewReactionSendResult = engine.sendReaction(emoji)
 
     /** Releases live network/runtime resources but retains recovery persistence. */
     override fun close() {

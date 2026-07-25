@@ -27,19 +27,27 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.Toolbar
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlin.math.abs
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
 import org.oxycblt.auxio.detail.DetailViewModel
@@ -56,6 +64,9 @@ import org.oxycblt.auxio.playback.ui.swiper.CoverPagerAdapter
 import org.oxycblt.auxio.playback.ui.swiper.UserAwarePagerCallback
 import org.oxycblt.auxio.shippy.lyrics.PlainLyrics
 import org.oxycblt.auxio.shippy.lyrics.SyncedLyrics
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerMode
 import org.oxycblt.auxio.shippy.domain.Track
@@ -87,6 +98,7 @@ class PlaybackPanelFragment :
     StyledSeekBar.Listener,
     StepperOverlay.Listener {
     @Inject lateinit var sleepTimerController: SleepTimerController
+    @Inject lateinit var activeCrewRuntime: ActiveCrewRuntime
     private val coverPagerAdapter = CoverPagerAdapter(this)
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
@@ -98,6 +110,7 @@ class PlaybackPanelFragment :
     private var currentPagerPosition = 0
     private var renderedLyricsState: PlaybackLyricsState = PlaybackLyricsState.None
     private var renderedLyricsLineIndex = Int.MIN_VALUE
+    private val reactionViews = mutableSetOf<View>()
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -214,6 +227,12 @@ class PlaybackPanelFragment :
         collectImmediately(playbackModel.pagerQueue, ::updatePager)
         collectImmediately(playerActionsModel.state, ::updateActions)
         collectImmediately(playbackModel.lyrics, playbackModel.positionDs, ::updateLyrics)
+        collectImmediately(activeCrewRuntime.state, ::updateCrewActions)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                activeCrewRuntime.reactions.collect(::showCrewReaction)
+            }
+        }
     }
 
     // FIXME: Old code!! Maybe not necessary anymore?
@@ -262,9 +281,18 @@ class PlaybackPanelFragment :
         binding.playbackPager?.adapter = null
         renderedLyricsState = PlaybackLyricsState.None
         renderedLyricsLineIndex = Int.MIN_VALUE
+        reactionViews.toList().forEach { reaction ->
+            reaction.animate().cancel()
+            (reaction.parent as? ViewGroup)?.removeView(reaction)
+        }
+        reactionViews.clear()
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_crew_react) {
+            showReactionPicker()
+            return true
+        }
         if (item.itemId == R.id.action_sleep_timer) {
             showSleepTimerDialog()
             return true
@@ -290,6 +318,75 @@ class PlaybackPanelFragment :
         }
 
         return false
+    }
+
+    private fun updateCrewActions(state: ActiveCrewRuntimeState) {
+        requireBinding()
+            .playbackToolbar
+            .menu
+            .findItem(R.id.action_crew_react)
+            ?.isVisible = state is ActiveCrewRuntimeState.Active
+    }
+
+    private fun showReactionPicker() {
+        val reactions = activeCrewRuntime.allowedReactions
+        if (reactions.isEmpty()) return
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.ttl_react_to_crew)
+            .setItems(reactions.toTypedArray()) { _, index ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    activeCrewRuntime.sendReaction(reactions[index])
+                }
+            }
+            .setNegativeButton(R.string.lbl_cancel, null)
+            .show()
+    }
+
+    private fun showCrewReaction(reaction: ActiveCrewReaction) {
+        val root = requireBinding().root
+        val density = resources.displayMetrics.density
+        val reactionView =
+            android.widget.TextView(requireContext()).apply {
+                text = reaction.event.emoji
+                textSize = 42f
+                alpha = 0f
+                scaleX = 0.82f
+                scaleY = 0.82f
+                translationX =
+                    (Math.floorMod(reaction.event.id.value.hashCode(), 81) - 40) * density
+            }
+        root.addView(
+            reactionView,
+            ConstraintLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                startToStart = ConstraintSet.PARENT_ID
+                endToEnd = ConstraintSet.PARENT_ID
+                bottomToBottom = ConstraintSet.PARENT_ID
+                bottomMargin = (112 * density).toInt()
+            },
+        )
+        reactionViews += reactionView
+        reactionView
+            .animate()
+            .alpha(1f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(120L)
+            .withEndAction {
+                reactionView
+                    .animate()
+                    .translationY(-180 * density)
+                    .alpha(0f)
+                    .setDuration(1_300L)
+                    .withEndAction {
+                        root.removeView(reactionView)
+                        reactionViews -= reactionView
+                    }
+                    .start()
+            }
+            .start()
     }
 
     override fun onSeekConfirmed(positionDs: Long) {

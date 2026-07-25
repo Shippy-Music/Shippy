@@ -15,6 +15,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -45,6 +46,8 @@ import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
+import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewWebRtcRuntime
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
@@ -100,6 +103,8 @@ class CrewLanJoinedSession internal constructor(
     private var left = false
 
     val state: StateFlow<CrewState> = engine.state
+    val reactions: SharedFlow<ActiveCrewReaction> = engine.reactions
+    val allowedReactions: List<String> = engine.allowedReactions
 
     override fun toString() = "CrewLanJoinedSession(identity=redacted, invite=redacted)"
 
@@ -112,6 +117,8 @@ class CrewLanJoinedSession internal constructor(
                 action = action,
             ),
         )
+
+    suspend fun sendReaction(emoji: String): CrewReactionSendResult = engine.sendReaction(emoji)
 
     override fun close() {
         if (!markReleased()) return

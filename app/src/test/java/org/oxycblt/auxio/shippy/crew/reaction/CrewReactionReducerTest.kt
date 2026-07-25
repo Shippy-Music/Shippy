@@ -128,6 +128,25 @@ class CrewReactionReducerTest {
         assertTrue(reducer.prune(state, emptySet(), 500).lastAcceptedAtByMember.isEmpty())
     }
 
+    @Test
+    fun `joiner accepts coordinator relay but coordinator rejects forged relay`() {
+        val coordinator = CrewMemberId("coordinator", version)
+        val allMembers = setOf(member, otherMember, coordinator)
+        assertTrue(
+            reducer.apply(
+                CrewReactionState(), event("relay", memberId = otherMember), coordinator, session,
+                allMembers, 0, coordinator, member,
+            ) is CrewReactionResult.Accepted
+        )
+        assertRejected(
+            CrewReactionRejection.SENDER_MISMATCH,
+            reducer.apply(
+                CrewReactionState(), event("forged", memberId = otherMember), member, session,
+                allMembers, 0, coordinator, coordinator,
+            ),
+        )
+    }
+
     private fun event(
         id: String,
         sessionId: CrewSessionId = session,

@@ -120,6 +120,7 @@
     <string name="lbl_start_crew">Start a Crew</string>
     <string name="lbl_join_with_link">Join with link</string>
     <string name="lbl_scan_qr_code">Scan QR code</string>
+    <string name="lbl_react">React</string>
     <!-- As in filtering to particular types of music in the search view -->
     <string name="lbl_filter">Filter</string>
     <!-- As in to not filter -->
@@ -265,6 +266,7 @@
     <string name="ttl_crew_qr_code">Join Crew</string>
     <string name="lng_crew_qr_code">Scan this code to join the Crew.</string>
     <string name="lng_scan_crew_qr_code">Point your camera at a Crew QR code.</string>
+    <string name="ttl_react_to_crew">React to Crew</string>
     <string name="lbl_end_crew">End Crew</string>
     <string name="lbl_leave_crew">Leave Crew</string>
     <string name="ttl_join_crew">Join Crew</string>

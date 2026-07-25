@@ -88,13 +88,18 @@ class CrewReactionReducer(private val policy: CrewReactionPolicy) {
         activeSessionId: CrewSessionId,
         activeMemberIds: Set<CrewMemberId>,
         nowMonotonicMs: Long,
+        currentCoordinatorMemberId: CrewMemberId = authenticatedSenderId,
+        localMemberId: CrewMemberId = authenticatedSenderId,
     ): CrewReactionResult {
         require(nowMonotonicMs >= 0) { "Reaction clock cannot be negative" }
         val current = prune(state, activeMemberIds, nowMonotonicMs)
         if (event.sessionId != activeSessionId) {
             return CrewReactionResult.Rejected(current, CrewReactionRejection.WRONG_SESSION)
         }
-        if (event.memberId != authenticatedSenderId) {
+        val publisherMayRelay =
+            localMemberId != currentCoordinatorMemberId &&
+                authenticatedSenderId == currentCoordinatorMemberId
+        if (!publisherMayRelay && event.memberId != authenticatedSenderId) {
             return CrewReactionResult.Rejected(current, CrewReactionRejection.SENDER_MISMATCH)
         }
         if (event.memberId !in activeMemberIds) {

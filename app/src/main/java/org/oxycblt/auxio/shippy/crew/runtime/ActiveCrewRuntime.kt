@@ -14,9 +14,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
@@ -26,6 +30,8 @@ import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
+import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 
 enum class ActiveCrewMode {
     HOST,
@@ -48,6 +54,14 @@ sealed interface ActiveCrewSubmitResult {
     data object SessionChanged : ActiveCrewSubmitResult
 
     data object Failed : ActiveCrewSubmitResult
+}
+
+sealed interface ActiveCrewReactionSendResult {
+    data class Accepted(val reaction: ActiveCrewReaction) : ActiveCrewReactionSendResult
+    data object Rejected : ActiveCrewReactionSendResult
+    data object NotActive : ActiveCrewReactionSendResult
+    data object SessionChanged : ActiveCrewReactionSendResult
+    data object Failed : ActiveCrewReactionSendResult
 }
 
 sealed interface ActiveCrewRuntimeFailure {
@@ -103,10 +117,16 @@ constructor(
     private val lock = Any()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutableState = MutableStateFlow<ActiveCrewRuntimeState>(ActiveCrewRuntimeState.Idle)
+    private val mutableReactions = MutableSharedFlow<ActiveCrewReaction>(extraBufferCapacity = 32)
     private var generation = 0L
     private var ownedSession: OwnedSession? = null
+    private var presentationJob: Job? = null
+    private var reactionJob: Job? = null
 
     val state: StateFlow<ActiveCrewRuntimeState> = mutableState.asStateFlow()
+    val reactions: SharedFlow<ActiveCrewReaction> = mutableReactions
+    val allowedReactions: List<String>
+        get() = synchronized(lock) { ownedSession?.allowedReactions ?: emptyList() }
 
     fun startHost(): ActiveCrewRequestResult =
         begin(ActiveCrewMode.HOST) { generation -> launchHost(generation) }
@@ -173,6 +193,34 @@ constructor(
         }
     }
 
+    suspend fun sendReaction(emoji: String): ActiveCrewReactionSendResult {
+        val request = synchronized(lock) {
+            if (mutableState.value !is ActiveCrewRuntimeState.Active) return ActiveCrewReactionSendResult.NotActive
+            val session = ownedSession ?: return ActiveCrewReactionSendResult.NotActive
+            SubmitRequest(generation, session)
+        }
+        val result =
+            try {
+                request.session.sendReaction(emoji)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                return synchronized(lock) {
+                    if (generation != request.generation || ownedSession !== request.session) {
+                        ActiveCrewReactionSendResult.SessionChanged
+                    } else ActiveCrewReactionSendResult.Failed
+                }
+            }
+        return synchronized(lock) {
+            if (generation != request.generation || ownedSession !== request.session) {
+                ActiveCrewReactionSendResult.SessionChanged
+            } else when (result) {
+                is CrewReactionSendResult.Accepted -> ActiveCrewReactionSendResult.Accepted(result.reaction)
+                CrewReactionSendResult.Rejected -> ActiveCrewReactionSendResult.Rejected
+            }
+        }
+    }
+
     fun dismissFailure() {
         synchronized(lock) {
             if (mutableState.value is ActiveCrewRuntimeState.Failed) {
@@ -228,21 +276,57 @@ constructor(
     }
 
     private suspend fun activate(generation: Long, session: OwnedSession) {
-        val activated = synchronized(lock) {
+        val claimed = synchronized(lock) {
             if (this.generation != generation || mutableState.value !is ActiveCrewRuntimeState.Starting) {
                 false
             } else {
                 ownedSession = session
-                mutableState.value = ActiveCrewRuntimeState.Active(session.presentation(session.state.value))
+                true
+            }
+        }
+        if (!claimed) {
+            session.endExplicitly()
+            return
+        }
+        val nextPresentationJob =
+            scope.launch(start = CoroutineStart.LAZY) {
+                session.state.collect { crewState ->
+                    refreshPresentation(generation, session, crewState)
+                }
+            }
+        val nextReactionJob =
+            scope.launch(start = CoroutineStart.LAZY) {
+                session.reactions.collect { reaction ->
+                    synchronized(lock) {
+                        if (this.generation == generation && ownedSession === session) {
+                            mutableReactions.tryEmit(reaction)
+                        }
+                    }
+                }
+            }
+        val activated = synchronized(lock) {
+            if (
+                this.generation != generation ||
+                    mutableState.value !is ActiveCrewRuntimeState.Starting ||
+                    ownedSession !== session
+            ) {
+                false
+            } else {
+                presentationJob?.cancel()
+                reactionJob?.cancel()
+                presentationJob = nextPresentationJob
+                reactionJob = nextReactionJob
+                nextPresentationJob.start()
+                nextReactionJob.start()
+                mutableState.value =
+                    ActiveCrewRuntimeState.Active(session.presentation(session.state.value))
                 true
             }
         }
         if (!activated) {
+            nextPresentationJob.cancel()
+            nextReactionJob.cancel()
             session.endExplicitly()
-            return
-        }
-        scope.launch {
-            session.state.collect { crewState -> refreshPresentation(generation, session, crewState) }
         }
     }
 
@@ -269,6 +353,10 @@ constructor(
         } finally {
             synchronized(lock) {
                 if (generation == request.generation && ownedSession === request.session) {
+                    presentationJob?.cancel()
+                    reactionJob?.cancel()
+                    presentationJob = null
+                    reactionJob = null
                     ownedSession = null
                     mutableState.value = ActiveCrewRuntimeState.Idle
                 }
@@ -289,10 +377,13 @@ constructor(
         val localMemberId: CrewMemberId
         val state: StateFlow<CrewState>
         val inviteLink: String?
+        val reactions: SharedFlow<ActiveCrewReaction>
+        val allowedReactions: List<String>
 
         suspend fun endExplicitly()
 
         suspend fun submit(action: CrewAction): CrewSubmitResult
+        suspend fun sendReaction(emoji: String): CrewReactionSendResult
 
         fun presentation(crewState: CrewState) =
             ActiveCrewPresentation(role, sessionId, localMemberId, crewState, inviteLink)
@@ -303,10 +394,13 @@ constructor(
             override val localMemberId = session.localMemberId
             override val state = session.state
             override val inviteLink = session.inviteLink
+            override val reactions = session.reactions
+            override val allowedReactions = session.allowedReactions
 
             override suspend fun endExplicitly() = session.end()
 
             override suspend fun submit(action: CrewAction) = session.submit(action)
+            override suspend fun sendReaction(emoji: String) = session.sendReaction(emoji)
         }
 
         class Join(private val session: CrewLanJoinedSession) : OwnedSession {
@@ -315,10 +409,13 @@ constructor(
             override val localMemberId = session.localMemberId
             override val state = session.state
             override val inviteLink: String? = null
+            override val reactions = session.reactions
+            override val allowedReactions = session.allowedReactions
 
             override suspend fun endExplicitly() = session.leave()
 
             override suspend fun submit(action: CrewAction) = session.submit(action)
+            override suspend fun sendReaction(emoji: String) = session.sendReaction(emoji)
         }
     }
 }

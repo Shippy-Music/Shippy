@@ -389,6 +389,13 @@ Reactions are rate-limited, ephemeral, not included in durable chat history, and
 not required for state convergence. Clients apply reduced-motion presentation
 locally.
 
+The implemented coordinator-centred LAN path carries a bounded binary reaction
+event on the dedicated lossy channel. The coordinator authenticates an
+originating joiner before fan-out; joiners accept relayed member identity only
+from the authenticated current coordinator. Malformed, duplicate, forged, or
+rate-limited reactions are dropped without detaching the peer or disturbing
+durable playback state.
+
 ## 15. Failure Behavior
 
 ### Supplier leaves
