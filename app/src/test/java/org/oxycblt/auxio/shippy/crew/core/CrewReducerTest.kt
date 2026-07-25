@@ -11,6 +11,7 @@
 package org.oxycblt.auxio.shippy.crew.core
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -82,7 +83,7 @@ class CrewReducerTest {
         val event = event(initial, 1, CrewAction.QueueReplaced(listOf(queueItem("one"))))
         val applied = apply(initial, event)
 
-        val result = reducer.apply(applied, event)
+        val result = reducer.apply(applied, event, applied.coordinatorMemberId)
 
         assertTrue(result is CrewEventResult.DuplicateRejected)
         assertSame(applied, (result as CrewEventResult.DuplicateRejected).state)
@@ -99,7 +100,10 @@ class CrewReducerTest {
                 term = 1,
             )
 
-        assertTrue(reducer.apply(current, stale) is CrewEventResult.StaleTermRejected)
+        assertTrue(
+            reducer.apply(current, stale, current.coordinatorMemberId) is
+                CrewEventResult.StaleTermRejected
+        )
     }
 
     @Test
@@ -110,6 +114,7 @@ class CrewReducerTest {
             reducer.apply(
                 state,
                 event(state, 2, CrewAction.QueueReplaced(listOf(queueItem("one")))),
+                state.coordinatorMemberId,
             )
 
         assertTrue(result is CrewEventResult.SnapshotRequired)
@@ -132,6 +137,7 @@ class CrewReducerTest {
             reducer.apply(
                 applied,
                 event(applied, 1, CrewAction.QueueItemRemoved(QueueItemId("one"))),
+                applied.coordinatorMemberId,
             )
 
         assertTrue(result is CrewEventResult.StaleSequenceRejected)
@@ -148,12 +154,58 @@ class CrewReducerTest {
                 term = state.term,
                 sequence = EventSequence(1),
                 id = DurableEventId("event"),
+                publisherMemberId = coordinatorId,
                 issuingMemberId = CrewMemberId("member", otherVersion),
                 clientMonotonicTimestampMs = 1,
                 action = CrewAction.QueueReplaced(emptyList()),
             )
 
-        assertTrue(reducer.apply(state, event) is CrewEventResult.Rejected)
+        assertTrue(reducer.apply(state, event, coordinatorId) is CrewEventResult.Rejected)
+    }
+
+    @Test
+    fun `member cannot forge a coordinator published event`() {
+        val state = state()
+        val forged =
+            event(
+                state,
+                sequence = 1,
+                action = CrewAction.ShuffleChanged(enabled = true),
+                publisher = coordinatorId,
+                issuer = memberId,
+            )
+
+        assertTrue(reducer.apply(state, forged, memberId) is CrewEventResult.Rejected)
+    }
+
+    @Test
+    fun `authenticated non coordinator cannot publish an event`() {
+        val state = state()
+        val event =
+            event(
+                state,
+                sequence = 1,
+                action = CrewAction.ShuffleChanged(enabled = true),
+                publisher = memberId,
+            )
+
+        assertTrue(reducer.apply(state, event, memberId) is CrewEventResult.Rejected)
+    }
+
+    @Test
+    fun `coordinator transfer is rejected when transport publisher is not current coordinator`() {
+        val state = state()
+        val forged =
+            event(
+                state,
+                sequence = 1,
+                action = CrewAction.CoordinatorTransferred(memberId),
+                term = state.term.next().value,
+                publisher = memberId,
+                issuer = coordinatorId,
+            )
+
+        assertTrue(reducer.apply(state, forged, memberId) is CrewEventResult.Rejected)
     }
 
     @Test
@@ -165,6 +217,7 @@ class CrewReducerTest {
             reducer.apply(
                 state,
                 event(state, 1, CrewAction.QueueReplaced(listOf(duplicate, duplicate))),
+                state.coordinatorMemberId,
             )
 
         assertTrue(result is CrewEventResult.Rejected)
@@ -178,6 +231,7 @@ class CrewReducerTest {
             reducer.apply(
                 state,
                 event(state, 1, CrewAction.QueueItemInserted(queueItem("one"), 1)),
+                state.coordinatorMemberId,
             )
 
         assertTrue(result is CrewEventResult.Rejected)
@@ -252,7 +306,315 @@ class CrewReducerTest {
                 term = 2,
             )
 
-        assertTrue(reducer.apply(state, event) is CrewEventResult.SnapshotRequired)
+        assertTrue(
+            reducer.apply(state, event, state.coordinatorMemberId) is CrewEventResult.SnapshotRequired
+        )
+    }
+
+    @Test
+    fun `members can join update and leave after coordinator transfer`() {
+        val newcomerId = CrewMemberId("newcomer", protocolVersion)
+        var state = state()
+
+        state =
+            apply(
+                state,
+                event(state, 1, CrewAction.MemberJoined(CrewMember(newcomerId, "Newcomer"))),
+            )
+        state =
+            apply(
+                state,
+                event(state, 2, CrewAction.MemberUpdated(CrewMember(newcomerId, "Updated name"))),
+            )
+        assertEquals("Updated name", state.members.single { it.id == newcomerId }.displayName)
+
+        val blockedCoordinatorLeave =
+            reducer.apply(
+                state,
+                event(state, 3, CrewAction.MemberLeft(coordinatorId)),
+                state.coordinatorMemberId,
+            )
+        assertTrue(blockedCoordinatorLeave is CrewEventResult.Rejected)
+
+        state =
+            apply(
+                state,
+                event(
+                    state,
+                    sequence = 1,
+                    action = CrewAction.CoordinatorTransferred(memberId),
+                    term = state.term.next().value,
+                    issuer = coordinatorId,
+                ),
+            )
+        state =
+            apply(
+                state,
+                event(
+                    state,
+                    sequence = 2,
+                    action = CrewAction.MemberLeft(coordinatorId),
+                    issuer = memberId,
+                ),
+            )
+
+        assertEquals(memberId, state.coordinatorMemberId)
+        assertFalse(state.members.any { it.id == coordinatorId })
+        assertTrue(state.members.any { it.id == newcomerId })
+    }
+
+    @Test
+    fun `equal members can synchronize shuffle and repeat`() {
+        var state = state()
+
+        state = apply(state, event(state, 1, CrewAction.ShuffleChanged(enabled = true)))
+        state = apply(state, event(state, 2, CrewAction.RepeatChanged(CrewRepeatMode.ALL)))
+
+        assertTrue(state.shuffleEnabled)
+        assertEquals(CrewRepeatMode.ALL, state.repeatMode)
+    }
+
+    @Test
+    fun `sequence gap recovers only through a newer authoritative snapshot`() {
+        val initial = state()
+        val gap = event(initial, 2, CrewAction.ShuffleChanged(enabled = true))
+        assertTrue(
+            reducer.apply(initial, gap, initial.coordinatorMemberId) is CrewEventResult.SnapshotRequired
+        )
+
+        val snapshot =
+            initial
+                .toSnapshot()
+                .copy(
+                    lastSequence = EventSequence(2),
+                    queue = listOf(queueItem("one")),
+                    playback =
+                        CrewPlaybackState(
+                            currentQueueItemId = QueueItemId("one"),
+                            mode = CrewPlaybackMode.PAUSED,
+                            positionAtEpochMs = 42,
+                            sessionEpochMs = 100,
+                        ),
+                    shuffleEnabled = true,
+                )
+        val recoveredResult =
+            reducer.applySnapshot(
+                initial,
+                snapshot,
+                initial.coordinatorMemberId,
+            )
+        assertTrue(recoveredResult is CrewSnapshotResult.Applied)
+        var recovered = (recoveredResult as CrewSnapshotResult.Applied).state
+        assertTrue(recovered.appliedEventIds.isEmpty())
+        assertEquals(EventSequence(2), recovered.lastSequence)
+        assertTrue(recovered.shuffleEnabled)
+
+        recovered = apply(recovered, event(recovered, 3, CrewAction.RepeatChanged(CrewRepeatMode.ONE)))
+        assertEquals(CrewRepeatMode.ONE, recovered.repeatMode)
+    }
+
+    @Test
+    fun `equal or unsupported snapshots are rejected`() {
+        val current = apply(state(), event(state(), 1, CrewAction.ShuffleChanged(enabled = true)))
+
+        assertTrue(
+            reducer.applySnapshot(
+                current,
+                current.toSnapshot(),
+                current.coordinatorMemberId,
+            ) is CrewSnapshotResult.StaleRejected
+        )
+        assertTrue(
+            reducer.applySnapshot(
+                current,
+                current.toSnapshot().copy(snapshotVersion = CrewSnapshotVersion(2)),
+                current.coordinatorMemberId,
+            ) is CrewSnapshotResult.Rejected
+        )
+    }
+
+    @Test
+    fun `same term snapshot must be published by the current coordinator`() {
+        val current = state()
+        val forged =
+            current
+                .toSnapshot()
+                .copy(lastSequence = EventSequence(1), publisherMemberId = memberId)
+
+        assertTrue(
+            reducer.applySnapshot(
+                current,
+                forged,
+                memberId,
+            ) is CrewSnapshotResult.Rejected
+        )
+        assertTrue(
+            reducer.applySnapshot(
+                current,
+                current.toSnapshot().copy(lastSequence = EventSequence(1)),
+                memberId,
+            ) is CrewSnapshotResult.Rejected
+        )
+        assertTrue(
+            reducer.applySnapshot(
+                current,
+                current
+                    .toSnapshot()
+                    .copy(
+                        lastSequence = EventSequence(1),
+                        coordinatorMemberId = memberId,
+                    ),
+                current.coordinatorMemberId,
+            ) is CrewSnapshotResult.Rejected
+        )
+    }
+
+    @Test
+    fun `higher term snapshot elects stable eligible winner after coordinator loss`() {
+        val newcomerId = CrewMemberId("newcomer", protocolVersion)
+        var state = state()
+        state =
+            apply(
+                state,
+                event(state, 1, CrewAction.MemberJoined(CrewMember(newcomerId, "Newcomer"))),
+            )
+        val electionVotes =
+            listOf(
+                electionVote(state, voter = memberId, candidate = memberId),
+                electionVote(state, voter = newcomerId, candidate = memberId),
+            )
+        val electedSnapshot =
+            state
+                .toSnapshot()
+                .copy(
+                    term = state.term.next(),
+                    lastSequence = EventSequence(1),
+                    publisherMemberId = memberId,
+                    coordinatorMemberId = memberId,
+                    members =
+                        listOf(
+                            CrewMember(memberId, "Member"),
+                            CrewMember(newcomerId, "Newcomer"),
+                        ),
+                )
+
+        val elected = reducer.applySnapshot(state, electedSnapshot, memberId, electionVotes)
+
+        assertTrue(elected is CrewSnapshotResult.Applied)
+        assertEquals(memberId, (elected as CrewSnapshotResult.Applied).state.coordinatorMemberId)
+
+        val forgedWinner =
+            electedSnapshot.copy(
+                publisherMemberId = newcomerId,
+                coordinatorMemberId = newcomerId,
+            )
+        assertTrue(
+            reducer.applySnapshot(state, forgedWinner, newcomerId, electionVotes) is
+                CrewSnapshotResult.Rejected
+        )
+        assertTrue(
+            reducer.applySnapshot(
+                state,
+                electedSnapshot,
+                memberId,
+                listOf(
+                    electionVote(state, voter = coordinatorId, candidate = memberId),
+                    electionVote(state, voter = memberId, candidate = memberId),
+                ),
+            ) is CrewSnapshotResult.Rejected
+        )
+        assertTrue(
+            reducer.applySnapshot(
+                state,
+                electedSnapshot.copy(
+                    publisherMemberId = newcomerId,
+                    coordinatorMemberId = newcomerId,
+                ),
+                newcomerId,
+                listOf(electionVote(state, voter = newcomerId, candidate = newcomerId)),
+            ) is CrewSnapshotResult.Rejected
+        )
+        val otherSession = CrewSessionId("other-crew", protocolVersion)
+        assertTrue(
+            reducer.applySnapshot(
+                state,
+                electedSnapshot,
+                memberId,
+                electionVotes.map {
+                    it.copy(checkpoint = it.checkpoint.copy(sessionId = otherSession))
+                },
+            ) is CrewSnapshotResult.Rejected
+        )
+    }
+
+    @Test
+    fun `two member Crew waits for coordinator or relay witness after ungraceful loss`() {
+        val current = state()
+        val survivorSnapshot =
+            current
+                .toSnapshot()
+                .copy(
+                    term = current.term.next(),
+                    lastSequence = EventSequence(1),
+                    publisherMemberId = memberId,
+                    coordinatorMemberId = memberId,
+                    members = listOf(CrewMember(memberId, "Member")),
+                )
+
+        assertTrue(
+            reducer.applySnapshot(
+                current,
+                survivorSnapshot,
+                memberId,
+                listOf(electionVote(current, voter = memberId, candidate = memberId)),
+            ) is CrewSnapshotResult.Rejected
+        )
+    }
+
+    @Test
+    fun `snapshot validation rejects an invalid authoritative state`() {
+        val current = state()
+        val duplicate = queueItem("duplicate")
+        val invalid =
+            current.toSnapshot().copy(
+                lastSequence = EventSequence(1),
+                queue = listOf(duplicate, duplicate),
+                playback = CrewPlaybackState(currentQueueItemId = duplicate.id),
+            )
+
+        assertTrue(
+            reducer.applySnapshot(
+                current,
+                invalid,
+                current.coordinatorMemberId,
+            ) is CrewSnapshotResult.Rejected
+        )
+    }
+
+    @Test
+    fun `recent event ID retention is bounded while sequence remains authoritative`() {
+        var state = state()
+
+        repeat(CrewState.MAX_APPLIED_EVENT_IDS + 1) { offset ->
+            val sequence = offset + 1L
+            state = apply(state, event(state, sequence, CrewAction.ShuffleChanged(offset % 2 == 0)))
+        }
+
+        assertEquals(CrewState.MAX_APPLIED_EVENT_IDS, state.appliedEventIds.size)
+        assertFalse(DurableEventId("event-1-1") in state.appliedEventIds)
+        assertTrue(
+            DurableEventId("event-1-${CrewState.MAX_APPLIED_EVENT_IDS + 1}") in
+                state.appliedEventIds
+        )
+        assertEquals(EventSequence((CrewState.MAX_APPLIED_EVENT_IDS + 1).toLong()), state.lastSequence)
+        assertTrue(
+            reducer.apply(
+                state,
+                event(state, 1, CrewAction.ShuffleChanged(enabled = false)),
+                state.coordinatorMemberId,
+            )
+                is CrewEventResult.StaleSequenceRejected
+        )
     }
 
     private fun state(
@@ -284,6 +646,7 @@ class CrewReducerTest {
         sequence: Long,
         action: CrewAction,
         term: Long = state.term.value,
+        publisher: CrewMemberId = state.coordinatorMemberId,
         issuer: CrewMemberId = memberId,
     ) =
         DurableCrewEvent(
@@ -292,6 +655,7 @@ class CrewReducerTest {
             term = CoordinatorTerm(term),
             sequence = EventSequence(sequence),
             id = DurableEventId("event-$term-$sequence"),
+            publisherMemberId = publisher,
             issuingMemberId = issuer,
             clientMonotonicTimestampMs = sequence,
             action = action,
@@ -301,10 +665,21 @@ class CrewReducerTest {
         state: CrewState,
         event: DurableCrewEvent,
     ): CrewState {
-        val result = reducer.apply(state, event)
+        val result = reducer.apply(state, event, state.coordinatorMemberId)
         assertTrue("Expected applied result but was $result", result is CrewEventResult.Applied)
         return (result as CrewEventResult.Applied).state
     }
+
+    private fun electionVote(
+        state: CrewState,
+        voter: CrewMemberId,
+        candidate: CrewMemberId,
+    ) =
+        CrewElectionVote(
+            voterMemberId = voter,
+            candidateMemberId = candidate,
+            checkpoint = state.toElectionCheckpoint(),
+        )
 
     private fun queueItem(id: String): QueueItem {
         val trackId = TrackId("track-$id")

@@ -31,6 +31,13 @@ enum class CrewPlaybackMode {
     ENDED,
 }
 
+/** Repeat state is session state so every Crew member advances the queue the same way. */
+enum class CrewRepeatMode {
+    OFF,
+    ALL,
+    ONE,
+}
+
 data class CrewPlaybackState(
     val currentQueueItemId: QueueItemId? = null,
     val mode: CrewPlaybackMode = CrewPlaybackMode.IDLE,
@@ -55,7 +62,16 @@ data class CrewState(
     val members: List<CrewMember>,
     val queue: List<QueueItem> = emptyList(),
     val playback: CrewPlaybackState = CrewPlaybackState(),
-    val appliedEventIds: Set<DurableEventId> = emptySet(),
+    val shuffleEnabled: Boolean = false,
+    val repeatMode: CrewRepeatMode = CrewRepeatMode.OFF,
+    /**
+     * Ordered, bounded replay protection for recently applied events.
+     *
+     * Sequence and term remain the durable source of ordering. This short cache only rejects a
+     * duplicate before it reaches action validation; snapshots can safely clear it because their
+     * last sequence is authoritative.
+     */
+    val appliedEventIds: List<DurableEventId> = emptyList(),
 ) {
     init {
         require(sessionId.protocolVersion == protocolVersion) {
@@ -74,11 +90,21 @@ data class CrewState(
         require(queue.map(QueueItem::id).distinct().size == queue.size) {
             "Queue item IDs must be unique"
         }
+        require(appliedEventIds.distinct().size == appliedEventIds.size) {
+            "Applied Crew event IDs must be unique"
+        }
+        require(appliedEventIds.size <= MAX_APPLIED_EVENT_IDS) {
+            "Applied Crew event ID retention exceeds its bound"
+        }
         require(
             playback.currentQueueItemId == null ||
                 queue.any { it.id == playback.currentQueueItemId }
         ) {
             "Current queue item must exist in the Crew queue"
         }
+    }
+
+    companion object {
+        const val MAX_APPLIED_EVENT_IDS = 512
     }
 }

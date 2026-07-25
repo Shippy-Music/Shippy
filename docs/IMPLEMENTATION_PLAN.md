@@ -133,16 +133,16 @@ code/test level, ready for later device verification.
 
 ## Stage 5 — Crew Domain And Control Plane
 
-- [ ] Implement protocol-versioned Crew domain module.
-- [ ] Implement canonical state, ordered/idempotent events, snapshots, and gaps.
+- [x] Implement protocol-versioned Crew domain module.
+- [x] Implement canonical state, ordered/idempotent events, snapshots, and gaps.
 - [ ] Implement equal member control and optimistic reconciliation.
 - [ ] Implement coordinator terms, election, handoff, and stale-message rejection.
-- [ ] Implement queue replacement from any member’s song/playlist selection.
+- [x] Implement queue replacement from any member’s song/playlist selection.
 - [ ] Implement availability summaries per member and queue item.
-- [ ] Implement monotonic session clock probes and scheduled playback decisions.
+- [x] Implement monotonic session clock probes and scheduled playback decisions.
 - [ ] Implement readiness, buffering, late join, and drift decision logic.
 - [ ] Implement membership lifecycle and persistent active-session checkpoint.
-- [ ] Implement ephemeral reactions.
+- [x] Implement ephemeral reactions.
 
 **Validation:**
 

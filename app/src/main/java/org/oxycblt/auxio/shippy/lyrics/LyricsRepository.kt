@@ -18,6 +18,7 @@ import dagger.multibindings.IntoSet
 import java.io.IOException
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -393,7 +394,7 @@ private fun tokenSimilarity(left: String, right: String): Double {
 
 private fun normalize(value: String): String =
     value
-        .lowercase()
+        .lowercase(Locale.ROOT)
         .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
         .trim()
 
@@ -443,6 +444,10 @@ abstract class LyricsModule {
     @Binds
     @IntoSet
     abstract fun lrclib(repository: LrclibLyricsRepository): LyricsSource
+
+    @Binds
+    @IntoSet
+    abstract fun musixmatchBroker(repository: MusixmatchBrokerLyricsSource): LyricsSource
 
     @Binds
     @Singleton

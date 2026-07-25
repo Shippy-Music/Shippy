@@ -16,6 +16,7 @@ import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,9 +44,9 @@ internal fun LyricsRequest.cacheKey(): LyricsCacheKey {
     return LyricsCacheKey(trackId.value, fingerprint, titleKey, artistsKey, albumKey, durationSeconds)
 }
 
-private fun normalizeLyricsIdentity(value: String): String =
+internal fun normalizeLyricsIdentity(value: String): String =
     value
-        .lowercase()
+        .lowercase(Locale.ROOT)
         .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
         .trim()
 

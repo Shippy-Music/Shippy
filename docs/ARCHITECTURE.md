@@ -338,7 +338,7 @@ concatenation, rename bugs, or stale filename records.
 Lyrics are an ordered source chain behind one repository:
 
 1. Fresh exact offline cache entry.
-2. Musixmatch through a Shippy-controlled broker when configured.
+2. Musixmatch through a configured Shippy-controlled HTTPS broker.
 3. LRCLIB exact lookup, then conservative search fallback.
 4. Stale cached lyrics when the network sources are unavailable.
 
@@ -348,6 +348,11 @@ request. The key therefore belongs in a hosted broker or another owner-controlle
 secret boundary, never in the open-source APK. The Android client sends only the
 recording identity needed for matching and accepts a normalized lyrics document;
 the broker owns provider authentication and rate-limit handling.
+
+The credential-free Android broker client is disabled until an endpoint is
+configured. It sends normalized recording identity only, validates the returned
+recording before use, and applies an endpoint-scoped bounded cooldown after
+rate limiting so LRCLIB can continue without repeatedly hitting the broker.
 
 The cache stores provider/source identity, recording metadata used to validate
 the hit, plain/synchronized payloads, instrumental state, and fetch time. A
@@ -375,12 +380,22 @@ Temporary media cache -> PlaybackResolver
 ### Pure core
 
 - Immutable/versioned state transitions
-- Event ordering/idempotency
-- Coordinator terms/election
+- Coordinator-authenticated event publication while retaining the requesting
+  member separately
+- Event ordering/idempotency and bounded replay protection
+- Versioned authenticated snapshots and majority next-term election certificates
 - Queue operations
 - Availability and supplier decisions
 - Prefetch priorities
-- Clock/drift decisions
+- Monotonic clock probes, scheduled starts, and configurable clock/drift decisions
+- Active-session reaction expiry, sender checks, rate limiting, and bounds
+
+Ungraceful election certificates contain independently authenticated votes tied
+to one exact session, term, sequence, coordinator, and membership checkpoint.
+The reducer requires a strict majority and one deterministic candidate. A
+caller-supplied reachable-member subset is not authority and cannot install a
+snapshot. Without an external relay/witness, a two-member partition favors
+safety and waits rather than allowing two coordinators.
 
 This layer has deterministic JVM tests.
 

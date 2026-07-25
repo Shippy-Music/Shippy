@@ -1,7 +1,7 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-25  
-**Current stage:** Stages 2–4 — Library completion and player integrations
+**Current stage:** Stages 2–5 — Library/player completion and Crew control plane
 **Overall state:** In progress
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
@@ -124,6 +124,22 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   and invalidates corrupt or definitively obsolete entries.
 - Musixmatch is documented as the preferred optional synchronized-lyrics source
   through a Shippy-controlled broker; no reusable credential will enter the APK.
+- A credential-free Musixmatch broker client is implemented behind an opt-in
+  validated HTTPS endpoint. It sends normalized recording identity only, runs
+  before LRCLIB, validates returned identity, and applies bounded endpoint
+  cooldown after rate limiting.
+- Crew control state now includes ordered membership changes, shared
+  shuffle/repeat, bounded replay IDs, versioned snapshots, and sequence-gap
+  recovery.
+- Durable Crew events retain the requesting member but can be installed only
+  from the authenticated current coordinator. Snapshots require authenticated
+  current-coordinator authority or a strict-majority next-term election
+  certificate tied to one persisted checkpoint.
+- Pure Crew synchronization now estimates monotonic clock offset from
+  lowest-latency probes, schedules common starts/late joins, and emits bounded
+  configurable drift corrections without hard-coded device promises.
+- Pure Crew reactions are active-session/member scoped, sender-authenticated,
+  rate-limited, bounded, and expired against receiver-local monotonic time.
 
 ## In Progress
 
@@ -137,7 +153,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Crew transport/session engine behind the new Crew destination.
+- Crew availability/readiness, persistence, transport/session engine, and active
+  UI behind the new Crew destination.
 
 ## Not Started
 
@@ -152,6 +169,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   assumed reusable as native Kotlin.
 - Crew transport must be proven with a focused spike before committing to a
   networking library.
+- Safe ungraceful election needs a strict majority. A direct two-member Crew
+  pauses after coordinator loss until reconnection; the future relay/witness
+  path must restore availability without weakening split-brain safety.
 - Room/Hilt generation, JioSaavn JSON parsing, and provider playback are
   compile/device-unverified until the owner build.
 - WorkManager/Hilt worker generation, SAF storage, and foreground download
@@ -182,8 +202,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, LRCLIB/playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer |
-| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/active-line timing, player action presentation, Crew |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions |
+| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
 | Static structure | Parsed | Graphify 276-file AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

@@ -19,6 +19,9 @@ data class DurableCrewEvent(
     val term: CoordinatorTerm,
     val sequence: EventSequence,
     val id: DurableEventId,
+    /** Coordinator/sequencer identity asserted by the event envelope. */
+    val publisherMemberId: CrewMemberId,
+    /** Member who requested or issued the collaborative action. */
     val issuingMemberId: CrewMemberId,
     val clientMonotonicTimestampMs: Long,
     val action: CrewAction,
@@ -32,6 +35,12 @@ data class DurableCrewEvent(
 }
 
 sealed interface CrewAction {
+    data class MemberJoined(val member: CrewMember) : CrewAction
+
+    data class MemberUpdated(val member: CrewMember) : CrewAction
+
+    data class MemberLeft(val memberId: CrewMemberId) : CrewAction
+
     data class QueueReplaced(val items: List<QueueItem>) : CrewAction
 
     data class QueueItemInserted(
@@ -62,6 +71,10 @@ sealed interface CrewAction {
         val positionAtEpochMs: Long,
         val sessionEpochMs: Long,
     ) : CrewAction
+
+    data class ShuffleChanged(val enabled: Boolean) : CrewAction
+
+    data class RepeatChanged(val mode: CrewRepeatMode) : CrewAction
 
     data class CoordinatorTransferred(val newCoordinatorMemberId: CrewMemberId) : CrewAction
 }

@@ -52,6 +52,7 @@
     <string name="set_key_download_destination_uri" translatable="false">shippy_download_destination_uri</string>
     <string name="set_key_download_destination_name" translatable="false">shippy_download_destination_name</string>
     <string name="set_key_download_destination_picker" translatable="false">shippy_download_destination_picker</string>
+    <string name="set_key_musixmatch_broker_endpoint" translatable="false">shippy_musixmatch_broker_endpoint</string>
 
     <string name="set_key_task_exit" translatable="false">auxio_task_exit</string>
 

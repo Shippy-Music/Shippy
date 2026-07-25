@@ -135,7 +135,8 @@ Every durable control event has:
 - Coordinator term
 - Event ID for idempotency
 - Sequence number assigned by the coordinator
-- Issuing member
+- Authenticated publishing coordinator/sequencer
+- Issuing/requesting member, retained separately from the publisher
 - Client monotonic timestamp
 - Event payload
 
@@ -163,6 +164,14 @@ Transient, unordered or separately sequenced events:
 Duplicate event IDs are ignored. Events from an old coordinator term are
 ignored. A reconnecting member requests a snapshot when a sequence gap cannot be
 filled cheaply.
+
+The reducer accepts a durable event only when its declared publisher matches the
+authenticated transport peer and that peer is the current coordinator. A newer
+snapshot likewise requires an authenticated publisher and either the current
+coordinator or a next-term certificate containing a strict majority of
+independently authenticated votes for the same base checkpoint and deterministic
+candidate. Merely claiming a coordinator ID or reachable-member subset in a
+payload is never authority.
 
 ## 7. “Tap Any Song” Behavior
 
@@ -377,8 +386,12 @@ then pause/skip with a concise explanation only when recovery fails.
 
 ### Coordinator leaves
 
-Elect/transfer coordinator, retain the last checkpoint, increment term, resume
-without duplicating queue actions.
+Graceful transfer retains the last checkpoint, increments the term, and resumes
+without duplicating queue actions. Ungraceful election requires a strict majority
+of checkpoint-bound authenticated member votes. Therefore a direct two-member
+Crew cannot safely elect after losing its coordinator: it pauses and waits for
+reconnection unless a relay/witness lease is available. This is the deliberate
+split-brain-safe tradeoff; the relay path must restore two-member availability.
 
 ### Member disconnects temporarily
 
@@ -475,4 +488,3 @@ chosen only after a focused spike proves:
 The QR is an invitation/authentication mechanism. Signaling, ICE/STUN/TURN, LAN
 discovery, and relay remain necessary implementation concerns and must not be
 collapsed into “QR contains the address.”
-
