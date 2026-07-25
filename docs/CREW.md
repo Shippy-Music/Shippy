@@ -568,6 +568,17 @@ term, and sequence must agree with the decoded snapshot. Media is not persisted
 there, and invitation/rejoin secrets still require the later Android secure
 credential boundary.
 
+The active session engine now connects these messages to authenticated peer
+transports. A member request is queued only to the current coordinator; the
+coordinator sequences it once, persists the accepted state, and broadcasts the
+event through one ordered outbound actor per active member. Receivers validate
+the transport publisher, reduce, reconcile optimistic intent, and persist.
+Sequence gaps trigger an authenticated snapshot request. Exact coordinator
+rejections roll back the matching request. Control backpressure is retried for
+a bounded time and then becomes an explicit peer failure rather than a dropped
+event. Higher-term election snapshots remain rejected until their votes have
+been collected over independently authenticated peer paths.
+
 This decision and the join/NSD adapters satisfy the architecture gate at
 source/API level only. Authenticated local signaling sockets are implemented and
 have loopback tests authored, but are not compiled or device-proven. NAT, TURN,

@@ -430,6 +430,16 @@ bounds concurrent assemblies, memory, chunk count, and lifetime before decoding.
 This permits real playlist replacement and snapshots without pretending every
 valid session fits in one WebRTC frame.
 
+`CrewSessionEngine` is the active authenticated control-plane owner. Each peer
+has one bounded outbound actor, so concurrently sequenced events remain ordered
+even when a logical message spans frames. The engine compares every embedded
+issuer/publisher/requester with the authenticated transport member, routes
+member requests only to the current coordinator, applies reducer results,
+reconciles exact optimistic intent, requests snapshots on gaps, and persists
+each accepted state. Durable-control queue overflow or send timeout detaches the
+peer explicitly; it never silently drops a state event. Raw election votes from
+one payload are not treated as independently authenticated quorum evidence.
+
 ### Transport adapters
 
 The 2026-07-25 focused spike selected:

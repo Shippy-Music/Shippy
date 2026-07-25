@@ -1,0 +1,777 @@
+/*
+ * Copyright (c) 2026 Shippy contributors
+ * CrewSessionEngine.kt is part of Shippy.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.shippy.crew.session
+
+import java.io.Closeable
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
+import org.oxycblt.auxio.shippy.crew.core.CrewEventResult
+import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewReducer
+import org.oxycblt.auxio.shippy.crew.core.CrewSnapshotResult
+import org.oxycblt.auxio.shippy.crew.core.CrewState
+import org.oxycblt.auxio.shippy.crew.core.DurableCrewEvent
+import org.oxycblt.auxio.shippy.crew.core.toSnapshot
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFrameResult
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlCodec
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFramer
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlMessage
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlReassembler
+import org.oxycblt.auxio.shippy.crew.protocol.CrewSnapshotRequest
+import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
+import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
+import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
+import org.oxycblt.auxio.shippy.crew.transport.CrewTransportState
+import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
+
+private const val MAX_SESSION_PEERS = 63
+private const val OUTBOUND_CONTROL_CAPACITY = 32
+private const val CONTROL_SEND_TIMEOUT_MS = 10_000L
+private const val CONTROL_RETRY_DELAY_MS = 20L
+
+private enum class CrewRouteResult {
+    ROUTED,
+    COORDINATOR_REJECTED,
+    TRANSPORT_UNAVAILABLE,
+}
+
+sealed interface CrewSubmitResult {
+    data class Submitted(val request: CrewActionRequest) : CrewSubmitResult
+
+    data class AlreadyPending(val request: CrewActionRequest) : CrewSubmitResult
+
+    data object CapacityReached : CrewSubmitResult
+
+    data class Rejected(
+        val request: CrewActionRequest,
+        val reason: CrewOptimisticRejectionReason,
+    ) : CrewSubmitResult
+}
+
+sealed interface CrewSessionNotice {
+    data class StateAdvanced(
+        val event: DurableCrewEvent,
+        val state: CrewState,
+    ) : CrewSessionNotice
+
+    data class SnapshotApplied(val state: CrewState) : CrewSessionNotice
+
+    data class OptimisticAccepted(val result: CrewOptimisticReconcileResult.Accepted) :
+        CrewSessionNotice
+
+    data class OptimisticConflict(val result: CrewOptimisticReconcileResult.Conflict) :
+        CrewSessionNotice
+
+    data class OptimisticRejected(val rejection: CrewOptimisticRejection) :
+        CrewSessionNotice
+
+    data class PeerAttached(val memberId: CrewMemberId) : CrewSessionNotice
+
+    data class PeerDetached(
+        val memberId: CrewMemberId,
+        val reason: CrewPeerDetachReason,
+    ) : CrewSessionNotice
+
+    data class SnapshotRequested(val coordinatorMemberId: CrewMemberId) : CrewSessionNotice
+
+    data class ProtocolRejected(
+        val memberId: CrewMemberId,
+        val reason: String,
+    ) : CrewSessionNotice
+
+    data class EngineFailed(val reason: String) : CrewSessionNotice
+}
+
+enum class CrewPeerDetachReason {
+    REPLACED,
+    TRANSPORT_FAILED,
+    CONTROL_BACKPRESSURE,
+    PROTOCOL_VIOLATION,
+    ENGINE_FAILURE,
+    ENGINE_CLOSED,
+}
+
+/**
+ * One active Crew's authenticated control-plane authority.
+ *
+ * Each peer has a single bounded outbound actor, preserving coordinator event order across
+ * multi-frame messages. The engine never trusts member IDs inside a payload without comparing
+ * them to the authenticated [CrewPeerTransport.remoteMemberId].
+ */
+class CrewSessionEngine(
+    initialState: CrewState,
+    private val localMemberId: CrewMemberId,
+    private val checkpointRepository: CrewCheckpointRepository,
+    private val nowEpochMs: () -> Long = System::currentTimeMillis,
+    private val nowMonotonicMs: () -> Long = { System.nanoTime() / 1_000_000L },
+    dispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val reducer: CrewReducer = CrewReducer(),
+) : Closeable {
+    private data class PeerSession(
+        val transport: CrewPeerTransport,
+        val reassembler: CrewControlReassembler,
+        val outgoing: Channel<CrewControlMessage>,
+        val jobs: MutableList<Job> = mutableListOf(),
+    )
+
+    private val closed = AtomicBoolean(false)
+    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val stateMutex = Mutex()
+    private val peers = ConcurrentHashMap<CrewMemberId, PeerSession>()
+    private val optimisticActions = CrewOptimisticActionTracker()
+    private var sequencer: CrewCoordinatorSequencer? =
+        if (initialState.coordinatorMemberId == localMemberId) {
+            CrewCoordinatorSequencer(initialState, localMemberId, reducer)
+        } else {
+            null
+        }
+    private val mutableState = MutableStateFlow(initialState)
+    private val mutablePeerStates = MutableStateFlow<Map<CrewMemberId, CrewTransportState>>(emptyMap())
+    private val mutableNotices =
+        MutableSharedFlow<CrewSessionNotice>(
+            extraBufferCapacity = 64,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
+
+    val state: StateFlow<CrewState> = mutableState.asStateFlow()
+    val peerStates: StateFlow<Map<CrewMemberId, CrewTransportState>> =
+        mutablePeerStates.asStateFlow()
+    val notices: SharedFlow<CrewSessionNotice> = mutableNotices.asSharedFlow()
+
+    init {
+        require(localMemberId.protocolVersion == initialState.protocolVersion) {
+            "Local Crew member protocol must match the session"
+        }
+        require(initialState.members.any { it.id == localMemberId }) {
+            "Local Crew member must exist in the initial state"
+        }
+    }
+
+    suspend fun start() {
+        check(!closed.get()) { "Crew session engine is closed" }
+        checkpointRepository.save(mutableState.value.toSnapshot(), nowEpochMs())
+    }
+
+    @Synchronized
+    fun attachPeer(transport: CrewPeerTransport) {
+        check(!closed.get()) { "Crew session engine is closed" }
+        require(transport.remoteMemberId != localMemberId) {
+            "Crew cannot attach the local member as a remote peer"
+        }
+        require(transport.remoteMemberId.protocolVersion == mutableState.value.protocolVersion) {
+            "Crew peer protocol must match the session"
+        }
+        check(peers.size < MAX_SESSION_PEERS || transport.remoteMemberId in peers) {
+            "Crew peer limit reached"
+        }
+        val peer =
+            PeerSession(
+                transport = transport,
+                reassembler = CrewControlReassembler(),
+                outgoing = Channel(OUTBOUND_CONTROL_CAPACITY),
+            )
+        val replaced = peers.put(transport.remoteMemberId, peer)
+        replaced?.let {
+            releasePeer(
+                transport.remoteMemberId,
+                it,
+                CrewPeerDetachReason.REPLACED,
+                closeTransport = true,
+            )
+        }
+        peer.jobs += scope.launch { pumpOutbound(peer) }
+        peer.jobs += scope.launch { collectInbound(peer) }
+        peer.jobs += scope.launch { collectTransportState(peer) }
+        publishPeerStates()
+        emit(CrewSessionNotice.PeerAttached(transport.remoteMemberId))
+    }
+
+    suspend fun submit(
+        request: CrewActionRequest,
+        submittedAtMonotonicMs: Long = nowMonotonicMs(),
+    ): CrewSubmitResult {
+        check(!closed.get()) { "Crew session engine is closed" }
+        require(request.issuingMemberId == localMemberId) {
+            "Local Crew submission must identify the local member"
+        }
+        if (
+            runCatching {
+                    CrewControlCodec.encode(CrewControlMessage.Request(request))
+                }
+                .isFailure
+        ) {
+            return CrewSubmitResult.Rejected(
+                request,
+                CrewOptimisticRejectionReason.INVALID_REQUEST,
+            )
+        }
+        return stateMutex.withLock {
+            val submitResult = optimisticActions.submit(request, submittedAtMonotonicMs)
+            when (submitResult) {
+                CrewOptimisticSubmitResult.CapacityReached ->
+                    CrewSubmitResult.CapacityReached
+                is CrewOptimisticSubmitResult.AlreadyPending -> {
+                    when (routeRequestLocked(submitResult.request)) {
+                        CrewRouteResult.ROUTED ->
+                            CrewSubmitResult.AlreadyPending(submitResult.request)
+                        CrewRouteResult.COORDINATOR_REJECTED ->
+                            CrewSubmitResult.Rejected(
+                                submitResult.request,
+                                CrewOptimisticRejectionReason.COORDINATOR_REJECTED,
+                            )
+                        CrewRouteResult.TRANSPORT_UNAVAILABLE ->
+                            rejectLocalLocked(
+                                submitResult.request,
+                                CrewOptimisticRejectionReason.TRANSPORT_UNAVAILABLE,
+                            )
+                    }
+                }
+                is CrewOptimisticSubmitResult.Pending -> {
+                    when (routeRequestLocked(submitResult.request)) {
+                        CrewRouteResult.ROUTED -> CrewSubmitResult.Submitted(submitResult.request)
+                        CrewRouteResult.COORDINATOR_REJECTED ->
+                            CrewSubmitResult.Rejected(
+                                submitResult.request,
+                                CrewOptimisticRejectionReason.COORDINATOR_REJECTED,
+                            )
+                        CrewRouteResult.TRANSPORT_UNAVAILABLE ->
+                            rejectLocalLocked(
+                                submitResult.request,
+                                CrewOptimisticRejectionReason.TRANSPORT_UNAVAILABLE,
+                            )
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun requestSnapshot(): Boolean =
+        stateMutex.withLock {
+            val current = mutableState.value
+            if (current.coordinatorMemberId == localMemberId) return@withLock false
+            val request =
+                CrewControlMessage.SnapshotRequested(
+                    CrewSnapshotRequest(
+                        sessionId = current.sessionId,
+                        protocolVersion = current.protocolVersion,
+                        requestingMemberId = localMemberId,
+                        knownTerm = current.term,
+                        knownSequence = current.lastSequence,
+                    )
+                )
+            val queued = enqueueLocked(current.coordinatorMemberId, request)
+            if (queued) {
+                emit(CrewSessionNotice.SnapshotRequested(current.coordinatorMemberId))
+            }
+            queued
+        }
+
+    fun expireOptimisticActions(nowMonotonicMs: Long = this.nowMonotonicMs()) {
+        optimisticActions.expire(nowMonotonicMs).forEach {
+            emit(CrewSessionNotice.OptimisticRejected(it))
+        }
+    }
+
+    private suspend fun collectInbound(peer: PeerSession) {
+        try {
+            peer.transport.incoming.collect { frame ->
+                if (frame.channel != CrewTransportChannel.CONTROL) return@collect
+                when (
+                    val result =
+                        peer.reassembler.accept(
+                            frame,
+                            nowMonotonicMs(),
+                        )
+                ) {
+                    is CrewControlFrameResult.Pending -> Unit
+                    is CrewControlFrameResult.Complete ->
+                        handleMessage(peer.transport.remoteMemberId, result.message)
+                    is CrewControlFrameResult.Rejected -> {
+                        protocolViolation(
+                            peer,
+                            "Crew control frame rejected: ${result.name}",
+                        )
+                        return@collect
+                    }
+                }
+            }
+            if (!closed.get() && peers[peer.transport.remoteMemberId] === peer) {
+                detachPeer(
+                    peer.transport.remoteMemberId,
+                    CrewPeerDetachReason.TRANSPORT_FAILED,
+                    expectedPeer = peer,
+                )
+            }
+        } catch (_: Exception) {
+            if (!closed.get() && peers[peer.transport.remoteMemberId] === peer) {
+                emit(CrewSessionNotice.EngineFailed("Crew control processing failed"))
+                detachPeer(
+                    peer.transport.remoteMemberId,
+                    CrewPeerDetachReason.ENGINE_FAILURE,
+                    expectedPeer = peer,
+                )
+            }
+        }
+    }
+
+    private suspend fun collectTransportState(peer: PeerSession) {
+        peer.transport.state.collect { transportState ->
+            publishPeerStates()
+            if (
+                transportState == CrewTransportState.FAILED ||
+                    transportState == CrewTransportState.CLOSED
+            ) {
+                detachPeer(
+                    peer.transport.remoteMemberId,
+                    CrewPeerDetachReason.TRANSPORT_FAILED,
+                    expectedPeer = peer,
+                )
+                return@collect
+            }
+        }
+    }
+
+    private suspend fun pumpOutbound(peer: PeerSession) {
+        for (message in peer.outgoing) {
+            val sent =
+                withTimeoutOrNull(CONTROL_SEND_TIMEOUT_MS) {
+                    var complete = true
+                    for (frame in CrewControlFramer.encode(message)) {
+                        if (!sendFrameWhenReady(peer.transport, frame)) {
+                            complete = false
+                            break
+                        }
+                    }
+                    complete
+                } == true
+            if (!sent) {
+                detachPeer(
+                    peer.transport.remoteMemberId,
+                    CrewPeerDetachReason.CONTROL_BACKPRESSURE,
+                    expectedPeer = peer,
+                )
+                return
+            }
+        }
+    }
+
+    private suspend fun sendFrameWhenReady(
+        transport: CrewPeerTransport,
+        frame: org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame,
+    ): Boolean {
+        while (!closed.get()) {
+            when (transport.trySend(frame)) {
+                is CrewSendResult.Sent -> return true
+                is CrewSendResult.Backpressured,
+                CrewSendResult.ChannelNotOpen -> {
+                    val transportState = transport.state.value
+                    if (
+                        transportState == CrewTransportState.FAILED ||
+                            transportState == CrewTransportState.CLOSED
+                    ) {
+                        return false
+                    }
+                    delay(CONTROL_RETRY_DELAY_MS)
+                }
+                CrewSendResult.NativeRejected,
+                CrewSendResult.Closed -> return false
+            }
+        }
+        return false
+    }
+
+    private suspend fun handleMessage(
+        authenticatedMemberId: CrewMemberId,
+        message: CrewControlMessage,
+    ) {
+        stateMutex.withLock {
+            when (message) {
+                is CrewControlMessage.Request ->
+                    handleRequestLocked(authenticatedMemberId, message.request)
+                is CrewControlMessage.Event ->
+                    handleEventLocked(authenticatedMemberId, message.event)
+                is CrewControlMessage.SnapshotRequested ->
+                    handleSnapshotRequestLocked(authenticatedMemberId, message.request)
+                is CrewControlMessage.SnapshotInstalled ->
+                    handleSnapshotLocked(authenticatedMemberId, message)
+                is CrewControlMessage.RequestRejected ->
+                    handleRejectionLocked(authenticatedMemberId, message)
+            }
+        }
+    }
+
+    private suspend fun handleRequestLocked(
+        authenticatedMemberId: CrewMemberId,
+        request: CrewActionRequest,
+    ) {
+        val currentSequencer = sequencer
+        if (currentSequencer == null) {
+            protocolRejected(authenticatedMemberId, "Received action request on non-coordinator")
+            return
+        }
+        publishSequenceResultLocked(
+            currentSequencer.sequence(request, authenticatedMemberId),
+            request = request,
+            requester = authenticatedMemberId,
+        )
+    }
+
+    private suspend fun handleEventLocked(
+        authenticatedMemberId: CrewMemberId,
+        event: DurableCrewEvent,
+    ) {
+        val current = mutableState.value
+        when (val result = reducer.apply(current, event, authenticatedMemberId)) {
+            is CrewEventResult.Applied -> {
+                installStateLocked(result.state)
+                reconcileLocked(event)
+                checkpointRepository.save(result.state.toSnapshot(), nowEpochMs())
+                emit(CrewSessionNotice.StateAdvanced(event, result.state))
+            }
+            is CrewEventResult.DuplicateRejected -> reconcileLocked(event)
+            is CrewEventResult.SnapshotRequired -> {
+                enqueueSnapshotRequestLocked()
+            }
+            is CrewEventResult.Rejected ->
+                protocolRejected(authenticatedMemberId, result.reason)
+            is CrewEventResult.StaleSequenceRejected,
+            is CrewEventResult.StaleTermRejected -> Unit
+        }
+    }
+
+    private suspend fun handleSnapshotRequestLocked(
+        authenticatedMemberId: CrewMemberId,
+        request: CrewSnapshotRequest,
+    ) {
+        val current = mutableState.value
+        if (
+            localMemberId != current.coordinatorMemberId ||
+                request.requestingMemberId != authenticatedMemberId ||
+                request.sessionId != current.sessionId ||
+                request.protocolVersion != current.protocolVersion ||
+                current.members.none { it.id == authenticatedMemberId }
+        ) {
+            protocolRejected(authenticatedMemberId, "Crew snapshot request is unauthorized")
+            return
+        }
+        enqueueLocked(
+            authenticatedMemberId,
+            CrewControlMessage.SnapshotInstalled(current.toSnapshot()),
+        )
+    }
+
+    private suspend fun handleSnapshotLocked(
+        authenticatedMemberId: CrewMemberId,
+        message: CrewControlMessage.SnapshotInstalled,
+    ) {
+        val current = mutableState.value
+        if (message.electionVotes.isNotEmpty()) {
+            protocolRejected(
+                authenticatedMemberId,
+                "Election votes require independent authenticated collection",
+            )
+            return
+        }
+        when (
+            val result =
+                reducer.applySnapshot(
+                    current,
+                    message.snapshot,
+                    authenticatedPublisher = authenticatedMemberId,
+                    authenticatedElectionVotes = emptyList(),
+                )
+        ) {
+            is CrewSnapshotResult.Applied -> {
+                installStateLocked(result.state)
+                checkpointRepository.save(result.state.toSnapshot(), nowEpochMs())
+                emit(CrewSessionNotice.SnapshotApplied(result.state))
+            }
+            is CrewSnapshotResult.Rejected ->
+                protocolRejected(authenticatedMemberId, result.reason)
+            is CrewSnapshotResult.StaleRejected -> Unit
+        }
+    }
+
+    private fun handleRejectionLocked(
+        authenticatedMemberId: CrewMemberId,
+        message: CrewControlMessage.RequestRejected,
+    ) {
+        val current = mutableState.value
+        if (
+            authenticatedMemberId != current.coordinatorMemberId ||
+                message.coordinatorMemberId != authenticatedMemberId ||
+                message.sessionId != current.sessionId ||
+                message.protocolVersion != current.protocolVersion
+        ) {
+            protocolRejected(authenticatedMemberId, "Crew request rejection is unauthorized")
+            return
+        }
+        optimisticActions
+            .reject(
+                message.requestId,
+                CrewOptimisticRejectionReason.COORDINATOR_REJECTED,
+            )
+            ?.let { emit(CrewSessionNotice.OptimisticRejected(it)) }
+    }
+
+    private suspend fun routeRequestLocked(request: CrewActionRequest): CrewRouteResult {
+        val current = mutableState.value
+        return if (current.coordinatorMemberId == localMemberId) {
+            val currentSequencer = checkNotNull(sequencer) { "Local coordinator has no sequencer" }
+            val result = currentSequencer.sequence(request, localMemberId)
+            publishSequenceResultLocked(
+                result,
+                request = request,
+                requester = localMemberId,
+            )
+            if (result is CrewSequenceResult.Rejected) {
+                CrewRouteResult.COORDINATOR_REJECTED
+            } else {
+                CrewRouteResult.ROUTED
+            }
+        } else {
+            if (
+                enqueueLocked(
+                    current.coordinatorMemberId,
+                    CrewControlMessage.Request(request),
+                )
+            ) {
+                CrewRouteResult.ROUTED
+            } else {
+                CrewRouteResult.TRANSPORT_UNAVAILABLE
+            }
+        }
+    }
+
+    private suspend fun publishSequenceResultLocked(
+        result: CrewSequenceResult,
+        request: CrewActionRequest,
+        requester: CrewMemberId,
+    ) {
+        when (result) {
+            is CrewSequenceResult.Published -> {
+                installStateLocked(result.state)
+                reconcileLocked(result.event)
+                checkpointRepository.save(result.state.toSnapshot(), nowEpochMs())
+                broadcastLocked(CrewControlMessage.Event(result.event))
+                emit(CrewSessionNotice.StateAdvanced(result.event, result.state))
+            }
+            is CrewSequenceResult.Duplicate -> {
+                if (requester == localMemberId) {
+                    reconcileLocked(result.event)
+                } else {
+                    enqueueLocked(requester, CrewControlMessage.Event(result.event))
+                }
+            }
+            is CrewSequenceResult.Rejected -> {
+                if (requester == localMemberId) {
+                    optimisticActions
+                        .reject(
+                            request.id,
+                            CrewOptimisticRejectionReason.COORDINATOR_REJECTED,
+                        )
+                        ?.let { emit(CrewSessionNotice.OptimisticRejected(it)) }
+                } else {
+                    enqueueLocked(
+                        requester,
+                        CrewControlMessage.RequestRejected(
+                            sessionId = result.state.sessionId,
+                            protocolVersion = result.state.protocolVersion,
+                            requestId = request.id,
+                            coordinatorMemberId = localMemberId,
+                            reason = result.reason,
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun rejectLocalLocked(
+        request: CrewActionRequest,
+        reason: CrewOptimisticRejectionReason,
+    ): CrewSubmitResult.Rejected {
+        optimisticActions.reject(request.id, reason)?.let {
+            emit(CrewSessionNotice.OptimisticRejected(it))
+        }
+        return CrewSubmitResult.Rejected(request, reason)
+    }
+
+    private fun reconcileLocked(event: DurableCrewEvent) {
+        when (val result = optimisticActions.reconcile(event)) {
+            is CrewOptimisticReconcileResult.Accepted ->
+                emit(CrewSessionNotice.OptimisticAccepted(result))
+            is CrewOptimisticReconcileResult.Conflict ->
+                emit(CrewSessionNotice.OptimisticConflict(result))
+            CrewOptimisticReconcileResult.NotPending -> Unit
+        }
+    }
+
+    private fun installStateLocked(state: CrewState) {
+        mutableState.value = state
+        sequencer =
+            when {
+                state.coordinatorMemberId != localMemberId -> null
+                sequencer?.state() == state -> sequencer
+                else -> CrewCoordinatorSequencer(state, localMemberId, reducer)
+            }
+    }
+
+    private fun broadcastLocked(message: CrewControlMessage) {
+        mutableState.value.members
+            .map { it.id }
+            .filter { it != localMemberId }
+            .sortedBy(CrewMemberId::value)
+            .forEach { memberId ->
+            enqueueLocked(memberId, message)
+        }
+    }
+
+    private fun enqueueSnapshotRequestLocked() {
+        val current = mutableState.value
+        if (current.coordinatorMemberId == localMemberId) return
+        if (
+            enqueueLocked(
+                current.coordinatorMemberId,
+                CrewControlMessage.SnapshotRequested(
+                    CrewSnapshotRequest(
+                        sessionId = current.sessionId,
+                        protocolVersion = current.protocolVersion,
+                        requestingMemberId = localMemberId,
+                        knownTerm = current.term,
+                        knownSequence = current.lastSequence,
+                    )
+                ),
+            )
+        ) {
+            emit(CrewSessionNotice.SnapshotRequested(current.coordinatorMemberId))
+        }
+    }
+
+    private fun enqueueLocked(
+        memberId: CrewMemberId,
+        message: CrewControlMessage,
+    ): Boolean {
+        val peer = peers[memberId] ?: return false
+        return if (peer.outgoing.trySend(message).isSuccess) {
+            true
+        } else {
+            detachPeer(
+                memberId,
+                CrewPeerDetachReason.CONTROL_BACKPRESSURE,
+                expectedPeer = peer,
+            )
+            false
+        }
+    }
+
+    private fun protocolRejected(
+        memberId: CrewMemberId,
+        reason: String,
+    ) {
+        emit(CrewSessionNotice.ProtocolRejected(memberId, reason))
+    }
+
+    private fun protocolViolation(
+        peer: PeerSession,
+        reason: String,
+    ) {
+        val memberId = peer.transport.remoteMemberId
+        protocolRejected(memberId, reason)
+        detachPeer(
+            memberId,
+            CrewPeerDetachReason.PROTOCOL_VIOLATION,
+            expectedPeer = peer,
+        )
+    }
+
+    private fun detachPeer(
+        memberId: CrewMemberId,
+        reason: CrewPeerDetachReason,
+        expectedPeer: PeerSession? = null,
+    ) {
+        val removed =
+            if (expectedPeer == null) {
+                peers.remove(memberId)
+            } else if (peers.remove(memberId, expectedPeer)) {
+                expectedPeer
+            } else {
+                null
+            }
+        removed?.let {
+            releasePeer(memberId, it, reason, closeTransport = true)
+        }
+    }
+
+    private fun releasePeer(
+        memberId: CrewMemberId,
+        peer: PeerSession,
+        reason: CrewPeerDetachReason,
+        closeTransport: Boolean,
+    ) {
+        peer.outgoing.close()
+        peer.jobs.forEach { it.cancel() }
+        peer.reassembler.reset()
+        if (closeTransport) peer.transport.close()
+        publishPeerStates()
+        emit(CrewSessionNotice.PeerDetached(memberId, reason))
+    }
+
+    private fun publishPeerStates() {
+        mutablePeerStates.value =
+            peers.entries.associate { (memberId, peer) ->
+                memberId to peer.transport.state.value
+            }
+    }
+
+    private fun emit(notice: CrewSessionNotice) {
+        mutableNotices.tryEmit(notice)
+    }
+
+    @Synchronized
+    override fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        peers.entries.toList().forEach { (memberId, peer) ->
+            if (peers.remove(memberId, peer)) {
+                releasePeer(
+                    memberId,
+                    peer,
+                    CrewPeerDetachReason.ENGINE_CLOSED,
+                    closeTransport = true,
+                )
+            }
+        }
+        optimisticActions.clearForSessionChange().forEach {
+            emit(CrewSessionNotice.OptimisticRejected(it))
+        }
+        scope.cancel()
+    }
+}

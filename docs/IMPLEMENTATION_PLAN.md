@@ -139,6 +139,8 @@ code/test level, ready for later device verification.
 - [x] Implement authenticated equal-member request sequencing with bounded
       duplicate replay and requester/publisher separation.
 - [x] Implement equal member control and optimistic reconciliation.
+- [x] Route authenticated requests/events/rejections/snapshots through one
+      persistent active-session engine with ordered per-peer output.
 - [ ] Implement coordinator terms, election, handoff, and stale-message rejection.
 - [x] Implement queue replacement from any member’s song/playlist selection.
 - [x] Implement availability summaries per member and queue item.
@@ -169,6 +171,8 @@ code/test level, ready for later device verification.
 - [x] Separate durable control, transient reaction, clock, and media channels.
 - [x] Implement bounded durable-control serialization and multi-frame
       reassembly for requests, events, rejections, and snapshots.
+- [x] Connect authenticated peer transports to the control/session engine with
+      bounded backpressure and snapshot-gap recovery.
 - [ ] Expose only clear join/connection states in UI.
 
 **Validation:**

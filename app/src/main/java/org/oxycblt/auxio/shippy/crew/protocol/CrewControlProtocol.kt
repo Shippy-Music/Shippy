@@ -58,6 +58,8 @@ private const val SHA_256_BYTES = 32
 private const val FRAME_HEADER_BYTES =
     Int.SIZE_BYTES + Byte.SIZE_BYTES + Int.SIZE_BYTES + Short.SIZE_BYTES * 2 + SHA_256_BYTES
 private const val MAX_STRING_BYTES = 16 * 1024
+private const val MAX_ID_BYTES = 128
+private const val MAX_DISPLAY_NAME_BYTES = 512
 private const val MAX_LOCATOR_BYTES = 64 * 1024
 private const val MAX_ARTISTS = 64
 private const val MAX_CANDIDATES = 32
@@ -65,6 +67,7 @@ private const val MAX_MEMBERS = 64
 private const val MAX_QUEUE_ITEMS = 10_000
 private const val MAX_ELECTION_VOTES = MAX_MEMBERS
 private const val MAX_LOGICAL_MESSAGE_BYTES = 4 * 1024 * 1024
+private const val MAX_REQUEST_MESSAGE_BYTES = MAX_LOGICAL_MESSAGE_BYTES - 64 * 1024
 private const val MAX_CONTROL_CHUNKS = 128
 private const val MAX_IN_FLIGHT_MESSAGES = 8
 private const val MAX_REASSEMBLY_BYTES = 8 * 1024 * 1024
@@ -162,13 +165,18 @@ object CrewControlCodec {
                     output.writeByte(5)
                     output.writeSessionId(message.sessionId)
                     output.writeProtocolVersion(message.protocolVersion)
-                    output.writeSizedString(message.requestId.value)
+                    output.writeSizedString(message.requestId.value, MAX_ID_BYTES)
                     output.writeMemberId(message.coordinatorMemberId)
                     output.writeByte(message.reason.wireCode())
                 }
             }
         }
         return bytes.toByteArray().also {
+            if (message is CrewControlMessage.Request) {
+                require(it.size <= MAX_REQUEST_MESSAGE_BYTES) {
+                    "Crew action request leaves insufficient event-envelope capacity"
+                }
+            }
             require(it.size <= MAX_LOGICAL_MESSAGE_BYTES) {
                 "Crew control message exceeds $MAX_LOGICAL_MESSAGE_BYTES bytes"
             }
@@ -206,7 +214,7 @@ object CrewControlCodec {
                         5 -> {
                             val sessionId = input.readSessionId()
                             val protocolVersion = input.readProtocolVersion()
-                            val requestId = DurableEventId(input.readSizedString())
+                            val requestId = DurableEventId(input.readSizedString(MAX_ID_BYTES))
                             val coordinatorMemberId = input.readMemberId()
                             val rejectionCode = input.readUnsignedByte()
                             CrewControlMessage.RequestRejected(
@@ -480,7 +488,7 @@ class CrewControlReassembler(
 }
 
 private fun DataOutputStream.writeActionRequest(request: CrewActionRequest) {
-    writeSizedString(request.id.value)
+    writeSizedString(request.id.value, MAX_ID_BYTES)
     writeMemberId(request.issuingMemberId)
     writeLong(request.clientMonotonicTimestampMs)
     writeAction(request.action)
@@ -488,7 +496,7 @@ private fun DataOutputStream.writeActionRequest(request: CrewActionRequest) {
 
 private fun DataInputStream.readActionRequest() =
     CrewActionRequest(
-        id = DurableEventId(readSizedString()),
+        id = DurableEventId(readSizedString(MAX_ID_BYTES)),
         issuingMemberId = readMemberId(),
         clientMonotonicTimestampMs = readLong(),
         action = readAction(),
@@ -499,7 +507,7 @@ private fun DataOutputStream.writeDurableEvent(event: DurableCrewEvent) {
     writeProtocolVersion(event.protocolVersion)
     writeLong(event.term.value)
     writeLong(event.sequence.value)
-    writeSizedString(event.id.value)
+    writeSizedString(event.id.value, MAX_ID_BYTES)
     writeMemberId(event.publisherMemberId)
     writeMemberId(event.issuingMemberId)
     writeLong(event.clientMonotonicTimestampMs)
@@ -512,7 +520,7 @@ private fun DataInputStream.readDurableEvent() =
         protocolVersion = readProtocolVersion(),
         term = CoordinatorTerm(readLong()),
         sequence = EventSequence(readLong()),
-        id = DurableEventId(readSizedString()),
+        id = DurableEventId(readSizedString(MAX_ID_BYTES)),
         publisherMemberId = readMemberId(),
         issuingMemberId = readMemberId(),
         clientMonotonicTimestampMs = readLong(),
@@ -626,16 +634,16 @@ private fun DataOutputStream.writeAction(action: CrewAction) {
         }
         is CrewAction.QueueItemMoved -> {
             writeByte(6)
-            writeSizedString(action.itemId.value)
+            writeSizedString(action.itemId.value, MAX_ID_BYTES)
             writeInt(action.newIndex)
         }
         is CrewAction.QueueItemRemoved -> {
             writeByte(7)
-            writeSizedString(action.itemId.value)
+            writeSizedString(action.itemId.value, MAX_ID_BYTES)
         }
         is CrewAction.CurrentItemChanged -> {
             writeByte(8)
-            writeSizedString(action.itemId.value)
+            writeSizedString(action.itemId.value, MAX_ID_BYTES)
         }
         is CrewAction.Play -> {
             writeByte(9)
@@ -674,9 +682,9 @@ private fun DataInputStream.readAction(): CrewAction =
         3 -> CrewAction.MemberLeft(readMemberId())
         4 -> CrewAction.QueueReplaced(readQueue())
         5 -> CrewAction.QueueItemInserted(readQueueItem(), readInt())
-        6 -> CrewAction.QueueItemMoved(QueueItemId(readSizedString()), readInt())
-        7 -> CrewAction.QueueItemRemoved(QueueItemId(readSizedString()))
-        8 -> CrewAction.CurrentItemChanged(QueueItemId(readSizedString()))
+        6 -> CrewAction.QueueItemMoved(QueueItemId(readSizedString(MAX_ID_BYTES)), readInt())
+        7 -> CrewAction.QueueItemRemoved(QueueItemId(readSizedString(MAX_ID_BYTES)))
+        8 -> CrewAction.CurrentItemChanged(QueueItemId(readSizedString(MAX_ID_BYTES)))
         9 -> CrewAction.Play(readLong(), readLong())
         10 -> CrewAction.Pause(readLong(), readLong())
         11 -> CrewAction.Seek(readLong(), readLong())
@@ -694,22 +702,22 @@ private fun DataOutputStream.writeQueue(queue: List<QueueItem>) {
 private fun DataInputStream.readQueue() = readBoundedList(MAX_QUEUE_ITEMS) { readQueueItem() }
 
 private fun DataOutputStream.writeQueueItem(item: QueueItem) {
-    writeSizedString(item.id.value)
+    writeSizedString(item.id.value, MAX_ID_BYTES)
     writeTrack(item.track)
-    writeNullableString(item.contextId)
-    writeNullableString(item.contributorId)
+    writeNullableString(item.contextId, MAX_ID_BYTES)
+    writeNullableString(item.contributorId, MAX_ID_BYTES)
 }
 
 private fun DataInputStream.readQueueItem() =
     QueueItem(
-        id = QueueItemId(readSizedString()),
+        id = QueueItemId(readSizedString(MAX_ID_BYTES)),
         track = readTrack(),
-        contextId = readNullableString(),
-        contributorId = readNullableString(),
+        contextId = readNullableString(MAX_ID_BYTES),
+        contributorId = readNullableString(MAX_ID_BYTES),
     )
 
 private fun DataOutputStream.writeTrack(track: Track) {
-    writeSizedString(track.id.value)
+    writeSizedString(track.id.value, MAX_ID_BYTES)
     writeByte(track.realm.wireCode())
     writeSizedString(track.title)
     writeBoundedCount(track.artists.size, MAX_ARTISTS)
@@ -724,7 +732,7 @@ private fun DataOutputStream.writeTrack(track: Track) {
 
 private fun DataInputStream.readTrack() =
     Track(
-        id = TrackId(readSizedString()),
+        id = TrackId(readSizedString(MAX_ID_BYTES)),
         realm =
             when (readUnsignedByte()) {
                 1 -> TrackRealm.PROVIDER
@@ -756,27 +764,27 @@ private fun DataInputStream.readTrackVersion() =
     )
 
 private fun DataOutputStream.writeCandidate(candidate: TrackCandidate) {
-    writeSizedString(candidate.id.value)
-    writeSizedString(candidate.trackId.value)
+    writeSizedString(candidate.id.value, MAX_ID_BYTES)
+    writeSizedString(candidate.trackId.value, MAX_ID_BYTES)
     writeByte(candidate.kind.wireCode())
-    writeSizedString(candidate.sourceId)
+    writeSizedString(candidate.sourceId, MAX_ID_BYTES)
     writeSizedString(candidate.sourceItemId)
     writeByte(candidate.availability.wireCode())
     writeNullableString(candidate.locator, MAX_LOCATOR_BYTES)
-    writeNullableString(candidate.providerId?.value)
+    writeNullableString(candidate.providerId?.value, MAX_ID_BYTES)
     writeNullableMedia(candidate.media)
 }
 
 private fun DataInputStream.readCandidate() =
     TrackCandidate(
-        id = CandidateId(readSizedString()),
-        trackId = TrackId(readSizedString()),
+        id = CandidateId(readSizedString(MAX_ID_BYTES)),
+        trackId = TrackId(readSizedString(MAX_ID_BYTES)),
         kind = readCandidateKind(),
-        sourceId = readSizedString(),
+        sourceId = readSizedString(MAX_ID_BYTES),
         sourceItemId = readSizedString(),
         availability = readCandidateAvailability(),
         locator = readNullableString(MAX_LOCATOR_BYTES),
-        providerId = readNullableString()?.let(::ProviderId),
+        providerId = readNullableString(MAX_ID_BYTES)?.let(::ProviderId),
         media = readNullableMedia(),
     )
 
@@ -817,26 +825,27 @@ private fun DataInputStream.readPlayback() =
 
 private fun DataOutputStream.writeMember(member: CrewMember) {
     writeMemberId(member.id)
-    writeSizedString(member.displayName)
+    writeSizedString(member.displayName, MAX_DISPLAY_NAME_BYTES)
 }
 
-private fun DataInputStream.readMember() = CrewMember(readMemberId(), readSizedString())
+private fun DataInputStream.readMember() =
+    CrewMember(readMemberId(), readSizedString(MAX_DISPLAY_NAME_BYTES))
 
 private fun DataOutputStream.writeSessionId(id: CrewSessionId) {
-    writeSizedString(id.value)
+    writeSizedString(id.value, MAX_ID_BYTES)
     writeProtocolVersion(id.protocolVersion)
 }
 
 private fun DataInputStream.readSessionId() =
-    CrewSessionId(readSizedString(), readProtocolVersion())
+    CrewSessionId(readSizedString(MAX_ID_BYTES), readProtocolVersion())
 
 private fun DataOutputStream.writeMemberId(id: CrewMemberId) {
-    writeSizedString(id.value)
+    writeSizedString(id.value, MAX_ID_BYTES)
     writeProtocolVersion(id.protocolVersion)
 }
 
 private fun DataInputStream.readMemberId() =
-    CrewMemberId(readSizedString(), readProtocolVersion())
+    CrewMemberId(readSizedString(MAX_ID_BYTES), readProtocolVersion())
 
 private fun DataOutputStream.writeProtocolVersion(version: ProtocolVersion) {
     writeInt(version.value)

@@ -40,6 +40,8 @@ sealed interface CrewOptimisticReconcileResult {
 
 enum class CrewOptimisticRejectionReason {
     COORDINATOR_REJECTED,
+    INVALID_REQUEST,
+    TRANSPORT_UNAVAILABLE,
     TIMED_OUT,
     SESSION_CHANGED,
 }

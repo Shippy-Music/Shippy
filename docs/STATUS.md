@@ -202,6 +202,13 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - The active Crew snapshot now has a singleton Room v5 checkpoint with indexed
   session/term/sequence identity, SHA-256 integrity, race-safe corrupt cleanup,
   and exact-session clearing. Rejoin secrets remain outside generic Room storage.
+- An authenticated Crew session engine now routes equal-member action requests
+  to the coordinator, sequences and broadcasts accepted events in order,
+  validates every payload identity against its peer transport, reconciles exact
+  optimistic intent, requests snapshots on gaps, and persists accepted states.
+- Each peer has one bounded durable-control actor. Temporary backpressure retries
+  without reordering; exhaustion or protocol corruption detaches the peer
+  explicitly instead of silently losing a state event.
 
 ## In Progress
 
@@ -217,8 +224,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   vertical slice.
 - Crew persistence, hosted signaling, transport/session engine, and active UI
   behind the new Crew destination.
-- Wiring the new Crew control codec and checkpoint repository into the live
-  authenticated session engine.
+- Completing Crew admission/leave, graceful handoff, independently
+  authenticated election votes, and reconnect lifecycle around the session
+  engine.
 
 ## Not Started
 
@@ -236,7 +244,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   tests are authored but not run; NAT traversal, TURN, reconnection, and
   multi-phone behavior remain compile/device-unverified.
 - Crew control serialization, chunk reassembly, Room v5 checkpoint generation,
-  and persistence tests are authored/static-parsed only and remain uncompiled.
+  session-engine convergence, and persistence tests are authored/static-parsed
+  only and remain uncompiled.
 - Safe ungraceful election needs a strict majority. A direct two-member Crew
   pauses after coordinator loss until reconnection; the future relay/witness
   path must restore availability without weakening split-brain safety.
@@ -259,8 +268,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 1. Resolve canonical metadata into permanent collection and mixed-playlist rows.
 2. Add unmanaged-folder indexing and direct collection-row download state.
 3. Add the next viable provider/YouTube adapter and Musixmatch broker boundary.
-4. Implement the authenticated Crew session engine over the new control codec
-   and checkpoint store, then add hosted signaling exchange.
+4. Complete Crew membership/handoff/reconnect lifecycle, then add hosted
+   signaling exchange.
 
 ## Verification Ledger
 
@@ -271,8 +280,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics/Crew-checkpoint persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec and framing, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
-| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/control codec/framing/checkpoint persistence/signaling/direct-connection/transport policies |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics/Crew-checkpoint persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
+| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/control codec/framing/checkpoint persistence/session convergence/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 345-file app AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 347-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |
