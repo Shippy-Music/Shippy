@@ -22,8 +22,7 @@
             <org.oxycblt.auxio.ui.AuxioToolbar
                 android:id="@+id/search_normal_toolbar"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                app:navigationIcon="@drawable/ic_back_24">
+                android:layout_height="wrap_content">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/search_edit_text"

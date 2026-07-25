@@ -38,10 +38,10 @@ subsequent task names an actual module.
 ## Stage 1 — Shippy Shell And Existing Local Playback
 
 - [ ] Introduce Shippy product identity and design tokens.
-- [ ] Implement four-destination shell: Home, Search, Library, Crew.
-- [ ] Preserve destination state across navigation.
-- [ ] Attach persistent mini-player above navigation.
-- [ ] Implement expand/collapse Now Playing and predictive/back hierarchy.
+- [x] Implement four-destination shell: Home, Search, Library, Crew.
+- [x] Preserve destination state across navigation.
+- [x] Attach persistent mini-player above navigation.
+- [x] Preserve Auxio's expand/collapse Now Playing and predictive/back hierarchy.
 - [ ] Rebuild player action hierarchy without duplicate save/download actions.
 - [ ] Place lyrics below the main player content.
 - [ ] Move technical/provider actions to Song Information.
@@ -61,8 +61,8 @@ through Auxio’s existing playback stack.
 
 ## Stage 2 — Library, Storage, And Queue
 
-- [ ] Model permanent Liked, Downloads, and Local collections.
-- [ ] Prevent rename/delete for permanent collections.
+- [x] Model permanent Liked, Downloads, and Local collections.
+- [x] Prevent rename/delete for permanent collections.
 - [ ] Preserve user playlist creation, edit, pin, sort, and deletion.
 - [ ] Support Local tracks inside user playlists and queue.
 - [ ] Add selected Local source folder management and rescan behavior.
@@ -85,8 +85,8 @@ through Auxio’s existing playback stack.
 
 ## Stage 3 — Provider And Download Platform
 
-- [ ] Define Shippy Kotlin provider interface and capability/health reporting.
-- [ ] Implement canonical track, provider candidate, playback candidate, and
+- [x] Define Shippy Kotlin provider interface and capability/health reporting.
+- [x] Implement canonical track, provider candidate, playback candidate, and
       recording-version safeguards.
 - [ ] Implement preferred/fallback provider settings.
 - [ ] Port or reimplement the first viable provider adapter from Bloomee evidence.
@@ -94,7 +94,7 @@ through Auxio’s existing playback stack.
 - [ ] Implement provider playback URL resolution with expiry/cache behavior.
 - [ ] Implement Shippy permanent download jobs, progress, retry, cancel, remove,
       and destination reconciliation.
-- [ ] Implement resolution order:
+- [x] Implement resolution order:
       Crew cache -> download -> preferred -> fallback -> Crew peer.
 - [ ] Add partial provider failure UI without failing the entire search.
 - [ ] Add unified provider search and clearly labelled On this device results.

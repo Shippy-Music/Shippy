@@ -28,6 +28,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
+import androidx.navigation.NavController
+import androidx.navigation.NavOptions
 import androidx.navigation.findNavController
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.R as MR
@@ -56,6 +58,7 @@ import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackBottomSheetBehavior
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.queue.QueueBottomSheetBehavior
+import org.oxycblt.auxio.ui.BottomSheetContentBehavior
 import org.oxycblt.auxio.ui.DialogAwareNavigationListener
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.ViewBindingFragment
@@ -92,6 +95,7 @@ class MainFragment :
     private var selectionBackCallback: SelectionBackPressedCallback? = null
     private var speedDialBackCallback: SpeedDialBackPressedCallback? = null
     private var navigationListener: DialogAwareNavigationListener? = null
+    private var primaryNavigationListener: NavController.OnDestinationChangedListener? = null
     private var lastInsets: WindowInsets? = null
     private var elevationNormal = 0f
     private var normalCornerSize = 0f
@@ -112,8 +116,14 @@ class MainFragment :
 
         val playbackSheetBehavior =
             binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior
+        val navigationHeight =
+            resources.getDimensionPixelSize(R.dimen.shippy_primary_navigation_height)
         playbackSheetBehavior.uiSettings = uiSettings
+        playbackSheetBehavior.primaryNavigationHeight = navigationHeight
         playbackSheetBehavior.makeBackgroundDrawable(requireContext())
+        val contentBehavior =
+            binding.mainContentContainer.coordinatorLayoutBehavior as BottomSheetContentBehavior
+        contentBehavior.minimumBottomInset = navigationHeight
         val queueSheetBehavior =
             binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
         queueSheetBehavior?.uiSettings = uiSettings
@@ -193,6 +203,7 @@ class MainFragment :
             setOnActionSelectedListener(this@MainFragment)
             setChangeListener(::updateSpeedDial)
         }
+        configurePrimaryNavigation(binding)
 
         forceHideAllFabs()
         updateSpeedDial(false)
@@ -259,6 +270,11 @@ class MainFragment :
         detailBackCallback = null
         selectionBackCallback = null
         navigationListener = null
+        primaryNavigationListener?.let {
+            binding.exploreNavHost.findNavController().removeOnDestinationChangedListener(it)
+        }
+        primaryNavigationListener = null
+        binding.primaryNavigation.setOnItemSelectedListener(null)
         binding.homeNewPlaylistFab.setChangeListener(null)
         binding.homeNewPlaylistFab.setOnActionSelectedListener(null)
     }
@@ -294,6 +310,10 @@ class MainFragment :
 
         val playbackOutRatio = 1 - min(playbackRatio * 2, 1f)
         val playbackInRatio = max(playbackRatio - 0.5f, 0f) * 2
+        binding.primaryNavigation.apply {
+            alpha = playbackOutRatio
+            isInvisible = playbackOutRatio == 0f
+        }
 
         val playbackMaxXScaleDelta = maxScaleXDistance / binding.playbackSheet.width
         val playbackEdgeRatio = max(playbackRatio - 0.9f, 0f) / 0.1f
@@ -411,6 +431,48 @@ class MainFragment :
         )
     }
 
+    private fun configurePrimaryNavigation(binding: FragmentMainBinding) {
+        val navController = binding.exploreNavHost.findNavController()
+        val topLevelDestinations =
+            setOf(
+                R.id.shippy_home_fragment,
+                R.id.search_fragment,
+                R.id.library_fragment,
+                R.id.crew_fragment,
+            )
+
+        binding.primaryNavigation.setOnItemSelectedListener { item ->
+            if (item.itemId !in topLevelDestinations) {
+                return@setOnItemSelectedListener false
+            }
+            if (navController.currentDestination?.id == item.itemId) {
+                return@setOnItemSelectedListener true
+            }
+
+            val options =
+                NavOptions.Builder()
+                    .setLaunchSingleTop(true)
+                    .setRestoreState(true)
+                    .setPopUpTo(
+                        navController.graph.startDestinationId,
+                        inclusive = false,
+                        saveState = true,
+                    )
+                    .build()
+            navController.navigate(item.itemId, null, options)
+            true
+        }
+
+        val destinationListener =
+            NavController.OnDestinationChangedListener { _, destination, _ ->
+                if (destination.id in topLevelDestinations) {
+                    binding.primaryNavigation.menu.findItem(destination.id)?.isChecked = true
+                }
+            }
+        primaryNavigationListener = destinationListener
+        navController.addOnDestinationChangedListener(destinationListener)
+    }
+
     private fun updateCurrentTab(tabType: MusicType) {
         val binding = requireBinding()
         updateFabVisibility(
@@ -518,7 +580,8 @@ class MainFragment :
         songs: List<Song>,
         isFastScrolling: Boolean,
     ) =
-        binding.exploreNavHost.findNavController().currentDestination?.id != R.id.home_fragment ||
+        binding.exploreNavHost.findNavController().currentDestination?.id !=
+            R.id.library_fragment ||
             sheetRising == true ||
             songs.isEmpty() ||
             isFastScrolling

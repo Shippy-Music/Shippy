@@ -38,6 +38,7 @@ import org.oxycblt.auxio.util.systemBarInsetsCompat
  */
 class BottomSheetContentBehavior<V : View>(context: Context, attributeSet: AttributeSet?) :
     CoordinatorLayout.Behavior<V>(context, attributeSet) {
+    var minimumBottomInset = 0
     private var dep: View? = null
     private var lastInsets: WindowInsets? = null
     private var lastConsumed = -1
@@ -72,7 +73,7 @@ class BottomSheetContentBehavior<V : View>(context: Context, attributeSet: Attri
                     bars.left,
                     bars.top,
                     bars.right,
-                    consumed.coerceAtLeast(bars.bottom),
+                    consumed.coerceAtLeast(bars.bottom + minimumBottomInset),
                 )
             }
 

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/shippy_home_fragment"
+        android:icon="@drawable/ic_home_24"
+        android:title="@string/lbl_home" />
+    <item
+        android:id="@+id/search_fragment"
+        android:icon="@drawable/ic_search_24"
+        android:title="@string/lbl_search" />
+    <item
+        android:id="@+id/library_fragment"
+        android:icon="@drawable/ic_library_24"
+        android:title="@string/lbl_library" />
+    <item
+        android:id="@+id/crew_fragment"
+        android:icon="@drawable/ic_group_24"
+        android:title="@string/lbl_crew" />
+</menu>

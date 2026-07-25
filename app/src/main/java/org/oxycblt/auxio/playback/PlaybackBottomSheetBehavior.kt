@@ -44,6 +44,7 @@ import org.oxycblt.auxio.util.systemBarInsetsCompat
 class PlaybackBottomSheetBehavior<V : View>(context: Context, attributeSet: AttributeSet?) :
     BaseBottomSheetBehavior<V>(context, attributeSet) {
     lateinit var sheetBackgroundDrawable: MaterialShapeDrawable
+    var primaryNavigationHeight = 0
 
     fun makeBackgroundDrawable(context: Context) {
         sheetBackgroundDrawable =
@@ -68,7 +69,7 @@ class PlaybackBottomSheetBehavior<V : View>(context: Context, attributeSet: Attr
     }
 
     override fun getIdealBarHeight(context: Context) =
-        context.getDimenPixels(R.dimen.size_touchable_large)
+        context.getDimenPixels(R.dimen.size_touchable_large) + primaryNavigationHeight
 
     // Hack around issue where the playback sheet will try to intercept nested scrolling events
     // before the queue sheet.
@@ -92,6 +93,7 @@ class PlaybackBottomSheetBehavior<V : View>(context: Context, attributeSet: Attr
 
     override fun applyWindowInsets(child: View, insets: WindowInsets): WindowInsets {
         super.applyWindowInsets(child, insets)
+        peekHeight += primaryNavigationHeight
         // Offset our expanded panel by the size of the playback bar, as that is shown when
         // we slide up the panel.
         val bars = insets.systemBarInsetsCompat

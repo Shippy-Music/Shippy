@@ -98,6 +98,16 @@
 
     <!-- Search for music -->
     <string name="lbl_search">Search</string>
+    <string name="lbl_home">Home</string>
+    <string name="lbl_library">Library</string>
+    <string name="lbl_crew">Crew</string>
+    <string name="lbl_continue_listening">Continue listening</string>
+    <string name="lbl_your_music">Your music</string>
+    <string name="lbl_open_library">Open library</string>
+    <string name="lbl_find_music">Find music</string>
+    <string name="lbl_listen_together">Listen together</string>
+    <string name="lbl_start_crew">Start a Crew</string>
+    <string name="lbl_scan_or_join">Scan QR or join</string>
     <!-- As in filtering to particular types of music in the search view -->
     <string name="lbl_filter">Filter</string>
     <!-- As in to not filter -->
@@ -206,6 +216,8 @@
     <string name="lng_supporters_promo">Donate to the project to get your name added here!</string>
     <!-- As in music library -->
     <string name="lng_search_library">Search your library…</string>
+    <string name="lng_no_current_music">Play something and it will stay close at hand.</string>
+    <string name="lng_crew_empty">Share one queue and keep playback in sync on a nearby or remote device.</string>
     <string name="lng_tasker_start">
         Starts Auxio using the previously saved state. If no saved state is available, all songs will be shuffled. Playback will start immediately.
         \n\nWARNING: Be careful controlling this service, if you close it and then try to use it again, you will probably crash the app.
@@ -369,6 +381,8 @@
     <string name="desc_song_handle">Move this song</string>
     <string name="desc_queue_bar">Open the queue</string>
     <string name="desc_tab_handle">Move this tab</string>
+    <string name="desc_primary_navigation">Primary navigation</string>
+    <string name="desc_open_now_playing">Open now playing</string>
     <string name="desc_clear_search">Clear search query</string>
     <string name="desc_add_folder">Add folder</string>
     <string name="desc_music_location_delete">Remove folder</string>
@@ -476,6 +490,7 @@
     <!-- As in the total duration of all songs in the music library -->
     <string name="fmt_lib_total_duration">Total duration: %s</string>
     <string name="fmt_lib_total_size">Total size: %s</string>
+    <string name="fmt_shippy_library_summary">%1$d songs · %2$d albums · %3$d artists</string>
 
     <plurals name="fmt_song_count">
         <item quantity="one">%d song</item>

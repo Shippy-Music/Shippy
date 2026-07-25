@@ -1,7 +1,7 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-25  
-**Current stage:** Stage 1 foundation seam — domain, providers, downloads, and Crew state  
+**Current stage:** Stage 1 — Shippy shell over preserved Auxio playback  
 **Overall state:** In progress
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
@@ -35,12 +35,22 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Deterministic Crew state/event reducer implemented with equal-member queue and
   playback actions, sequence/term checks, snapshot gaps, and coordinator transfer.
 - Shippy app label and required network permissions introduced.
+- Four primary destinations implemented in the real Android navigation graph:
+  Home, Search, Library, and Crew.
+- Auxio mini-player/full-player/queue sheets retained and offset above the
+  primary navigation; full-player expansion fades navigation away.
+- Top-level destination state restoration and Library-only Auxio FAB behavior
+  implemented.
+- Home now reflects real current playback and real local-library statistics.
+- Search is a top-level destination; the mature Auxio local library is retained
+  under Library.
+- JioSaavn media URL/response utilities and LRC parser ported with focused tests.
 
 ## In Progress
 
-- Static review of the new pure Kotlin foundations and tests.
-- First donor ports for JioSaavn media utilities and LRC lyrics parsing.
-- Shippy four-destination shell design against the preserved Auxio player sheets.
+- Static review of the new Android shell and inset/mini-player integration.
+- Wiring provider-backed search and permanent collection persistence.
+- Crew transport/session engine behind the new Crew destination.
 
 ## Not Started
 
@@ -60,11 +70,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Complete static parsing and review of provider/download/Crew foundations.
-2. Commit the reviewed foundation slice.
-3. Implement Home, Search, Library, and Crew shell while preserving mini-player,
-   queue sheet, and Back behavior.
-4. Continue the first local-playback vertical slice through the new shell.
+1. Commit the statically reviewed Shippy shell.
+2. Implement permanent collection persistence and Library projection.
+3. Implement the first complete provider adapter and unified search repository.
+4. Continue the local/provider playback vertical slice through Auxio Media3.
 
 ## Verification Ledger
 
@@ -77,5 +86,5 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
 | App code | Implemented, not compiled | Domain, provider, download, local adapter, Crew reducer |
 | New tests | Authored, not run | Resolver, collections, provider registry, download, Crew |
-| Static structure | Parsing in progress | Graphify extraction |
+| Static structure | Parsed | Graphify AST extraction and XML parsing |
 | APK/device | Not verified | Owner handoff stage |

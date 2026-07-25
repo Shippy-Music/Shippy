@@ -2,12 +2,18 @@
 <navigation xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    app:startDestination="@id/home_fragment">
+    app:startDestination="@id/shippy_home_fragment">
 
     <fragment
-        android:id="@+id/home_fragment"
+        android:id="@+id/shippy_home_fragment"
+        android:name="org.oxycblt.auxio.shippy.home.ShippyHomeFragment"
+        android:label="shippy_home_fragment"
+        tools:layout="@layout/fragment_shippy_home" />
+
+    <fragment
+        android:id="@+id/library_fragment"
         android:name="org.oxycblt.auxio.home.HomeFragment"
-        android:label="home_fragment"
+        android:label="library_fragment"
         tools:layout="@layout/fragment_home">
         <action
             android:id="@+id/search"
@@ -91,6 +97,12 @@
             android:id="@+id/choose_locations"
             app:destination="@id/music_locations_dialog" />
     </fragment>
+
+    <fragment
+        android:id="@+id/crew_fragment"
+        android:name="org.oxycblt.auxio.shippy.crew.ui.CrewFragment"
+        android:label="crew_fragment"
+        tools:layout="@layout/fragment_crew" />
 
     <dialog
         android:id="@+id/error_details_dialog"

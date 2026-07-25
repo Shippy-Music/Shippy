@@ -9,6 +9,7 @@
 
 
     <org.oxycblt.auxio.ui.EatInsetsFrameLayout
+        android:id="@+id/main_content_container"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         app:layout_behavior="org.oxycblt.auxio.ui.BottomSheetContentBehavior">
@@ -20,7 +21,7 @@
             android:layout_height="match_parent"
             app:defaultNavHost="true"
             app:navGraph="@navigation/inner"
-            tools:layout="@layout/fragment_home" />
+            tools:layout="@layout/fragment_shippy_home" />
 
 
         <org.oxycblt.auxio.ui.EdgeFrameLayout
@@ -135,5 +136,17 @@
             android:layout_height="match_parent" />
 
     </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/primary_navigation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="?attr/colorSurfaceContainer"
+        android:contentDescription="@string/desc_primary_navigation"
+        android:minHeight="@dimen/shippy_primary_navigation_height"
+        app:itemIconSize="24dp"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/shippy_primary_navigation" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
