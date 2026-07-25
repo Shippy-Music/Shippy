@@ -149,7 +149,8 @@ code/test level, ready for later device verification.
 - [ ] Complete membership lifecycle:
   - [x] Authenticated coordinator admission and canonical post-join snapshot.
   - [x] Self-leave and deterministic graceful coordinator handoff.
-  - [ ] Liveness expiry, reconnect lease, and independently authenticated
+  - [x] Monotonic reconnect grace and strict-majority election eligibility.
+  - [ ] Sequence expired-member removal and independently authenticated
         ungraceful election votes.
 - [x] Implement bounded persistent active-session checkpoint format and Room
       store; secure rejoin credentials remain part of session orchestration.

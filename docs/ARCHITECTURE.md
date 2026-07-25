@@ -449,6 +449,13 @@ successor, then sends a self-leave request through that new coordinator. The
 departing device clears only its exact active checkpoint after the accepted
 `MemberLeft` event reaches it.
 
+`CrewLivenessTracker` keeps transport loss separate from membership mutation.
+It uses monotonic configurable reconnect grace, cancels expiry on authenticated
+activity, lets only the coordinator remove an expired ordinary member, and
+permits ungraceful election only when connected survivors are a strict majority
+of the full persisted checkpoint. The candidate is the lowest stable member ID;
+two-member coordinator loss therefore remains paused without a relay witness.
+
 ### Transport adapters
 
 The 2026-07-25 focused spike selected:

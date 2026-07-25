@@ -216,6 +216,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Graceful coordinator leave now transfers deterministically to the lowest-ID
   connected successor before its self-leave request. The departing member
   receives the accepted leave event and clears only its exact active checkpoint.
+- Crew liveness now uses monotonic configurable reconnect grace and authenticated
+  activity recovery. It exposes coordinator-only ordinary-member removal and
+  strict-full-checkpoint-majority election eligibility with deterministic
+  candidate choice; two-member split brain remains refused.
 
 ## In Progress
 
@@ -231,7 +235,7 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   vertical slice.
 - Secure rejoin credentials, hosted signaling, remaining transport lifecycle,
   and active UI behind the new Crew destination.
-- Completing liveness expiry, reconnect leases, and independently authenticated
+- Sequencing liveness-removal decisions and independently authenticated
   ungraceful election votes around the session engine.
 
 ## Not Started
@@ -289,5 +293,5 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics/Crew-checkpoint persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
 | New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/control codec/framing/checkpoint persistence/session convergence/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 347-file app AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 349-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

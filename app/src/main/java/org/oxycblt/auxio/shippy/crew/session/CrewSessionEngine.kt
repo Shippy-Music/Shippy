@@ -181,6 +181,7 @@ class CrewSessionEngine(
     private val stateMutex = Mutex()
     private val peers = ConcurrentHashMap<CrewMemberId, PeerSession>()
     private val optimisticActions = CrewOptimisticActionTracker()
+    private val liveness = CrewLivenessTracker(initialState, localMemberId)
     private var sequencer: CrewCoordinatorSequencer? =
         if (initialState.coordinatorMemberId == localMemberId) {
             CrewCoordinatorSequencer(initialState, localMemberId, reducer)
@@ -244,6 +245,7 @@ class CrewSessionEngine(
         peer.jobs += scope.launch { pumpOutbound(peer) }
         peer.jobs += scope.launch { collectInbound(peer) }
         peer.jobs += scope.launch { collectTransportState(peer) }
+        liveness.connected(transport.remoteMemberId, nowMonotonicMs())
         publishPeerStates()
         emit(CrewSessionNotice.PeerAttached(transport.remoteMemberId))
     }
@@ -444,9 +446,13 @@ class CrewSessionEngine(
         }
     }
 
+    fun livenessDecisions(nowMonotonicMs: Long = this.nowMonotonicMs()): List<CrewLivenessDecision> =
+        liveness.evaluate(mutableState.value, nowMonotonicMs)
+
     private suspend fun collectInbound(peer: PeerSession) {
         try {
             peer.transport.incoming.collect { frame ->
+                liveness.connected(peer.transport.remoteMemberId, nowMonotonicMs())
                 if (frame.channel != CrewTransportChannel.CONTROL) return@collect
                 when (
                     val result =
@@ -784,6 +790,7 @@ class CrewSessionEngine(
 
     private fun installStateLocked(state: CrewState) {
         mutableState.value = state
+        liveness.reconcile(state)
         sequencer =
             when {
                 state.coordinatorMemberId != localMemberId -> null
@@ -900,6 +907,9 @@ class CrewSessionEngine(
         peer.outgoing.close()
         peer.jobs.forEach { it.cancel() }
         peer.reassembler.reset()
+        if (reason != CrewPeerDetachReason.ENGINE_CLOSED) {
+            liveness.disconnected(memberId, nowMonotonicMs())
+        }
         if (closeTransport) peer.transport.close()
         publishPeerStates()
         emit(CrewSessionNotice.PeerDetached(memberId, reason))

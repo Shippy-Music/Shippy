@@ -587,6 +587,13 @@ transfers to the deterministic lowest-ID connected successor; its self-leave
 request follows the transfer on the same ordered channel. The leaving device
 clears its exact checkpoint only after receiving the accepted leave event.
 
+Transport loss now enters a monotonic reconnect grace instead of immediately
+removing membership. Authenticated activity cancels expiry. After grace, the
+current coordinator may sequence removal of an ordinary member. Coordinator
+loss produces an election opportunity only when connected survivors are a
+strict majority of the full checkpoint, with the lowest stable member ID as
+candidate. A two-member Crew still pauses safely after coordinator loss.
+
 This decision and the join/NSD adapters satisfy the architecture gate at
 source/API level only. Authenticated local signaling sockets are implemented and
 have loopback tests authored, but are not compiled or device-proven. NAT, TURN,
