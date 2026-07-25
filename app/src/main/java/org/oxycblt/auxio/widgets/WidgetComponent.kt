@@ -30,14 +30,16 @@ import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.image.coil.RoundedRectTransformation
 import org.oxycblt.auxio.image.coil.SquareCropTransformation
+import org.oxycblt.auxio.music.resolve
+import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.getDimenPixels
 import org.oxycblt.musikr.MusicParent
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -67,6 +69,7 @@ private constructor(
     }
 
     private val widgetProvider = WidgetProvider()
+    private var artworkRevision = 0L
 
     fun attach() {
         playbackManager.addListener(this)
@@ -76,21 +79,49 @@ private constructor(
 
     /** Update [WidgetProvider] with the current playback state. */
     fun update() {
-        val song = playbackManager.currentSong
-        if (song == null) {
-            L.d("No song, resetting widget")
+        val item = playbackManager.currentQueueItem
+        if (item == null) {
+            L.d("No playback item, resetting widget")
             widgetProvider.update(context, uiSettings, null)
             return
         }
+        val revision = ++artworkRevision
+        val track = item.track
+        val localSong = playbackManager.currentSong
+        val title = localSong?.name?.resolve(context) ?: track.title
+        val artist =
+            localSong?.artists?.resolveNames(context)
+                ?: track.artists.joinToString(", ")
+        val album = localSong?.album?.name?.resolve(context) ?: track.album.orEmpty()
 
         // Note: Store these values here so they remain consistent once the bitmap is loaded.
         val isPlaying = playbackManager.progression.isPlaying
         val repeatMode = playbackManager.repeatMode
         val isShuffled = playbackManager.isShuffled
 
-        L.d("Updating widget with new playback state")
+        fun publish(bitmap: Bitmap?) {
+            if (revision != artworkRevision) return
+            val state =
+                PlaybackState(
+                    title = title,
+                    artist = artist,
+                    album = album,
+                    cover = bitmap,
+                    isPlaying = isPlaying,
+                    repeatMode = repeatMode,
+                    isShuffled = isShuffled,
+                )
+            widgetProvider.update(context, uiSettings, state)
+        }
+
+        if (localSong == null) {
+            publish(null)
+            return
+        }
+
+        L.d("Updating widget with new local artwork")
         bitmapProvider.load(
-            song,
+            localSong,
             object : BitmapProvider.Target {
                 override fun onConfigRequest(builder: ImageRequest.Builder): ImageRequest.Builder {
                     val cornerRadius =
@@ -124,9 +155,8 @@ private constructor(
                 }
 
                 override fun onCompleted(bitmap: Bitmap?) {
-                    val state = PlaybackState(song, bitmap, isPlaying, repeatMode, isShuffled)
-                    L.d("Bitmap loaded, uploading state $state")
-                    widgetProvider.update(context, uiSettings, state)
+                    L.d("Bitmap loaded, uploading widget state")
+                    publish(bitmap)
                 }
             },
         )
@@ -146,17 +176,25 @@ private constructor(
     // Respond to all major song or player changes that will affect the widget
     override fun onIndexMoved(index: Int) = update()
 
-    override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
+    override fun onCanonicalQueueChanged(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        change: QueueChange,
+    ) {
         if (change.type == QueueChange.Type.SONG) {
             update()
         }
     }
 
-    override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) = update()
+    override fun onCanonicalQueueReordered(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        isShuffled: Boolean,
+    ) = update()
 
-    override fun onNewPlayback(
+    override fun onCanonicalNewPlayback(
         parent: MusicParent?,
-        queue: List<Song>,
+        queue: List<ResolvedQueueItem>,
         index: Int,
         isShuffled: Boolean,
     ) = update()
@@ -173,15 +211,18 @@ private constructor(
     /**
      * A condensed form of the playback state that is safe to use in AppWidgets.
      *
-     * @param song [PlaybackStateManager.currentSong]
-     * @param cover A pre-loaded album cover [Bitmap] for [song].
-     * @param cover A pre-loaded album cover [Bitmap] for [song], with rounded corners.
+     * @param title Current canonical playback title.
+     * @param artist Current canonical playback artist text.
+     * @param album Current canonical playback album text.
+     * @param cover A pre-loaded album cover [Bitmap], with rounded corners.
      * @param isPlaying [PlaybackStateManager.progression]
      * @param repeatMode [PlaybackStateManager.repeatMode]
      * @param isShuffled [PlaybackStateManager.isShuffled]
      */
     data class PlaybackState(
-        val song: Song,
+        val title: String,
+        val artist: String,
+        val album: String,
         val cover: Bitmap?,
         val isPlaying: Boolean,
         val repeatMode: RepeatMode,

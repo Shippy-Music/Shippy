@@ -30,7 +30,6 @@ import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -57,7 +56,7 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         binding.root.apply {
             setOnClickListener { playbackModel.openPlayback() }
             setOnLongClickListener {
-                playbackModel.song.value?.let(detailModel::showAlbum)
+                playbackModel.displayItem.value?.localSong?.let(detailModel::showAlbum)
                 true
             }
         }
@@ -70,7 +69,7 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         binding.playbackPlayPause.setOnClickListener { playbackModel.togglePlaying() }
 
         // -- VIEWMODEL SETUP ---
-        collectImmediately(playbackModel.song, ::updateSong)
+        collectImmediately(playbackModel.displayItem, ::updateItem)
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playbackModel.positionDs, ::updatePosition)
         collectImmediately(
@@ -89,18 +88,26 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
         binding.playbackInfo.isSelected = false
     }
 
-    private fun updateSong(song: Song?) {
-        if (song == null) {
+    private fun updateItem(item: PlaybackDisplayItem?) {
+        if (item == null) {
             // Nothing to do.
             return
         }
 
-        val context = requireContext()
         val binding = requireBinding()
-        binding.playbackCover.bind(song)
-        binding.playbackSong.text = song.name.resolve(context)
-        binding.playbackInfo.text = song.artists.resolveNames(context)
-        binding.playbackProgressBar.max = song.durationMs.msToDs().toInt()
+        val context = requireContext()
+        val track = item.queueItem.track
+        val localSong = item.localSong
+        if (localSong != null) {
+            binding.playbackCover.bind(localSong)
+            binding.playbackSong.text = localSong.name.resolve(context)
+            binding.playbackInfo.text = localSong.artists.resolveNames(context)
+        } else {
+            binding.playbackCover.bindArtwork(track.artwork, track.album ?: track.title)
+            binding.playbackSong.text = track.title
+            binding.playbackInfo.text = track.artists.joinToString(", ")
+        }
+        binding.playbackProgressBar.max = (track.durationMs ?: 0L).msToDs().toInt()
     }
 
     private fun updatePlaying(isPlaying: Boolean) {

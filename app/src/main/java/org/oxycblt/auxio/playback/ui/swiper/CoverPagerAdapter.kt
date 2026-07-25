@@ -23,9 +23,9 @@ import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.databinding.ItemCoverBinding
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
+import org.oxycblt.auxio.playback.PlaybackDisplayItem
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
 import org.oxycblt.auxio.util.inflater
-import org.oxycblt.musikr.Song
 
 /**
  * A [FlexibleListAdapter] that hosts [CoverViewHolder]s containing a [Song]'s cover and step
@@ -35,7 +35,7 @@ import org.oxycblt.musikr.Song
  * @author Alexander Capehart (OxygenCobalt)
  */
 class CoverPagerAdapter(private val listener: StepperOverlay.Listener) :
-    FlexibleListAdapter<Song, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
+    FlexibleListAdapter<PlaybackDisplayItem, CoverViewHolder>(CoverViewHolder.DIFF_CALLBACK) {
 
     override fun onCreateViewHolder(parent: ViewGroup, pos: Int) = CoverViewHolder.from(parent)
 
@@ -57,8 +57,14 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
      * @param song The new [Song] to bind.
      * @param listener An [StepperOverlay.Listener] to bind fast seek interactions to.
      */
-    fun bind(song: Song, listener: StepperOverlay.Listener) {
-        binding.cover.bind(song)
+    fun bind(item: PlaybackDisplayItem, listener: StepperOverlay.Listener) {
+        val localSong = item.localSong
+        if (localSong != null) {
+            binding.cover.bind(localSong)
+        } else {
+            val track = item.queueItem.track
+            binding.cover.bindArtwork(track.artwork, track.album ?: track.title)
+        }
         binding.coverFastSeekOverlay.listener = listener
     }
 
@@ -74,9 +80,14 @@ class CoverViewHolder private constructor(private val binding: ItemCoverBinding)
 
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
-            object : SimpleDiffCallback<Song>() {
-                override fun areContentsTheSame(oldItem: Song, newItem: Song) =
-                    oldItem.cover == newItem.cover
+            object : SimpleDiffCallback<PlaybackDisplayItem>() {
+                override fun areContentsTheSame(
+                    oldItem: PlaybackDisplayItem,
+                    newItem: PlaybackDisplayItem,
+                ) =
+                    oldItem.queueItem.id == newItem.queueItem.id &&
+                        oldItem.localSong?.cover == newItem.localSong?.cover &&
+                        oldItem.queueItem.track.artwork == newItem.queueItem.track.artwork
             }
     }
 }

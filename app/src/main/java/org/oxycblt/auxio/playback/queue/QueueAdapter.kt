@@ -31,14 +31,14 @@ import org.oxycblt.auxio.databinding.ItemEditableSongBinding
 import org.oxycblt.auxio.list.EditClickListListener
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.PlayingIndicatorAdapter
+import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.list.recycler.MaterialDragCallback
-import org.oxycblt.auxio.list.recycler.SongViewHolder
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
+import org.oxycblt.auxio.playback.PlaybackDisplayItem
 import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.inflater
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -47,8 +47,10 @@ import timber.log.Timber as L
  * @param listener A [EditClickListListener] to bind interactions to.
  * @author Alexander Capehart (OxygenCobalt)
  */
-class QueueAdapter(private val listener: EditClickListListener<Song>) :
-    FlexibleListAdapter<Song, QueueSongViewHolder>(QueueSongViewHolder.DIFF_CALLBACK) {
+class QueueAdapter(private val listener: EditClickListListener<PlaybackDisplayItem>) :
+    FlexibleListAdapter<PlaybackDisplayItem, QueueSongViewHolder>(
+        QueueSongViewHolder.DIFF_CALLBACK
+    ) {
     // Since PlayingIndicator adapter relies on an item value, we cannot use it for this
     // adapter, as one item can appear at several points in the UI. Use a similar implementation
     // with an index value instead.
@@ -152,11 +154,22 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
      * @param listener A [EditClickListListener] to bind interactions to.
      */
     @SuppressLint("ClickableViewAccessibility")
-    fun bind(song: Song, listener: EditClickListListener<Song>) {
-        listener.bind(song, this, body, binding.songDragHandle)
-        binding.songAlbumCover.bind(song)
-        binding.songName.text = song.name.resolve(binding.context)
-        binding.songInfo.text = song.artists.resolveNames(binding.context)
+    fun bind(
+        item: PlaybackDisplayItem,
+        listener: EditClickListListener<PlaybackDisplayItem>,
+    ) {
+        listener.bind(item, this, body, binding.songDragHandle)
+        val localSong = item.localSong
+        val track = item.queueItem.track
+        if (localSong != null) {
+            binding.songAlbumCover.bind(localSong)
+            binding.songName.text = localSong.name.resolve(binding.context)
+            binding.songInfo.text = localSong.artists.resolveNames(binding.context)
+        } else {
+            binding.songAlbumCover.bindArtwork(track.artwork, track.album ?: track.title)
+            binding.songName.text = track.title
+            binding.songInfo.text = track.artists.joinToString(", ")
+        }
         // Not swiping this ViewHolder if it's being re-bound, ensure that the background is
         // not visible. See QueueDragCallback for why this is done.
         binding.background.isInvisible = true
@@ -178,6 +191,12 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
             QueueSongViewHolder(ItemEditableSongBinding.inflate(parent.context.inflater))
 
         /** A comparator that can be used with DiffUtil. */
-        val DIFF_CALLBACK = SongViewHolder.DIFF_CALLBACK
+        val DIFF_CALLBACK =
+            object : SimpleDiffCallback<PlaybackDisplayItem>() {
+                override fun areContentsTheSame(
+                    oldItem: PlaybackDisplayItem,
+                    newItem: PlaybackDisplayItem,
+                ) = oldItem == newItem
+            }
     }
 }

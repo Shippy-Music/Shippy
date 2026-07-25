@@ -24,12 +24,14 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.playback.PlaybackDisplayItem
+import org.oxycblt.auxio.playback.PlaybackDisplayMapper
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.MusicParent
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -38,12 +40,17 @@ import timber.log.Timber as L
  * @author Alexander Capehart (OxygenCobalt)
  */
 @HiltViewModel
-class QueueViewModel @Inject constructor(private val playbackManager: PlaybackStateManager) :
+class QueueViewModel
+@Inject
+constructor(
+    private val playbackManager: PlaybackStateManager,
+    private val playbackDisplayMapper: PlaybackDisplayMapper,
+) :
     ViewModel(), PlaybackStateManager.Listener {
 
-    private val _queue = MutableStateFlow(listOf<Song>())
+    private val _queue = MutableStateFlow(listOf<PlaybackDisplayItem>())
     /** The current queue. */
-    val queue: StateFlow<List<Song>> = _queue
+    val queue: StateFlow<List<PlaybackDisplayItem>> = _queue
     private val _queueInstructions = MutableEvent<UpdateInstructions>()
     /** Instructions for how to update [queue] in the UI. */
     val queueInstructions: Event<UpdateInstructions> = _queueInstructions
@@ -67,11 +74,15 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         _index.value = index
     }
 
-    override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
+    override fun onCanonicalQueueChanged(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        change: QueueChange,
+    ) {
         // Queue changed trivially due to item mo -> Diff queue, stay at current index.
         L.d("Updating queue display")
         _queueInstructions.put(change.instructions)
-        _queue.value = queue
+        _queue.value = queue.map(playbackDisplayMapper::map)
         if (change.type != QueueChange.Type.MAPPING) {
             // Index changed, make sure it remains updated without actually scrolling to it.
             L.d("Index changed with queue, synchronizing new position")
@@ -79,18 +90,22 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         }
     }
 
-    override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
+    override fun onCanonicalQueueReordered(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        isShuffled: Boolean,
+    ) {
         // Queue changed completely -> Replace queue, update index
         L.d("Queue changed completely, replacing queue and position")
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
-        _queue.value = queue
+        _queue.value = queue.map(playbackDisplayMapper::map)
         _index.value = index
     }
 
-    override fun onNewPlayback(
+    override fun onCanonicalNewPlayback(
         parent: MusicParent?,
-        queue: List<Song>,
+        queue: List<ResolvedQueueItem>,
         index: Int,
         isShuffled: Boolean,
     ) {
@@ -98,7 +113,7 @@ class QueueViewModel @Inject constructor(private val playbackManager: PlaybackSt
         L.d("New playback, replacing queue and position")
         _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
-        _queue.value = queue
+        _queue.value = queue.map(playbackDisplayMapper::map)
         _index.value = index
     }
 

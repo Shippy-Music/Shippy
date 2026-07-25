@@ -22,6 +22,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
+import android.os.Bundle
+import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -46,6 +49,8 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.shippy.domain.QueueItem
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.util.newBroadcastPendingIntent
 import org.oxycblt.auxio.util.newMainPendingIntent
 import org.oxycblt.musikr.MusicParent
@@ -92,6 +97,7 @@ private constructor(
         get() = mediaSession.sessionToken
 
     private val _notification = PlaybackNotification(context, mediaSession.sessionToken)
+    private var metadataRevision = 0L
     val notification: ForegroundServiceNotification
         get() = _notification
 
@@ -125,11 +131,19 @@ private constructor(
     // --- PLAYBACKSTATEMANAGER OVERRIDES ---
 
     override fun onIndexMoved(index: Int) {
-        updateMediaMetadata(playbackManager.currentSong, playbackManager.parent)
+        updateMediaMetadata(
+            playbackManager.currentQueueItem,
+            playbackManager.currentSong,
+            playbackManager.parent,
+        )
         invalidateSessionState()
     }
 
-    override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
+    override fun onCanonicalQueueChanged(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        change: QueueChange,
+    ) {
         updateQueue(queue)
         when (change.type) {
             // Nothing special to do with mapping changes.
@@ -138,11 +152,19 @@ private constructor(
             QueueChange.Type.INDEX -> invalidateSessionState()
             // Song changed, ensure metadata changes.
             QueueChange.Type.SONG ->
-                updateMediaMetadata(playbackManager.currentSong, playbackManager.parent)
+                updateMediaMetadata(
+                    playbackManager.currentQueueItem,
+                    playbackManager.currentSong,
+                    playbackManager.parent,
+                )
         }
     }
 
-    override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
+    override fun onCanonicalQueueReordered(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        isShuffled: Boolean,
+    ) {
         updateQueue(queue)
         invalidateSessionState()
         mediaSession.setShuffleMode(
@@ -155,13 +177,13 @@ private constructor(
         invalidateNotificationActions()
     }
 
-    override fun onNewPlayback(
+    override fun onCanonicalNewPlayback(
         parent: MusicParent?,
-        queue: List<Song>,
+        queue: List<ResolvedQueueItem>,
         index: Int,
         isShuffled: Boolean,
     ) {
-        updateMediaMetadata(playbackManager.currentSong, parent)
+        updateMediaMetadata(playbackManager.currentQueueItem, playbackManager.currentSong, parent)
         updateQueue(queue)
         invalidateSessionState()
     }
@@ -190,7 +212,11 @@ private constructor(
 
     override fun onImageSettingsChanged() {
         // Need to reload the metadata cover.
-        updateMediaMetadata(playbackManager.currentSong, playbackManager.parent)
+        updateMediaMetadata(
+            playbackManager.currentQueueItem,
+            playbackManager.currentSong,
+            playbackManager.parent,
+        )
     }
 
     // --- MEDIASESSION OVERRIDES ---
@@ -206,15 +232,64 @@ private constructor(
      * @param parent The current [MusicParent] to create the [MediaMetadataCompat] from, or null if
      *   playback is currently occuring from all songs.
      */
-    private fun updateMediaMetadata(song: Song?, parent: MusicParent?) {
-        L.d("Updating media metadata to $song with $parent")
-        if (song == null) {
+    private fun updateMediaMetadata(
+        item: QueueItem?,
+        localSong: Song?,
+        parent: MusicParent?,
+    ) {
+        val revision = ++metadataRevision
+        L.d("Updating media metadata to ${item?.id} with $parent")
+        if (item == null) {
             // Nothing playing, reset the MediaSession and close the notification.
             L.d("Nothing playing, resetting media session")
             mediaSession.setMetadata(emptyMetadata)
             return
         }
 
+        if (localSong == null) {
+            updateCanonicalMetadata(item)
+            return
+        }
+        updateLocalMetadata(localSong, parent, revision)
+    }
+
+    private fun updateCanonicalMetadata(item: QueueItem) {
+        val track = item.track
+        val artists =
+            track.artists.joinToString(", ").ifBlank { context.getString(R.string.cdc_unknown) }
+        val album = track.album.orEmpty()
+        val metadata =
+            MediaMetadataCompat.Builder()
+                .putText(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
+                .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+                .putText(MediaMetadataCompat.METADATA_KEY_ARTIST, artists)
+                .putText(MediaMetadataCompat.METADATA_KEY_ALBUM_ARTIST, artists)
+                .putText(MediaMetadataCompat.METADATA_KEY_AUTHOR, artists)
+                .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, track.title)
+                .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, artists)
+                .putText(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, album)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, track.durationMs ?: 0L)
+                .putText(
+                    PlaybackNotification.KEY_PARENT,
+                    track.album ?: context.getString(R.string.app_name),
+                )
+                .apply {
+                    track.artwork?.takeIf(String::isNotBlank)?.let { artwork ->
+                        putString(MediaMetadataCompat.METADATA_KEY_ART_URI, artwork)
+                        putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, artwork)
+                    }
+                }
+                .build()
+        mediaSession.setMetadata(metadata)
+        _notification.updateMetadata(metadata)
+        foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
+    }
+
+    private fun updateLocalMetadata(
+        song: Song,
+        parent: MusicParent?,
+        revision: Long,
+    ) {
         // Populate MediaMetadataCompat. For efficiency, cache some fields that are re-used
         // several times.
         val title = song.name.resolve(context)
@@ -273,6 +348,10 @@ private constructor(
             song,
             object : BitmapProvider.Target {
                 override fun onCompleted(bitmap: Bitmap?) {
+                    if (revision != metadataRevision) {
+                        L.d("Discarding stale media metadata artwork")
+                        return
+                    }
                     L.d("Bitmap loaded, applying media session and posting notification")
                     if (bitmap != null) {
                         builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
@@ -292,14 +371,36 @@ private constructor(
      *
      * @param queue The current queue to upload.
      */
-    private fun updateQueue(queue: List<Song>) {
+    private fun updateQueue(queue: List<ResolvedQueueItem>) {
         val queueItems =
-            queue.mapIndexed { i, song ->
+            queue.mapIndexed { i, resolvedItem ->
+                val item = resolvedItem.item
+                val track = item.track
+                val localSong =
+                    playbackManager.queue.getOrNull(i).takeIf {
+                        playbackManager.resolvedQueue.getOrNull(i)?.item?.id == item.id
+                    }
                 val description =
-                    song.toMediaDescription(
+                    localSong?.toMediaDescription(
                         context,
                         { putInt(MediaSessionInterface.KEY_QUEUE_POS, i) },
                     )
+                        ?: MediaDescriptionCompat.Builder()
+                            .setMediaId(item.id.value)
+                            .setTitle(track.title)
+                            .setSubtitle(track.artists.joinToString(", "))
+                            .setDescription(track.album)
+                            .setIconUri(
+                                track.artwork
+                                    ?.takeIf(String::isNotBlank)
+                                    ?.let(Uri::parse)
+                            )
+                            .setExtras(
+                                Bundle().apply {
+                                    putInt(MediaSessionInterface.KEY_QUEUE_POS, i)
+                                }
+                            )
+                            .build()
                 // Store the item index so we can then use the analogous index in the
                 // playback state.
                 MediaSessionCompat.QueueItem(description, i.toLong())

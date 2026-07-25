@@ -42,7 +42,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
 
     // TODO: Figure this out
     override fun onReceive(context: Context, intent: Intent) {
-        if (playbackManager.currentSong != null) {
+        if (playbackManager.currentQueueItem != null) {
             // We have a song, so we can assume that the service will start a foreground state.
             // At least, I hope. Again, *this is why we don't do this*. I cannot describe how
             // stupid this is with the state of foreground services on modern android. One

@@ -47,7 +47,7 @@ subsequent task names an actual module.
 - [ ] Move technical/provider actions to Song Information.
 - [ ] Establish accessible reusable track rows, collection rows, controls,
       dialogs, sheets, and empty/error/loading states.
-- [ ] Preserve real Auxio local playback through the entire shell.
+- [x] Preserve real Auxio local playback through the entire shell.
 
 **Validation:**
 
@@ -69,9 +69,9 @@ through Auxio’s existing playback stack.
 - [ ] Add selected Download destination with persisted Android access.
 - [ ] Index pre-existing supported media in the Download destination.
 - [ ] Add download relationship/state without isolating tracks from normal views.
-- [ ] Make queue the canonical playback order for UI, MediaSession, and later
+- [x] Make queue the canonical playback order for UI, MediaSession, and later
       Crew.
-- [ ] Implement reorder/remove/play-next/add/replace-context behavior.
+- [x] Implement reorder/remove/play-next/add/replace-context behavior.
 - [ ] Persist useful offline queue/context.
 
 **Validation:**
@@ -88,16 +88,16 @@ through Auxio’s existing playback stack.
 - [x] Define Shippy Kotlin provider interface and capability/health reporting.
 - [x] Implement canonical track, provider candidate, playback candidate, and
       recording-version safeguards.
-- [ ] Implement preferred/fallback provider settings.
+- [x] Implement preferred/fallback provider settings.
 - [x] Port or reimplement the first viable provider adapter from Bloomee evidence.
 - [ ] Add additional viable provider adapters.
-- [ ] Implement provider playback URL resolution with expiry/cache behavior.
+- [x] Implement provider playback URL resolution with expiry/cache behavior.
 - [ ] Implement Shippy permanent download jobs, progress, retry, cancel, remove,
       and destination reconciliation.
 - [x] Implement resolution order:
       Crew cache -> download -> preferred -> fallback -> Crew peer.
-- [ ] Add partial provider failure UI without failing the entire search.
-- [ ] Add unified provider search and clearly labelled On this device results.
+- [x] Add partial provider failure UI without failing the entire search.
+- [x] Add unified provider search and clearly labelled On this device results.
 
 **Validation:**
 
@@ -118,7 +118,7 @@ code/test level, ready for later device verification.
 - [ ] Gapless/crossfade/normalization settings according to actual Media3 support.
 - [ ] Sleep timer utility.
 - [ ] Original-link and Shippy-deep-link sharing.
-- [ ] MediaSession commands remain consistent with Shippy queue/player.
+- [x] MediaSession commands remain consistent with Shippy queue/player.
 - [ ] Notification, lock screen, headset, Bluetooth, and interruptions.
 - [ ] Home-screen widgets using the same state/commands.
 - [ ] Android Auto after MediaSession stability.

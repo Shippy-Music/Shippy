@@ -21,8 +21,10 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.ContentDataSource
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.ExtractorsFactory
@@ -52,9 +54,18 @@ class SystemModule {
     ): MediaSource.Factory = ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
 
     @Provides
-    fun dataSourceFactory(@ApplicationContext context: Context) =
-        // We only ever open conte tURIs, so only provide those data sources.
-        DataSource.Factory { ContentDataSource(context) }
+    fun dataSourceFactory(
+        @ApplicationContext context: Context,
+        playbackRequestHeaders: PlaybackRequestHeaders,
+    ): DataSource.Factory {
+        val httpFactory =
+            DefaultHttpDataSource.Factory()
+                .setConnectTimeoutMs(8_000)
+                .setReadTimeoutMs(10_000)
+                .setAllowCrossProtocolRedirects(false)
+        val routingFactory = DefaultDataSource.Factory(context, httpFactory)
+        return ResolvingDataSource.Factory(routingFactory, playbackRequestHeaders::resolve)
+    }
 
     @Provides
     fun extractorsFactory() = ExtractorsFactory {

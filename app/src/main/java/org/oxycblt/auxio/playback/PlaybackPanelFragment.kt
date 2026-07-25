@@ -30,6 +30,7 @@ import android.view.View
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.Toolbar
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.fragment.app.activityViewModels
@@ -173,7 +174,7 @@ class PlaybackPanelFragment :
         }
 
         // --- VIEWMODEL SETUP --
-        collectImmediately(playbackModel.song, ::updateSong)
+        collectImmediately(playbackModel.displayItem, ::updateItem)
         collectImmediately(playbackModel.parent, ::updateParent)
         collectImmediately(playbackModel.positionDs, ::updatePosition)
         collectImmediately(playbackModel.repeatMode, ::updateRepeat)
@@ -256,22 +257,37 @@ class PlaybackPanelFragment :
         playbackModel.seekTo(positionDs)
     }
 
-    private fun updateSong(song: Song?) {
-        if (song == null) {
+    private fun updateItem(item: PlaybackDisplayItem?) {
+        if (item == null) {
             // Nothing to do.
             return
         }
 
         val binding = requireBinding()
         val context = requireContext()
-        L.d("Updating song display: $song")
-        binding.playbackSong.text = song.name.resolve(context)
-        binding.playbackArtist.text = song.artists.resolveNames(context)
-        binding.playbackAlbum?.text = song.album.name.resolve(context)
-        binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
+        val track = item.queueItem.track
+        val localSong = item.localSong
+        L.d("Updating playback display: ${item.queueItem.id}")
+        if (localSong != null) {
+            binding.playbackSong.text = localSong.name.resolve(context)
+            binding.playbackArtist.text = localSong.artists.resolveNames(context)
+            binding.playbackAlbum?.text = localSong.album.name.resolve(context)
+        } else {
+            binding.playbackSong.text = track.title
+            binding.playbackArtist.text = track.artists.joinToString(", ")
+            binding.playbackAlbum?.text = track.album.orEmpty()
+            binding.playbackToolbar.subtitle =
+                track.album?.takeIf(String::isNotBlank) ?: getString(R.string.lbl_search)
+        }
+        binding.playbackMore?.isVisible = localSong != null
+        binding.playbackSeekBar?.durationDs = (track.durationMs ?: 0L).msToDs()
     }
 
     private fun updateParent(parent: MusicParent?) {
+        val displayItem = playbackModel.displayItem.value
+        if (displayItem != null && displayItem.localSong == null) {
+            return
+        }
         val binding = requireBinding()
         val context = requireContext()
         binding.playbackToolbar.subtitle =

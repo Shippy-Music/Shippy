@@ -30,10 +30,10 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlin.math.min
 import org.oxycblt.auxio.databinding.FragmentQueueBinding
 import org.oxycblt.auxio.list.EditClickListListener
+import org.oxycblt.auxio.playback.PlaybackDisplayItem
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -42,7 +42,9 @@ import timber.log.Timber as L
  * @author Alexander Capehart (OxygenCobalt)
  */
 @AndroidEntryPoint
-class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickListListener<Song> {
+class QueueFragment :
+    ViewBindingFragment<FragmentQueueBinding>(),
+    EditClickListListener<PlaybackDisplayItem> {
     private val queueModel: QueueViewModel by viewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val queueAdapter = QueueAdapter(this)
@@ -93,7 +95,7 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
         queueModel.queueInstructions.consume()
     }
 
-    override fun onClick(item: Song, viewHolder: RecyclerView.ViewHolder) {
+    override fun onClick(item: PlaybackDisplayItem, viewHolder: RecyclerView.ViewHolder) {
         queueModel.goto(viewHolder.bindingAdapterPosition)
     }
 
@@ -108,7 +110,11 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
                 .findFirstCompletelyVisibleItemPosition() < 1
     }
 
-    private fun updateQueue(queue: List<Song>, index: Int, isPlaying: Boolean) {
+    private fun updateQueue(
+        queue: List<PlaybackDisplayItem>,
+        index: Int,
+        isPlaying: Boolean,
+    ) {
         val binding = requireBinding()
 
         queueAdapter.update(queue, queueModel.queueInstructions.consume())

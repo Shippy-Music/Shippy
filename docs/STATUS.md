@@ -55,15 +55,28 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   cancellation.
 - The live JioSaavn search response shape was checked on 2026-07-25; no secret
   credential was required or stored.
+- Auxio's single playback manager and ExoPlayer holder now store canonical
+  duplicate-safe Shippy queue items while deriving local Song compatibility.
+- Local and provider media use one Media3 path with content/file/HTTPS routing,
+  per-queue-item request headers, canonical metadata, and no second player.
+- Unified Search now renders independent provider sections, scoped failures,
+  and a labelled On this device section.
+- Provider Search results resolve asynchronously before entering the synchronized
+  player authority and can start real JioSaavn playback.
+- Mini/full player identity, artwork, queue, MediaSession, notification metadata,
+  headset/media-button presence checks, and widgets consume canonical playback
+  items; exact local artwork behavior is retained.
+- Legacy playback persistence remains local-only and never stores expiring
+  provider URLs or headers.
 
 ## In Progress
 
-- Migrating Auxio's Song-only playback boundary to canonical Shippy queue items
-  without creating a second player or queue.
-- Wiring provider results into Search only after provider playback has a real
-  canonical path.
 - Extending initial relationship persistence into complete user playlists,
   permanent collection projections, and download artifacts.
+- Implementing selected SAF download destination, existing-file reconciliation,
+  and durable download jobs.
+- Completing provider/player action surfaces beyond the first Search-to-play
+  vertical slice.
 - Crew transport/session engine behind the new Crew destination.
 
 ## Not Started
@@ -81,16 +94,20 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   networking library.
 - Room/Hilt generation, JioSaavn JSON parsing, and provider playback are
   compile/device-unverified until the owner build.
+- Canonical Media3 custom-cache-key/header routing is implemented and
+  syntax-checked but remains runtime-unverified.
+- Remote provider artwork currently reaches in-app Coil surfaces and metadata
+  URIs; notification/widget bitmap loading still needs the dedicated remote
+  artwork path.
 - Final device behavior is deliberately unverified until the owner performs the
   build/test handoff.
 
 ## Next Concrete Actions
 
-1. Generalize the existing Auxio player/queue authority for canonical Shippy
-   queue items while retaining exact local compatibility.
-2. Connect unified provider search to the real Search UI and canonical playback.
-3. Complete user-playlist metadata and permanent collection projections.
-4. Implement download storage/jobs against the selected SAF destination.
+1. Complete user-playlist metadata and permanent collection projections.
+2. Implement download storage/jobs against the selected SAF destination.
+3. Add the next viable provider/YouTube adapter and full provider action surfaces.
+4. Continue player integrations and Crew transport/session implementation.
 
 ## Verification Ledger
 
@@ -101,8 +118,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Domain, Room relationships, live provider/search repository, download reducer, local adapter, Crew reducer |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers, Room relationships, live provider/Search-to-play, download reducer, local adapter, Crew reducer |
 | New tests | Authored, not run | Resolver, collections, provider registry, download, Crew |
 | External provider shape | Live-inspected | JioSaavn search response on 2026-07-25 |
-| Static structure | Parsed | Graphify AST extraction and XML parsing |
+| Static structure | Parsed | Graphify 269-file AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

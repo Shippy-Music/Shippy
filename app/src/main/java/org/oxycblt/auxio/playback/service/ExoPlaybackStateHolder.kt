@@ -21,11 +21,13 @@ package org.oxycblt.auxio.playback.service
 import android.content.Context
 import android.content.Intent
 import android.media.audiofx.AudioEffect
+import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -61,8 +63,8 @@ import org.oxycblt.auxio.playback.state.RawQueue
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.playback.state.StateAck
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.musikr.MusicParent
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 @OptIn(UnstableApi::class)
@@ -76,6 +78,7 @@ class ExoPlaybackStateHolder(
     private val replayGainProcessor: ReplayGainAudioProcessor,
     private val musicRepository: MusicRepository,
     private val imageSettings: ImageSettings,
+    private val playbackRequestHeaders: PlaybackRequestHeaders,
 ) :
     PlaybackStateHolder,
     Player.Listener,
@@ -102,6 +105,7 @@ class ExoPlaybackStateHolder(
 
     fun release() {
         saveJob.cancel()
+        playbackRequestHeaders.replace(emptyList())
         playbackManager.unregisterStateHolder(this)
         musicRepository.removeUpdateListener(this)
         player.removeListener(this)
@@ -117,7 +121,7 @@ class ExoPlaybackStateHolder(
     override val progression: Progression
         get() {
             val mediaItem = player.currentMediaItem ?: return Progression.nil()
-            val duration = mediaItem.mediaMetadata.extras?.getLong("durationMs") ?: Long.MAX_VALUE
+            val duration = mediaItem.mediaMetadata.durationMs ?: Long.MAX_VALUE
             val clampedPosition = player.currentPosition.coerceAtLeast(0).coerceAtMost(duration)
             return Progression.from(player.playWhenReady, player.isPlaying, clampedPosition)
         }
@@ -135,10 +139,6 @@ class ExoPlaybackStateHolder(
         get() = player.audioSessionId
 
     override fun resolveQueue(): RawQueue {
-        val library =
-            musicRepository.library
-                // No library, cannot do anything.
-                ?: return RawQueue(emptyList(), emptyList(), 0)
         val heap = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
         val shuffledMapping =
             if (player.shuffleModeEnabled) {
@@ -146,7 +146,11 @@ class ExoPlaybackStateHolder(
             } else {
                 emptyList()
             }
-        return RawQueue(heap.mapNotNull { it.song }, shuffledMapping, player.currentMediaItemIndex)
+        return RawQueue(
+            heap.mapNotNull { it.resolvedQueueItem },
+            shuffledMapping,
+            player.currentMediaItemIndex,
+        )
     }
 
     override fun handleDeferred(action: DeferredPlayback): Boolean {
@@ -247,11 +251,12 @@ class ExoPlaybackStateHolder(
 
     override fun newPlayback(command: PlaybackCommand) {
         parent = command.parent
+        playbackRequestHeaders.replace(command.queue)
         player.shuffleModeEnabled = command.shuffled
         player.setMediaItems(command.queue.map { it.buildMediaItem() })
         val startIndex =
-            command.song
-                ?.let { command.queue.indexOf(it) }
+            command.selectedItemId
+                ?.let { selectedId -> command.queue.indexOfFirst { it.item.id == selectedId } }
                 .also { check(it != -1) { "Start song not in queue" } }
         if (command.shuffled) {
             player.setShuffleOrder(BetterShuffleOrder(command.queue.size, startIndex ?: -1))
@@ -330,7 +335,8 @@ class ExoPlaybackStateHolder(
         deferSave()
     }
 
-    override fun playNext(songs: List<Song>, ack: StateAck.PlayNext) {
+    override fun playNext(items: List<ResolvedQueueItem>, ack: StateAck.PlayNext) {
+        playbackRequestHeaders.replace(resolveQueue().heap + items)
         val currTimeline = player.currentTimeline
         val nextIndex =
             if (currTimeline.isEmpty) {
@@ -344,16 +350,17 @@ class ExoPlaybackStateHolder(
             }
 
         if (nextIndex == C.INDEX_UNSET) {
-            player.addMediaItems(songs.map { it.buildMediaItem() })
+            player.addMediaItems(items.map { it.buildMediaItem() })
         } else {
-            player.addMediaItems(nextIndex, songs.map { it.buildMediaItem() })
+            player.addMediaItems(nextIndex, items.map { it.buildMediaItem() })
         }
         playbackManager.ack(this, ack)
         deferSave()
     }
 
-    override fun addToQueue(songs: List<Song>, ack: StateAck.AddToQueue) {
-        player.addMediaItems(songs.map { it.buildMediaItem() })
+    override fun addToQueue(items: List<ResolvedQueueItem>, ack: StateAck.AddToQueue) {
+        playbackRequestHeaders.replace(resolveQueue().heap + items)
+        player.addMediaItems(items.map { it.buildMediaItem() })
         playbackManager.ack(this, ack)
         deferSave()
     }
@@ -391,6 +398,7 @@ class ExoPlaybackStateHolder(
         val trueIndex = indices[at]
         val songWillChange = player.currentMediaItemIndex == trueIndex
         player.removeMediaItem(trueIndex)
+        playbackRequestHeaders.replace(resolveQueue().heap)
         if (songWillChange && !playbackSettings.rememberPause) {
             player.play()
         }
@@ -412,6 +420,7 @@ class ExoPlaybackStateHolder(
             sendNewPlaybackEvent = true
         }
         if (rawQueue != resolveQueue()) {
+            playbackRequestHeaders.replace(rawQueue.heap)
             player.setMediaItems(rawQueue.heap.map { it.buildMediaItem() })
             if (rawQueue.isShuffled) {
                 player.shuffleModeEnabled = true
@@ -458,6 +467,7 @@ class ExoPlaybackStateHolder(
 
     override fun reset(ack: StateAck.NewPlayback) {
         player.setMediaItems(listOf())
+        playbackRequestHeaders.replace(emptyList())
         playbackManager.ack(this, ack)
         deferSave()
     }
@@ -591,10 +601,29 @@ class ExoPlaybackStateHolder(
         currentSaveJob = saveScope.launch { block() }
     }
 
-    private fun Song.buildMediaItem() = MediaItem.Builder().setUri(uri).setTag(this).build()
+    private fun ResolvedQueueItem.buildMediaItem(): MediaItem {
+        val track = item.track
+        val metadata =
+            MediaMetadata.Builder()
+                .setTitle(track.title)
+                .setArtist(track.artists.joinToString())
+                .setAlbumTitle(track.album)
+                .setDurationMs(track.durationMs)
+                .setArtworkUri(track.artwork?.takeIf(String::isNotBlank)?.let(Uri::parse))
+                .setIsPlayable(true)
+                .build()
+        return MediaItem.Builder()
+            .setMediaId(item.id.value)
+            .setUri(playback.uri)
+            .setMimeType(playback.mimeType)
+            .setCustomCacheKey(item.id.value)
+            .setMediaMetadata(metadata)
+            .setTag(this)
+            .build()
+    }
 
-    private val MediaItem.song: Song?
-        get() = this.localConfiguration?.tag as? Song?
+    private val MediaItem.resolvedQueueItem: ResolvedQueueItem?
+        get() = this.localConfiguration?.tag as? ResolvedQueueItem
 
     private fun Player.unscrambleQueueIndices(): List<Int> {
         val timeline = currentTimeline
@@ -653,6 +682,7 @@ class ExoPlaybackStateHolder(
         private val replayGainProcessor: ReplayGainAudioProcessor,
         private val musicRepository: MusicRepository,
         private val imageSettings: ImageSettings,
+        private val playbackRequestHeaders: PlaybackRequestHeaders,
     ) {
         fun create(): ExoPlaybackStateHolder {
             // Since Auxio is a music player, only specify an audio renderer to save
@@ -697,6 +727,7 @@ class ExoPlaybackStateHolder(
                 replayGainProcessor,
                 musicRepository,
                 imageSettings,
+                playbackRequestHeaders,
             )
         }
     }

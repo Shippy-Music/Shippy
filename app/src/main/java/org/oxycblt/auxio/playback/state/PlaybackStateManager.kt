@@ -22,6 +22,13 @@ import javax.inject.Inject
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.playback.state.PlaybackStateManager.Listener
+import org.oxycblt.auxio.shippy.domain.CandidateKind
+import org.oxycblt.auxio.shippy.domain.LocalCandidateResolution
+import org.oxycblt.auxio.shippy.domain.LocalCandidateResolver
+import org.oxycblt.auxio.shippy.domain.QueueItem
+import org.oxycblt.auxio.shippy.domain.QueueItemFactory
+import org.oxycblt.auxio.shippy.domain.ResolvedPlayback
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
@@ -59,6 +66,15 @@ interface PlaybackStateManager {
 
     /** The current queue of [Song]s. */
     val queue: List<Song>
+
+    /** The canonical current queue item. */
+    val currentQueueItem: QueueItem?
+
+    /** The canonical queue intent, preserving duplicate queue-item identity. */
+    val queueItems: List<QueueItem>
+
+    /** The canonical queue with prepared playback sources. */
+    val resolvedQueue: List<ResolvedQueueItem>
 
     /** The index of the currently playing [Song] in the queue. */
     val index: Int
@@ -161,6 +177,12 @@ interface PlaybackStateManager {
      * @param song The [Song] to add.
      */
     fun addToQueue(song: Song) = addToQueue(listOf(song))
+
+    /** Add already-prepared canonical items after the current item. */
+    fun playNextResolved(items: List<ResolvedQueueItem>)
+
+    /** Add already-prepared canonical items to the queue tail. */
+    fun addResolvedToQueue(items: List<ResolvedQueueItem>)
 
     /**
      * Move a [Song] in the queue.
@@ -299,6 +321,25 @@ interface PlaybackStateManager {
             isShuffled: Boolean,
         ) {}
 
+        fun onCanonicalQueueChanged(
+            queue: List<ResolvedQueueItem>,
+            index: Int,
+            change: QueueChange,
+        ) {}
+
+        fun onCanonicalQueueReordered(
+            queue: List<ResolvedQueueItem>,
+            index: Int,
+            isShuffled: Boolean,
+        ) {}
+
+        fun onCanonicalNewPlayback(
+            parent: MusicParent?,
+            queue: List<ResolvedQueueItem>,
+            index: Int,
+            isShuffled: Boolean,
+        ) {}
+
         /**
          * Called when the state of the audio player changes.
          *
@@ -334,12 +375,17 @@ interface PlaybackStateManager {
     )
 }
 
-class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
+class PlaybackStateManagerImpl
+@Inject
+constructor(
+    private val localCandidateResolver: LocalCandidateResolver,
+    private val queueItemFactory: QueueItemFactory,
+) : PlaybackStateManager {
     private data class StateMirror(
         val progression: Progression,
         val repeatMode: RepeatMode,
         val parent: MusicParent?,
-        val queue: List<Song>,
+        val queue: List<ResolvedQueueItem>,
         val index: Int,
         val isShuffled: Boolean,
         val rawQueue: RawQueue,
@@ -372,9 +418,18 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         get() = stateMirror.parent
 
     override val currentSong
-        get() = stateMirror.queue.getOrNull(stateMirror.index)
+        get() = stateMirror.queue.getOrNull(stateMirror.index)?.localSong()
 
     override val queue
+        get() = stateMirror.queue.localSongsOrEmpty()
+
+    override val currentQueueItem
+        get() = stateMirror.queue.getOrNull(stateMirror.index)?.item
+
+    override val queueItems
+        get() = stateMirror.queue.map(ResolvedQueueItem::item)
+
+    override val resolvedQueue
         get() = stateMirror.queue
 
     override val index
@@ -394,6 +449,12 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         if (isInitialized) {
             L.d("Sending initial state to $listener")
             listener.onNewPlayback(
+                stateMirror.parent,
+                queue,
+                stateMirror.index,
+                stateMirror.isShuffled,
+            )
+            listener.onCanonicalNewPlayback(
                 stateMirror.parent,
                 stateMirror.queue,
                 stateMirror.index,
@@ -420,7 +481,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         }
 
         this.stateHolder = stateHolder
-        if (isInitialized && currentSong != null) {
+        if (isInitialized && currentQueueItem != null) {
             stateHolder.applySavedState(
                 stateMirror.parent,
                 stateMirror.rawQueue,
@@ -480,32 +541,52 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
     @Synchronized
     override fun playNext(songs: List<Song>) {
-        if (currentSong == null) {
-            L.d("Nothing playing, short-circuiting to new playback")
-            play(QueueCommand(songs))
-        } else {
-            val stateHolder = stateHolder ?: return
-            L.d("Adding ${songs.size} songs to start of queue")
-            stateHolder.playNext(songs, StateAck.PlayNext(stateMirror.index + 1, songs.size))
-        }
+        playNextResolved(songs.map { it.resolveLocal(parent) })
     }
 
     @Synchronized
     override fun addToQueue(songs: List<Song>) {
-        if (currentSong == null) {
+        addResolvedToQueue(songs.map { it.resolveLocal(parent) })
+    }
+
+    @Synchronized
+    override fun playNextResolved(items: List<ResolvedQueueItem>) {
+        if (items.isEmpty()) return
+        if (currentQueueItem == null) {
             L.d("Nothing playing, short-circuiting to new playback")
-            play(QueueCommand(songs))
+            play(
+                PlaybackCommandFactoryImpl.PlaybackCommandImpl(
+                    selectedItemId = null,
+                    queue = items,
+                    parent = null,
+                    shuffled = false,
+                )
+            )
         } else {
             val stateHolder = stateHolder ?: return
-            L.d("Adding ${songs.size} songs to end of queue")
-            stateHolder.addToQueue(songs, StateAck.AddToQueue(queue.size, songs.size))
+            L.d("Adding ${items.size} items to start of queue")
+            stateHolder.playNext(items, StateAck.PlayNext(stateMirror.index + 1, items.size))
         }
     }
 
-    private class QueueCommand(override val queue: List<Song>) : PlaybackCommand {
-        override val song: Song? = null
-        override val parent: MusicParent? = null
-        override val shuffled = false
+    @Synchronized
+    override fun addResolvedToQueue(items: List<ResolvedQueueItem>) {
+        if (items.isEmpty()) return
+        if (currentQueueItem == null) {
+            L.d("Nothing playing, short-circuiting to new playback")
+            play(
+                PlaybackCommandFactoryImpl.PlaybackCommandImpl(
+                    selectedItemId = null,
+                    queue = items,
+                    parent = null,
+                    shuffled = false,
+                )
+            )
+        } else {
+            val stateHolder = stateHolder ?: return
+            L.d("Adding ${items.size} items to end of queue")
+            stateHolder.addToQueue(items, StateAck.AddToQueue(resolvedQueue.size, items.size))
+        }
     }
 
     @Synchronized
@@ -598,18 +679,20 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                 val rawQueue = stateHolder.resolveQueue()
                 val change =
                     QueueChange(QueueChange.Type.MAPPING, UpdateInstructions.Add(ack.at, ack.size))
-                stateMirror = stateMirror.copy(queue = rawQueue.resolveSongs(), rawQueue = rawQueue)
+                stateMirror = stateMirror.copy(queue = rawQueue.resolveItems(), rawQueue = rawQueue)
                 listeners.forEach {
-                    it.onQueueChanged(stateMirror.queue, stateMirror.index, change)
+                    it.onQueueChanged(queue, stateMirror.index, change)
+                    it.onCanonicalQueueChanged(stateMirror.queue, stateMirror.index, change)
                 }
             }
             is StateAck.AddToQueue -> {
                 val rawQueue = stateHolder.resolveQueue()
                 val change =
                     QueueChange(QueueChange.Type.MAPPING, UpdateInstructions.Add(ack.at, ack.size))
-                stateMirror = stateMirror.copy(queue = rawQueue.resolveSongs(), rawQueue = rawQueue)
+                stateMirror = stateMirror.copy(queue = rawQueue.resolveItems(), rawQueue = rawQueue)
                 listeners.forEach {
-                    it.onQueueChanged(stateMirror.queue, stateMirror.index, change)
+                    it.onQueueChanged(queue, stateMirror.index, change)
+                    it.onCanonicalQueueChanged(stateMirror.queue, stateMirror.index, change)
                 }
             }
             is StateAck.Move -> {
@@ -624,13 +707,14 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
                 stateMirror =
                     stateMirror.copy(
-                        queue = rawQueue.resolveSongs(),
+                        queue = rawQueue.resolveItems(),
                         index = newIndex,
                         rawQueue = rawQueue,
                     )
 
                 listeners.forEach {
-                    it.onQueueChanged(stateMirror.queue, stateMirror.index, change)
+                    it.onQueueChanged(queue, stateMirror.index, change)
+                    it.onCanonicalQueueChanged(stateMirror.queue, stateMirror.index, change)
                 }
             }
             is StateAck.Remove -> {
@@ -648,26 +732,32 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
 
                 stateMirror =
                     stateMirror.copy(
-                        queue = rawQueue.resolveSongs(),
+                        queue = rawQueue.resolveItems(),
                         index = newIndex,
                         rawQueue = rawQueue,
                     )
 
                 listeners.forEach {
-                    it.onQueueChanged(stateMirror.queue, stateMirror.index, change)
+                    it.onQueueChanged(queue, stateMirror.index, change)
+                    it.onCanonicalQueueChanged(stateMirror.queue, stateMirror.index, change)
                 }
             }
             is StateAck.QueueReordered -> {
                 val rawQueue = stateHolder.resolveQueue()
                 stateMirror =
                     stateMirror.copy(
-                        queue = rawQueue.resolveSongs(),
+                        queue = rawQueue.resolveItems(),
                         index = rawQueue.resolveIndex(),
                         isShuffled = rawQueue.isShuffled,
                         rawQueue = rawQueue,
                     )
                 listeners.forEach {
                     it.onQueueReordered(
+                        queue,
+                        stateMirror.index,
+                        stateMirror.isShuffled,
+                    )
+                    it.onCanonicalQueueReordered(
                         stateMirror.queue,
                         stateMirror.index,
                         stateMirror.isShuffled,
@@ -679,13 +769,19 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                 stateMirror =
                     stateMirror.copy(
                         parent = stateHolder.parent,
-                        queue = rawQueue.resolveSongs(),
+                        queue = rawQueue.resolveItems(),
                         index = rawQueue.resolveIndex(),
                         isShuffled = rawQueue.isShuffled,
                         rawQueue = rawQueue,
                     )
                 listeners.forEach {
                     it.onNewPlayback(
+                        stateMirror.parent,
+                        queue,
+                        stateMirror.index,
+                        stateMirror.isShuffled,
+                    )
+                    it.onCanonicalNewPlayback(
                         stateMirror.parent,
                         stateMirror.queue,
                         stateMirror.index,
@@ -712,11 +808,16 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     @Synchronized
     override fun toSavedState(): PlaybackStateManager.SavedState? {
         val currentSong = currentSong ?: return null
+        val localHeap =
+            stateMirror.rawQueue.heap.map { item ->
+                item.localSong()
+                    ?: return null
+            }
         return PlaybackStateManager.SavedState(
             positionMs = stateMirror.progression.calculateElapsedPositionMs(),
             repeatMode = stateMirror.repeatMode,
             parent = stateMirror.parent,
-            heap = stateMirror.rawQueue.heap,
+            heap = localHeap,
             shuffledMapping = stateMirror.rawQueue.shuffledMapping,
             index = stateMirror.index,
             songUid = currentSong.uid,
@@ -738,12 +839,12 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         // The heap may not be the same if the song composition changed between state saves/reloads.
         // This also means that we must modify the shuffled mapping as well, in what it points to
         // and it's general composition.
-        val heap = mutableListOf<Song>()
+        val heap = mutableListOf<ResolvedQueueItem>()
         val adjustments = mutableListOf<Int?>()
         var currentShift = 0
         for (song in savedState.heap) {
             if (song != null) {
-                heap.add(song)
+                heap.add(song.resolveLocal(savedState.parent))
                 adjustments.add(currentShift)
             } else {
                 adjustments.add(null)
@@ -767,7 +868,7 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
                     heap.getOrNull(index)
                 }
 
-            return currentSong?.uid == savedState.songUid
+            return currentSong?.localSong()?.uid == savedState.songUid
         }
 
         var index = savedState.index
@@ -807,5 +908,44 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         )
 
         isInitialized = true
+    }
+
+    private fun Song.resolveLocal(parent: MusicParent?): ResolvedQueueItem {
+        val item = queueItemFactory.fromLocal(this, contextId = parent?.uid?.toString())
+        val candidate =
+            item.track.candidates.singleOrNull { it.kind == CandidateKind.LOCAL }
+                ?: error("Local queue item must contain exactly one local candidate")
+        val uri =
+            candidate.locator?.takeIf(String::isNotBlank)
+                ?: error("Local queue item candidate must contain a playable URI")
+        return ResolvedQueueItem(
+            item = item,
+            playback =
+                ResolvedPlayback(
+                    queueItemId = item.id,
+                    candidateId = candidate.id,
+                    uri = uri,
+                    mimeType = candidate.media?.mimeType,
+                    bitrateBps = candidate.media?.bitrateBps,
+                    contentLength = candidate.media?.contentLength,
+                ),
+        )
+    }
+
+    private fun ResolvedQueueItem.localSong(): Song? {
+        val candidate =
+            item.track.candidates.firstOrNull { it.id == playback.candidateId }
+                ?: return null
+        return when (val result = localCandidateResolver.resolve(candidate)) {
+            is LocalCandidateResolution.Ready -> result.song
+            LocalCandidateResolution.InvalidIdentity,
+            LocalCandidateResolution.Missing,
+            LocalCandidateResolution.NotLocal -> null
+        }
+    }
+
+    private fun List<ResolvedQueueItem>.localSongsOrEmpty(): List<Song> {
+        val localSongs = mapNotNull { it.localSong() }
+        return if (localSongs.size == size) localSongs else emptyList()
     }
 }

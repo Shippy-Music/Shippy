@@ -81,7 +81,8 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
     override val listModel: ListViewModel by activityViewModels()
     override val playbackModel: PlaybackViewModel by activityViewModels()
     override val musicModel: MusicViewModel by activityViewModels()
-    private val searchAdapter = SearchAdapter(this)
+    private val searchAdapter =
+        SearchAdapter(this) { item -> searchModel.playProviderTrack(item.track) }
     private var getContentLauncher: ActivityResultLauncher<String>? = null
     private var pendingImportTarget: Playlist? = null
     private var imm: InputMethodManager? = null
@@ -177,13 +178,22 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
                     searchModel.searchResults.value.getOrElse(it) {
                         return@setFullWidthLookup false
                     }
-                item is PlainDivider || item is PlainHeader
+                item is PlainDivider ||
+                    item is PlainHeader ||
+                    item is SearchTextHeader ||
+                    item is ProviderSearchFailureItem
             }
         }
 
         // --- VIEWMODEL SETUP ---
 
         collectImmediately(searchModel.searchResults, ::updateSearchResults)
+        collect(searchModel.providerPlaybackFailure.flow) { failure ->
+            if (failure != null) {
+                requireContext().showToast(R.string.msg_provider_playback_unavailable)
+                searchModel.providerPlaybackFailure.consume()
+            }
+        }
         collectImmediately(listModel.selected, ::updateSelection)
         collect(listModel.menu.flow, ::handleMenu)
         collect(musicModel.playlistDecision.flow, ::handlePlaylistDecision)

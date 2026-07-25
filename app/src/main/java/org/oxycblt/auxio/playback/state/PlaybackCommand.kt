@@ -23,6 +23,12 @@ import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.PlaybackSettings
+import org.oxycblt.auxio.shippy.domain.CandidateKind
+import org.oxycblt.auxio.shippy.domain.QueueItem
+import org.oxycblt.auxio.shippy.domain.QueueItemFactory
+import org.oxycblt.auxio.shippy.domain.QueueItemId
+import org.oxycblt.auxio.shippy.domain.ResolvedPlayback
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
 import org.oxycblt.musikr.Genre
@@ -36,18 +42,24 @@ import org.oxycblt.musikr.Song
  * @author Alexander Capehart (OxygenCobalt)
  */
 interface PlaybackCommand {
-    /** A particular [Song] to play, or null to play the first [Song] in the new queue. * */
-    val song: Song?
-    /**
-     * The [MusicParent] to play from, or null if to play from an non-specific collection of "All
-     * [Song]s". *
-     */
+    /** A particular queue item to play, or null to play the first item in the new queue. */
+    val selectedItemId: QueueItemId?
+
+    /** The canonical queue with a playable source prepared for each item. */
+    val queue: List<ResolvedQueueItem>
+
+    /** Local-library context compatibility. Provider-originated commands leave this null. */
     val parent: MusicParent?
-    /** The queue of [Song]s to play from. * */
-    val queue: List<Song>
+
     /** Whether to shuffle or not. * */
     val shuffled: Boolean
 
+    /**
+     * Local-library compatibility factory.
+     *
+     * Song callers remain at the Auxio boundary. Each invocation creates canonical queue items and
+     * resolves their exact local URI before the synchronous player command is emitted.
+     */
     interface Factory {
         fun song(song: Song, shuffle: ShuffleMode): PlaybackCommand?
 
@@ -88,16 +100,27 @@ constructor(
     val playbackSettings: PlaybackSettings,
     val listSettings: ListSettings,
     val musicRepository: MusicRepository,
+    val queueItemFactory: QueueItemFactory,
 ) : PlaybackCommand.Factory {
     data class PlaybackCommandImpl(
-        override val song: Song?,
+        override val selectedItemId: QueueItemId?,
+        override val queue: List<ResolvedQueueItem>,
         override val parent: MusicParent?,
-        override val queue: List<Song>,
         override val shuffled: Boolean,
     ) : PlaybackCommand {
+        init {
+            require(queue.map { it.item.id }.distinct().size == queue.size) {
+                "Playback queue item IDs must be unique"
+            }
+            require(selectedItemId == null || queue.any { it.item.id == selectedItemId }) {
+                "Selected queue item must exist in the playback queue"
+            }
+        }
+
         // Only show queue count to reduce memory use
         override fun toString() =
-            "PlaybackCommand(song=$song, parent=$parent, queue=${queue.size} songs, shuffled=$shuffled)"
+            "PlaybackCommand(selectedItemId=$selectedItemId, " +
+                "queue=${queue.size} items, shuffled=$shuffled)"
     }
 
     override fun song(song: Song, shuffle: ShuffleMode) =
@@ -184,7 +207,42 @@ constructor(
         queue: List<Song>,
         shuffle: ShuffleMode,
     ): PlaybackCommand {
-        return PlaybackCommandImpl(song, parent, queue, isShuffled(shuffle))
+        val selectedIndex =
+            song?.let { selected ->
+                queue.indexOfFirst { it === selected }.takeIf { it >= 0 }
+                    ?: queue.indexOf(selected).takeIf { it >= 0 }
+            }
+        val contextId = parent?.uid?.toString()
+        val resolvedQueue =
+            queue.map { localSong ->
+                queueItemFactory.fromLocal(localSong, contextId = contextId).resolveLocal()
+            }
+        return PlaybackCommandImpl(
+            selectedItemId = selectedIndex?.let { resolvedQueue[it].item.id },
+            queue = resolvedQueue,
+            parent = parent,
+            shuffled = isShuffled(shuffle),
+        )
+    }
+
+    private fun QueueItem.resolveLocal(): ResolvedQueueItem {
+        val candidate =
+            track.candidates.singleOrNull { it.kind == CandidateKind.LOCAL }
+                ?: error("Local queue item must contain exactly one local candidate")
+        val uri = candidate.locator?.takeIf(String::isNotBlank)
+            ?: error("Local queue item candidate must contain a playable URI")
+        return ResolvedQueueItem(
+            item = this,
+            playback =
+                ResolvedPlayback(
+                    queueItemId = id,
+                    candidateId = candidate.id,
+                    uri = uri,
+                    mimeType = candidate.media?.mimeType,
+                    bitrateBps = candidate.media?.bitrateBps,
+                    contentLength = candidate.media?.contentLength,
+                ),
+        )
     }
 
     private fun isShuffled(shuffle: ShuffleMode) =

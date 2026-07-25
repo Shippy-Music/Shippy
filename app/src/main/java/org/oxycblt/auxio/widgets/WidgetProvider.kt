@@ -30,8 +30,6 @@ import android.view.View
 import android.widget.RemoteViews
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
-import org.oxycblt.auxio.music.resolve
-import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.service.PlaybackActions
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.ui.UISettings
@@ -309,7 +307,7 @@ class WidgetProvider : AppWidgetProvider() {
             setImageViewBitmap(R.id.widget_cover, state.cover)
             setContentDescription(
                 R.id.widget_cover,
-                context.getString(R.string.desc_album_cover, state.song.album.name.resolve(context)),
+                context.getString(R.string.desc_album_cover, state.album),
             )
         } else {
             discardCover(context)
@@ -349,8 +347,8 @@ class WidgetProvider : AppWidgetProvider() {
         state: WidgetComponent.PlaybackState,
     ): RemoteViews {
         setupCover(context, state)
-        setTextViewText(R.id.widget_song, state.song.name.resolve(context))
-        setTextViewText(R.id.widget_artist, state.song.artists.resolveNames(context))
+        setTextViewText(R.id.widget_song, state.title)
+        setTextViewText(R.id.widget_artist, state.artist)
         return this
     }
 

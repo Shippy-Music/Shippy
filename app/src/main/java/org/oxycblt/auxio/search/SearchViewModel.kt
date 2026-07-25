@@ -22,11 +22,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.yield
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.list.BasicHeader
 import org.oxycblt.auxio.list.Item
@@ -36,6 +36,14 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.auxio.playback.PlaybackSettings
+import org.oxycblt.auxio.shippy.search.ProviderSearchSnapshot
+import org.oxycblt.auxio.shippy.search.UnifiedSearchRepository
+import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
+import org.oxycblt.auxio.shippy.domain.Track
+import org.oxycblt.auxio.shippy.playback.PlaybackStartResult
+import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
+import org.oxycblt.auxio.util.Event
+import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Library
 import org.oxycblt.musikr.Song
 import timber.log.Timber as L
@@ -53,14 +61,21 @@ constructor(
     private val searchEngine: SearchEngine,
     private val searchSettings: SearchSettings,
     private val playbackSettings: PlaybackSettings,
+    private val unifiedSearchRepository: UnifiedSearchRepository,
+    private val shippyPlaybackController: ShippyPlaybackController,
 ) : ViewModel(), MusicRepository.UpdateListener {
     private var lastQuery: String? = null
     private var currentSearchJob: Job? = null
+    private var currentProviderPlaybackJob: Job? = null
 
     private val _searchResults = MutableStateFlow(listOf<Item>())
     /** The results of the last [search] call, if any. */
     val searchResults: StateFlow<List<Item>>
         get() = _searchResults
+
+    private val _providerPlaybackFailure = MutableEvent<PlaybackPreparation.Failed>()
+    val providerPlaybackFailure: Event<PlaybackPreparation.Failed>
+        get() = _providerPlaybackFailure
 
     /** The [PlaySong] instructions to use when playing a [Song]. */
     val playWith
@@ -93,20 +108,83 @@ constructor(
         currentSearchJob?.cancel()
         lastQuery = query
 
-        val library = musicRepository.library
-        if (query.isNullOrEmpty() || library == null) {
+        val normalizedQuery = query?.trim().orEmpty()
+        if (normalizedQuery.isEmpty()) {
             L.d("Cannot search for the current query, aborting")
             _searchResults.value = listOf()
             return
         }
 
-        // Searching is time-consuming, so do it in the background.
-        L.d("Searching music library for $query")
+        // Local and provider work are independent. Publish the local result first, then append
+        // provider sections without making one failed provider erase the useful result set.
+        L.d("Searching Shippy for $normalizedQuery")
         currentSearchJob =
             viewModelScope.launch {
-                _searchResults.value = searchImpl(library, query).also { yield() }
+                val providerSearch = async { unifiedSearchRepository.search(normalizedQuery) }
+                val localItems =
+                    musicRepository.library?.let { searchImpl(it, normalizedQuery) }.orEmpty()
+                _searchResults.value =
+                    combineSearchResults(
+                        providers = null,
+                        localItems = localItems,
+                        providersLoading = true,
+                    )
+                _searchResults.value =
+                    combineSearchResults(
+                        providers = providerSearch.await(),
+                        localItems = localItems,
+                        providersLoading = false,
+                    )
             }
     }
+
+    fun playProviderTrack(track: Track) {
+        currentProviderPlaybackJob?.cancel()
+        currentProviderPlaybackJob =
+            viewModelScope.launch {
+                when (val result = shippyPlaybackController.play(track, contextId = "search")) {
+                    is PlaybackStartResult.Started -> Unit
+                    is PlaybackStartResult.Failed -> _providerPlaybackFailure.put(result.failure)
+                }
+            }
+    }
+
+    private fun combineSearchResults(
+        providers: ProviderSearchSnapshot?,
+        localItems: List<Item>,
+        providersLoading: Boolean,
+    ): List<Item> =
+        buildList {
+            if (providersLoading) {
+                add(BasicHeader(R.string.lbl_searching_providers))
+            } else {
+                providers?.sections.orEmpty().forEach { section ->
+                    if (isNotEmpty()) add(PlainDivider(null))
+                    add(SearchTextHeader(section.provider.displayName))
+                    val failure = section.failure
+                    if (failure != null) {
+                        add(
+                            ProviderSearchFailureItem(
+                                providerName = section.provider.displayName,
+                                retryable = failure.retryable,
+                            )
+                        )
+                    } else {
+                        addAll(
+                            section.tracks.map { track ->
+                                ProviderTrackItem(section.provider.displayName, track)
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (localItems.isNotEmpty()) {
+                if (isNotEmpty()) add(PlainDivider(null))
+                add(BasicHeader(R.string.lbl_on_this_device))
+                addAll(localItems)
+            }
+        }
 
     private suspend fun searchImpl(library: Library, query: String): List<Item> {
         val filters = searchSettings.filters

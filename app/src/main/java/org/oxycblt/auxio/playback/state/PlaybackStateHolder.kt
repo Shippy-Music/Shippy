@@ -22,8 +22,8 @@ import android.net.Uri
 import android.os.SystemClock
 import android.support.v4.media.session.PlaybackStateCompat
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.musikr.MusicParent
-import org.oxycblt.musikr.Song
 
 /**
  * The designated "source of truth" for the current playback state. Should only be used by
@@ -89,20 +89,20 @@ interface PlaybackStateHolder {
     fun goto(index: Int)
 
     /**
-     * Add songs to the currently playing item in the queue.
+     * Add resolved items after the currently playing item in the queue.
      *
-     * @param songs The songs to add.
+     * @param items The resolved items to add.
      * @param ack The [StateAck] to return to [PlaybackStateManager].
      */
-    fun playNext(songs: List<Song>, ack: StateAck.PlayNext)
+    fun playNext(items: List<ResolvedQueueItem>, ack: StateAck.PlayNext)
 
     /**
-     * Add songs to the end of the queue.
+     * Add resolved items to the end of the queue.
      *
-     * @param songs The songs to add.
+     * @param items The resolved items to add.
      * @param ack The [StateAck] to return to [PlaybackStateManager].
      */
-    fun addToQueue(songs: List<Song>, ack: StateAck.AddToQueue)
+    fun addToQueue(items: List<ResolvedQueueItem>, ack: StateAck.AddToQueue)
 
     /**
      * Move a song in the queue to a new position.
@@ -118,7 +118,6 @@ interface PlaybackStateHolder {
      *
      * @param at The index of the song to remove.
      * @param ack The [StateAck] to return to [PlaybackStateManager].
-     * @return The [Song] that was removed.
      */
     fun remove(at: Int, ack: StateAck.Remove)
 
@@ -212,23 +211,27 @@ sealed interface StateAck {
  * The queue as it is represented in the audio player held by [PlaybackStateHolder]. This should not
  * be used as anything but a container. Use the provided fields to obtain saner queue information.
  *
- * @param heap The ordered list of all [Song]s in the queue.
- * @param shuffledMapping A list of indices that remap the songs in [heap] into a shuffled queue.
+ * @param heap The ordered list of all resolved queue entries in the queue.
+ * @param shuffledMapping A list of indices that remap the entries in [heap] into a shuffled queue.
  *   Empty if the queue is not shuffled.
  * @param heapIndex The index of the current song in [heap]. Note that if shuffled, this will be a
  *   nonsensical value that cannot be used to obtain next and last songs without first resolving the
  *   queue.
  */
-data class RawQueue(val heap: List<Song>, val shuffledMapping: List<Int>, val heapIndex: Int) {
+data class RawQueue(
+    val heap: List<ResolvedQueueItem>,
+    val shuffledMapping: List<Int>,
+    val heapIndex: Int,
+) {
     /** Whether the queue is currently shuffled. */
     val isShuffled = shuffledMapping.isNotEmpty()
 
     /**
-     * Resolve and return the exact [Song] sequence in the queue.
+     * Resolve and return the exact entry sequence in the queue.
      *
-     * @return The [Song]s in the queue, in order.
+     * @return The entries in queue order.
      */
-    fun resolveSongs() =
+    fun resolveItems() =
         if (isShuffled) {
             shuffledMapping.map { heap[it] }
         } else {

@@ -473,6 +473,21 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
             squareishShapeAppearance,
         )
 
+    /**
+     * Bind artwork that is not owned by the local musikr library.
+     *
+     * Coil accepts remote URLs, content URIs, and files as generic data. Keeping this small bridge
+     * inside CoverView lets provider and Crew rows retain Auxio's loading, fallback, shape, and
+     * accessibility behavior without teaching the local music model about remote artwork.
+     */
+    fun bindArtwork(data: Any?, desc: String) =
+        bindImpl(
+            { data },
+            desc,
+            R.drawable.ic_album_24,
+            squareishShapeAppearance,
+        )
+
     private fun bindImpl(
         img: (Size) -> Any?,
         desc: String,

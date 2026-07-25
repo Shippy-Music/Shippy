@@ -142,7 +142,7 @@ private constructor(
         // call to this function, which should come from that Intent.
         if (
             playbackSettings.headsetAutoplay &&
-                playbackManager.currentSong != null &&
+                playbackManager.currentQueueItem != null &&
                 initialHeadsetPlugEventHandled
         ) {
             L.d("Device connected, resuming")
@@ -151,7 +151,7 @@ private constructor(
     }
 
     private fun pauseFromHeadsetPlug() {
-        if (playbackManager.currentSong != null) {
+        if (playbackManager.currentQueueItem != null) {
             L.d("Device disconnected, pausing")
             playbackManager.playing(false)
         }

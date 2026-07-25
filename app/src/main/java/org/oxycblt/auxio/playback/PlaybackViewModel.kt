@@ -36,6 +36,7 @@ import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Album
@@ -61,6 +62,7 @@ constructor(
     private val playbackSettings: PlaybackSettings,
     private val commandFactory: PlaybackCommand.Factory,
     private val listSettings: ListSettings,
+    private val playbackDisplayMapper: PlaybackDisplayMapper,
 ) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener {
     private var lastPositionJob: Job? = null
 
@@ -68,6 +70,11 @@ constructor(
     /** The currently playing song. */
     val song: StateFlow<Song?>
         get() = _song
+
+    private val _displayItem = MutableStateFlow<PlaybackDisplayItem?>(null)
+    /** Canonical current item for local, provider, download, and Crew playback UI. */
+    val displayItem: StateFlow<PlaybackDisplayItem?>
+        get() = _displayItem
 
     private val _parent = MutableStateFlow<MusicParent?>(null)
     /** The [MusicParent] currently being played. Null if playback is occurring from all songs. */
@@ -142,33 +149,50 @@ constructor(
         L.d("Index moved, updating current song")
         _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()
         _song.value = playbackManager.currentSong
+        _displayItem.value =
+            playbackManager.resolvedQueue.getOrNull(index)?.let(playbackDisplayMapper::map)
 
         _pagerCommand.put(PagerCommand(update = null, scroll = index))
         _pagerQueue.value = _pagerQueue.value.copy(index = index)
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
-        // Other types of queue changes preserve the current song.
         if (change.type == QueueChange.Type.SONG) {
             L.d("Queue changed, updating current song")
             _song.value = playbackManager.currentSong
         }
+    }
 
+    override fun onCanonicalQueueChanged(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        change: QueueChange,
+    ) {
+        val displayQueue = queue.map(playbackDisplayMapper::map)
+        _displayItem.value = displayQueue.getOrNull(index)
         _pagerCommand.put(
             PagerCommand(
                 update = change.instructions,
                 scroll = index.takeIf { change.type != QueueChange.Type.MAPPING },
             )
         )
-        _pagerQueue.value = PagerQueue(queue = queue, index = index)
+        _pagerQueue.value = PagerQueue(queue = displayQueue, index = index)
     }
 
     override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
         L.d("Queue completely changed, updating current song")
         _isShuffled.value = isShuffled
+    }
 
+    override fun onCanonicalQueueReordered(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        isShuffled: Boolean,
+    ) {
+        val displayQueue = queue.map(playbackDisplayMapper::map)
+        _displayItem.value = displayQueue.getOrNull(index)
         _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
-        _pagerQueue.value = PagerQueue(queue = queue, index = index)
+        _pagerQueue.value = PagerQueue(queue = displayQueue, index = index)
     }
 
     override fun onNewPlayback(
@@ -181,9 +205,18 @@ constructor(
         _song.value = playbackManager.currentSong
         _parent.value = parent
         _isShuffled.value = isShuffled
+    }
 
+    override fun onCanonicalNewPlayback(
+        parent: MusicParent?,
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        isShuffled: Boolean,
+    ) {
+        val displayQueue = queue.map(playbackDisplayMapper::map)
+        _displayItem.value = displayQueue.getOrNull(index)
         _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
-        _pagerQueue.value = PagerQueue(queue = queue, index = index)
+        _pagerQueue.value = PagerQueue(queue = displayQueue, index = index)
     }
 
     override fun onProgressionChanged(progression: Progression) {
@@ -661,7 +694,7 @@ constructor(
     }
 }
 
-data class PagerQueue(val queue: List<Song>, val index: Int)
+data class PagerQueue(val queue: List<PlaybackDisplayItem>, val index: Int)
 
 data class PagerCommand(val update: UpdateInstructions?, val scroll: Int?)
 

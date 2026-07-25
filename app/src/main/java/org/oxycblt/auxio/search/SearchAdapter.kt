@@ -46,7 +46,10 @@ import org.oxycblt.musikr.Song
  * @param listener An [SelectableListListener] to bind interactions to.
  * @author Alexander Capehart (OxygenCobalt)
  */
-class SearchAdapter(private val listener: SelectableListListener<Music>) :
+class SearchAdapter(
+    private val listener: SelectableListListener<Music>,
+    private val onProviderTrackClick: (ProviderTrackItem) -> Unit,
+) :
     SelectionIndicatorAdapter<Item, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
 
     override fun getItemViewType(position: Int) =
@@ -58,6 +61,9 @@ class SearchAdapter(private val listener: SelectableListListener<Music>) :
             is Playlist -> PlaylistViewHolder.VIEW_TYPE
             is PlainDivider -> DividerViewHolder.VIEW_TYPE
             is BasicHeader -> BasicHeaderViewHolder.VIEW_TYPE
+            is SearchTextHeader -> SearchTextHeaderViewHolder.VIEW_TYPE
+            is ProviderTrackItem -> ProviderTrackViewHolder.VIEW_TYPE
+            is ProviderSearchFailureItem -> ProviderSearchFailureViewHolder.VIEW_TYPE
             else -> super.getItemViewType(position)
         }
 
@@ -70,6 +76,10 @@ class SearchAdapter(private val listener: SelectableListListener<Music>) :
             PlaylistViewHolder.VIEW_TYPE -> PlaylistViewHolder.from(parent)
             DividerViewHolder.VIEW_TYPE -> DividerViewHolder.from(parent)
             BasicHeaderViewHolder.VIEW_TYPE -> BasicHeaderViewHolder.from(parent)
+            SearchTextHeaderViewHolder.VIEW_TYPE -> SearchTextHeaderViewHolder.from(parent)
+            ProviderTrackViewHolder.VIEW_TYPE -> ProviderTrackViewHolder.from(parent)
+            ProviderSearchFailureViewHolder.VIEW_TYPE ->
+                ProviderSearchFailureViewHolder.from(parent)
             else -> error("Invalid item type $viewType")
         }
 
@@ -81,6 +91,11 @@ class SearchAdapter(private val listener: SelectableListListener<Music>) :
             is Genre -> (holder as GenreViewHolder).bind(item, listener)
             is Playlist -> (holder as PlaylistViewHolder).bind(item, listener)
             is BasicHeader -> (holder as BasicHeaderViewHolder).bind(item)
+            is SearchTextHeader -> (holder as SearchTextHeaderViewHolder).bind(item)
+            is ProviderTrackItem ->
+                (holder as ProviderTrackViewHolder).bind(item, onProviderTrackClick)
+            is ProviderSearchFailureItem ->
+                (holder as ProviderSearchFailureViewHolder).bind(item)
         }
     }
 
@@ -104,6 +119,12 @@ class SearchAdapter(private val listener: SelectableListListener<Music>) :
                             DividerViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, newItem)
                         oldItem is BasicHeader && newItem is BasicHeader ->
                             BasicHeaderViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, newItem)
+                        oldItem is SearchTextHeader && newItem is SearchTextHeader ->
+                            oldItem == newItem
+                        oldItem is ProviderTrackItem && newItem is ProviderTrackItem ->
+                            oldItem == newItem
+                        oldItem is ProviderSearchFailureItem &&
+                            newItem is ProviderSearchFailureItem -> oldItem == newItem
                         else -> false
                     }
             }

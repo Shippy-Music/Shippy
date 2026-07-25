@@ -56,6 +56,7 @@ import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackBottomSheetBehavior
+import org.oxycblt.auxio.playback.PlaybackDisplayItem
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.queue.QueueBottomSheetBehavior
 import org.oxycblt.auxio.ui.BottomSheetContentBehavior
@@ -226,7 +227,7 @@ class MainFragment :
         collectImmediately(homeModel.songList, homeModel.isFastScrolling, ::updateFab)
         collectImmediately(musicModel.indexingState, ::updateIndexerState)
         collectImmediately(listModel.selected, selectionBackCallback::invalidateEnabled)
-        collectImmediately(playbackModel.song, ::updateSong)
+        collectImmediately(playbackModel.displayItem, ::updatePlaybackItem)
         collectImmediately(playbackModel.openPanel.flow, ::handlePanel)
     }
 
@@ -350,7 +351,7 @@ class MainFragment :
             binding.playbackPanelFragment.alpha = min(playbackInRatio, queuePanelRatio)
             binding.queueFragment.alpha = queueInRatio
 
-            if (playbackModel.song.value != null) {
+            if (playbackModel.displayItem.value != null) {
                 // Playback sheet intercepts queue sheet touch events, prevent that from
                 // occurring by disabling dragging whenever the queue sheet is expanded.
                 playbackSheetBehavior.isDraggable =
@@ -385,7 +386,7 @@ class MainFragment :
         // Prevent interactions when the queue content fully fades out.
         binding.queueFragment.isInvisible = binding.queueFragment.alpha == 0f
 
-        if (playbackModel.song.value == null) {
+        if (playbackModel.displayItem.value == null) {
             // Sometimes lingering drags can un-hide the playback sheet even when we intend to
             // hide it, make sure we keep it hidden.
             tryHideAllSheets()
@@ -632,8 +633,8 @@ class MainFragment :
         homeModel.showOuter.consume()
     }
 
-    private fun updateSong(song: Song?) {
-        if (song != null) {
+    private fun updatePlaybackItem(item: PlaybackDisplayItem?) {
+        if (item != null) {
             tryShowSheets()
         } else {
             tryHideAllSheets()
