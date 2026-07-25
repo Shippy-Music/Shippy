@@ -20,6 +20,8 @@ import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobEntity
 import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
 import org.oxycblt.auxio.shippy.lyrics.LyricsCacheEntity
+import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleDao
+import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleEntity
 
 @Database(
     entities =
@@ -33,8 +35,9 @@ import org.oxycblt.auxio.shippy.lyrics.LyricsCacheEntity
             CrewCheckpointEntity::class,
             CanonicalTrackEntity::class,
             CanonicalTrackCandidateEntity::class,
+            LastFmScrobbleEntity::class,
         ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
@@ -46,6 +49,7 @@ internal abstract class ShippyDatabase : RoomDatabase() {
 
     abstract fun crewCheckpointDao(): CrewCheckpointDao
     abstract fun canonicalTrackMetadataDao(): CanonicalTrackMetadataDao
+    abstract fun lastFmScrobbleDao(): LastFmScrobbleDao
 
     companion object {
         val MIGRATION_1_2 =
@@ -257,5 +261,9 @@ internal abstract class ShippyDatabase : RoomDatabase() {
                 database.execSQL("""CREATE TABLE IF NOT EXISTS `canonical_track_candidate` (`trackId` TEXT NOT NULL, `candidateId` TEXT NOT NULL, `position` INTEGER NOT NULL, `kind` TEXT NOT NULL, `sourceId` TEXT NOT NULL, `sourceItemId` TEXT NOT NULL, `availability` TEXT NOT NULL, `locator` TEXT, `providerId` TEXT, `mimeType` TEXT, `container` TEXT, `bitrateBps` INTEGER, `contentLength` INTEGER, PRIMARY KEY(`trackId`, `candidateId`), FOREIGN KEY(`trackId`) REFERENCES `canonical_track`(`trackId`) ON UPDATE NO ACTION ON DELETE CASCADE)""")
                 database.execSQL("CREATE INDEX IF NOT EXISTS `index_canonical_track_candidate_trackId` ON `canonical_track_candidate` (`trackId`)")
             }
+        val MIGRATION_6_7 = Migration(6, 7) { database ->
+            database.execSQL("CREATE TABLE IF NOT EXISTS `lastfm_scrobble_outbox` (`id` TEXT NOT NULL, `artist` TEXT NOT NULL, `track` TEXT NOT NULL, `album` TEXT, `durationSeconds` INTEGER, `startedAtEpochSeconds` INTEGER NOT NULL, `queuedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_lastfm_scrobble_outbox_queuedAtEpochMs` ON `lastfm_scrobble_outbox` (`queuedAtEpochMs`)")
+        }
     }
 }

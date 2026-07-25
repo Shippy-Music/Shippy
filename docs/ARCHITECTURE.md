@@ -322,6 +322,13 @@ Bloomee donor order:
 4. YouTube stream resolver.
 5. Spotify metadata import/matching if retained.
 
+The current anonymous YouTube Music adapter bootstraps the public Innertube key,
+WEB_REMIX version, and visitor data from `music.youtube.com` at runtime. Search
+uses WEB_REMIX; playback retries with Android Music and iOS client contexts and
+accepts only direct HTTPS audio formats. Cipher-only formats are rejected
+honestly until a separately reviewed decipher path exists. Bootstrap data and
+resolved URLs are short-lived cache material, never durable track metadata.
+
 ## 9. Downloads
 
 Download state machine:
@@ -370,6 +377,20 @@ The cache stores provider/source identity, recording metadata used to validate
 the hit, plain/synchronized payloads, instrumental state, and fetch time. A
 TrackId hit is rejected if the cached recording metadata no longer matches the
 request. Lyrics do not require a separate encryption dependency.
+
+### Last.fm
+
+Scrobbling is an optional playback observer, not a second player state. It
+counts only ordinary advancing playback, queues an eligible listen durably in a
+Room FIFO outbox, sends oldest entries first in batches of at most 50, and
+inspects Last.fm's response body even when HTTP succeeds. Network/service errors
+retain the outbox; invalid entries may be dropped; invalid sessions require
+reauthentication.
+
+The API key, API secret, session key, and username enter through a credential
+repository and are stored only in an Android-Keystore AES-GCM `AtomicFile`
+envelope. No reusable Last.fm credential is embedded in the APK. The Settings
+authentication/reauthentication surface is still a separate product slice.
 
 ## 11. Crew Architecture
 
@@ -551,6 +572,17 @@ device-proven. Hosted signaling, network migration, TURN, and multi-phone
 behavior remain explicit implementation and device-verification work. The LAN
 socket path has focused loopback tests authored but not run on this machine. QR
 is invitation/authentication, never the transport itself.
+
+The media channel now carries an exact active-session/request/candidate/target/
+supplier identity. Request, cancel, manifest acknowledgement, retry, rejection,
+completion, manifest, and chunk frames are bounded below the WebRTC media
+channel limit. Authorized suppliers expose bytes only—never paths, provider
+URLs, or credentials. The receiver reserves declared object bytes before
+accepting a manifest, verifies every chunk and the complete SHA-256 object, and
+publishes only into the session-temporary cache. The controller is deliberately
+event-driven: a writable callback or acknowledgement resumes one bounded send;
+it never busy-loops. Authenticated-peer lifecycle, rolling prefetch, supplier
+selection, and cache-to-player integration remain the next seam.
 
 Primary evidence:
 

@@ -27,6 +27,7 @@ import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.RoomDownloadJobRepository
 import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
+import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleDao
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -45,6 +46,7 @@ object ShippyPersistenceModule {
                 ShippyDatabase.MIGRATION_3_4,
                 ShippyDatabase.MIGRATION_4_5,
                 ShippyDatabase.MIGRATION_5_6,
+                ShippyDatabase.MIGRATION_6_7,
             )
             .build()
 
@@ -75,6 +77,9 @@ object ShippyPersistenceModule {
     @Provides
     internal fun lyricsCacheDao(database: ShippyDatabase): LyricsCacheDao =
         database.lyricsCacheDao()
+
+    @Provides
+    internal fun lastFmScrobbleDao(database: ShippyDatabase): LastFmScrobbleDao = database.lastFmScrobbleDao()
 
     @Provides
     internal fun crewCheckpointDao(database: ShippyDatabase): CrewCheckpointDao =

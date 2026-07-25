@@ -24,22 +24,33 @@ class CrewMediaReceiver(
     private val cache: CrewTemporaryMediaCache,
     private val policy: CrewMediaReceiverPolicy = CrewMediaReceiverPolicy(),
 ) {
-    private val assemblies = linkedMapOf<CrewMediaDigest, Assembly>()
+    private val assemblies = linkedMapOf<CrewMediaTransferRef, Assembly>()
+    private var reservedBytes = 0L
     private var bufferedBytes = 0L
 
     fun accept(manifest: CrewMediaManifest): CrewMediaReceiveResult {
-        if (manifest.sessionId != activeSessionId) return CrewMediaReceiveResult.Rejected("wrong session")
-        if (assemblies.containsKey(manifest.objectIntegrity)) return CrewMediaReceiveResult.Accepted
-        if (assemblies.size >= policy.maxAssemblies || bufferedBytes + manifest.objectSizeBytes > policy.maxBufferedBytes) {
+        if (manifest.transfer.sessionId != activeSessionId) return CrewMediaReceiveResult.Rejected("wrong session")
+        assemblies[manifest.transfer]?.let { existing ->
+            return if (existing.manifest == manifest) {
+                CrewMediaReceiveResult.Accepted
+            } else {
+                CrewMediaReceiveResult.Rejected("conflicting manifest")
+            }
+        }
+        if (assemblies.size >= policy.maxAssemblies || reservedBytes + manifest.objectSizeBytes > policy.maxBufferedBytes) {
             return CrewMediaReceiveResult.Retry("receiver window full")
         }
-        assemblies[manifest.objectIntegrity] = Assembly(manifest)
+        assemblies[manifest.transfer] = Assembly(manifest)
+        reservedBytes += manifest.objectSizeBytes
         return CrewMediaReceiveResult.Accepted
     }
 
     fun accept(chunk: CrewMediaChunk): CrewMediaReceiveResult {
-        if (chunk.sessionId != activeSessionId) return CrewMediaReceiveResult.Rejected("wrong session")
-        val assembly = assemblies[chunk.objectIntegrity] ?: return CrewMediaReceiveResult.Retry("manifest required")
+        if (chunk.transfer.sessionId != activeSessionId) return CrewMediaReceiveResult.Rejected("wrong session")
+        val assembly = assemblies[chunk.transfer] ?: return CrewMediaReceiveResult.Retry("manifest required")
+        if (assembly.manifest.objectIntegrity != chunk.objectIntegrity) {
+            return CrewMediaReceiveResult.Rejected("wrong object")
+        }
         val descriptor = assembly.manifest.chunks.getOrNull(chunk.index)
             ?: return CrewMediaReceiveResult.Rejected("unknown chunk")
         val payload = chunk.copyPayload()
@@ -58,7 +69,8 @@ class CrewMediaReceiver(
             payload.copyInto(objectBytes, offset)
             offset += payload.size
         }
-        assemblies.remove(chunk.objectIntegrity)
+        assemblies.remove(chunk.transfer)
+        reservedBytes -= assembly.manifest.objectSizeBytes
         bufferedBytes -= objectBytes.size
         return if (CrewMediaDigest.sha256(objectBytes) != assembly.manifest.objectIntegrity) {
             CrewMediaReceiveResult.Rejected("object integrity mismatch")
@@ -69,6 +81,13 @@ class CrewMediaReceiver(
                     onFailure = { CrewMediaReceiveResult.Retry("temporary cache unavailable") },
                 )
         }
+    }
+
+    fun cancel(transfer: CrewMediaTransferRef): Boolean {
+        val assembly = assemblies.remove(transfer) ?: return false
+        reservedBytes -= assembly.manifest.objectSizeBytes
+        bufferedBytes -= assembly.chunks.values.sumOf(ByteArray::size)
+        return true
     }
 
     private class Assembly(val manifest: CrewMediaManifest) {

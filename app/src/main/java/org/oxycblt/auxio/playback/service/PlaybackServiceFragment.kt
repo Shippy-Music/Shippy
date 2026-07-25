@@ -35,6 +35,7 @@ import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
+import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleTracker
 import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
@@ -50,6 +51,7 @@ private constructor(
     sessionHolderFactory: MediaSessionHolder.Factory,
     widgetComponentFactory: WidgetComponent.Factory,
     systemReceiverFactory: SystemPlaybackReceiver.Factory,
+    private val lastFmScrobbleTracker: LastFmScrobbleTracker,
 ) : PlaybackStateManager.Listener {
     class Factory
     @Inject
@@ -60,6 +62,7 @@ private constructor(
         private val sessionHolderFactory: MediaSessionHolder.Factory,
         private val widgetComponentFactory: WidgetComponent.Factory,
         private val systemReceiverFactory: SystemPlaybackReceiver.Factory,
+        private val lastFmScrobbleTracker: LastFmScrobbleTracker,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
             PlaybackServiceFragment(
@@ -71,6 +74,7 @@ private constructor(
                 sessionHolderFactory,
                 widgetComponentFactory,
                 systemReceiverFactory,
+                lastFmScrobbleTracker,
             )
     }
 
@@ -120,6 +124,7 @@ private constructor(
         widgetComponent.attach()
         systemReceiver.attach()
         playbackManager.addListener(this)
+        lastFmScrobbleTracker.attach(playbackManager)
         updateAutoStopTimer(playbackManager.progression.isPlaying)
         return sessionHolder.token
     }
@@ -176,6 +181,7 @@ private constructor(
         autoStopJob?.cancel()
         waitJob.cancel()
         playbackManager.removeListener(this)
+        lastFmScrobbleTracker.release(playbackManager)
         systemReceiver.release()
         widgetComponent.release()
         sessionHolder.release()

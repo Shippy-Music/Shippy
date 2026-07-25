@@ -6,7 +6,9 @@
 package org.oxycblt.auxio.shippy.crew.media
 
 import java.security.MessageDigest
+import java.io.InputStream
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
+import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.domain.CandidateId
 
 /** Wire bounds intentionally leave room below the 48 KiB Crew media-channel payload limit. */
@@ -15,6 +17,32 @@ const val CREW_MEDIA_MAX_CHUNKS = 512
 /** The manifest has no paging in this foundation, so this is the actual transferable-object cap. */
 const val CREW_MEDIA_MAX_OBJECT_BYTES = 512L * CREW_MEDIA_MAX_CHUNK_BYTES
 const val CREW_MEDIA_DIGEST_BYTES = 32
+const val CREW_MEDIA_MAX_REQUEST_ID_BYTES = 96
+const val CREW_MEDIA_MAX_ID_BYTES = 128
+const val CREW_MEDIA_MAX_FRAME_BYTES = 48 * 1024
+
+@JvmInline
+value class CrewMediaRequestId(val value: String) {
+    init { require(value.toByteArray(Charsets.UTF_8).size in 1..CREW_MEDIA_MAX_REQUEST_ID_BYTES) }
+}
+
+/** Exact, path-free identity carried by every transfer frame. */
+data class CrewMediaTransferRef(
+    val sessionId: CrewSessionId,
+    val requestId: CrewMediaRequestId,
+    val candidateId: CandidateId,
+    val targetMemberId: CrewMemberId,
+    val supplierMemberId: CrewMemberId,
+)
+
+data class CrewMediaRequest(val transfer: CrewMediaTransferRef)
+
+/** An authorized source is intentionally bytes only: no path, URI, provider, or credential crosses this seam. */
+interface CrewAuthorizedMediaSource {
+    val lengthBytes: Long
+    val mimeType: String?
+    fun open(): InputStream
+}
 
 class CrewMediaDigest(bytes: ByteArray) {
     private val value = bytes.copyOf()
@@ -46,13 +74,14 @@ data class CrewMediaChunkDescriptor(
 
 /** Path-free declaration for one exact canonical candidate in one active Crew only. */
 data class CrewMediaManifest(
-    val sessionId: CrewSessionId,
-    val candidateId: CandidateId,
+    val transfer: CrewMediaTransferRef,
     val mimeType: String?,
     val objectSizeBytes: Long,
     val objectIntegrity: CrewMediaDigest,
     val chunks: List<CrewMediaChunkDescriptor>,
 ) {
+    val sessionId get() = transfer.sessionId
+    val candidateId get() = transfer.candidateId
     init {
         require(mimeType == null || mimeType.toByteArray(Charsets.UTF_8).size <= 256) {
             "MIME type is too large"
@@ -67,11 +96,12 @@ data class CrewMediaManifest(
 }
 
 class CrewMediaChunk(
-    val sessionId: CrewSessionId,
+    val transfer: CrewMediaTransferRef,
     val objectIntegrity: CrewMediaDigest,
     val index: Int,
     payload: ByteArray,
 ) {
+    val sessionId get() = transfer.sessionId
     private val bytes = payload.copyOf()
 
     init {
@@ -84,14 +114,50 @@ class CrewMediaChunk(
 
     override fun equals(other: Any?) =
         other is CrewMediaChunk &&
-            sessionId == other.sessionId &&
+            transfer == other.transfer &&
             objectIntegrity == other.objectIntegrity &&
             index == other.index &&
             bytes.contentEquals(other.bytes)
 
     override fun hashCode() =
-        31 * (31 * (31 * sessionId.hashCode() + objectIntegrity.hashCode()) + index) +
+        31 * (31 * (31 * transfer.hashCode() + objectIntegrity.hashCode()) + index) +
             bytes.contentHashCode()
+}
+
+/** Reads an already-authorized source only after bounding its declared and observed size. */
+object CrewMediaProducer {
+    fun produce(transfer: CrewMediaTransferRef, source: CrewAuthorizedMediaSource): Pair<CrewMediaManifest, List<CrewMediaChunk>> {
+        require(source.lengthBytes in 1..CREW_MEDIA_MAX_OBJECT_BYTES) { "Media source is outside Crew bounds" }
+        val bytes = source.open().use { input ->
+            val out = ByteArray(source.lengthBytes.toInt())
+            var offset = 0
+            while (offset < out.size) {
+                val read = input.read(out, offset, out.size - offset)
+                require(read >= 0) { "Media source ended early" }
+                if (read == 0) {
+                    val byte = input.read()
+                    require(byte >= 0) { "Media source ended early" }
+                    out[offset++] = byte.toByte()
+                } else {
+                    offset += read
+                }
+            }
+            require(input.read() == -1) { "Media source exceeded declared bound" }
+            out
+        }
+        val parts = buildList {
+            var offset = 0
+            while (offset < bytes.size) {
+                val end = minOf(offset + CREW_MEDIA_MAX_CHUNK_BYTES, bytes.size)
+                add(bytes.copyOfRange(offset, end))
+                offset = end
+            }
+        }
+        require(parts.size <= CREW_MEDIA_MAX_CHUNKS)
+        val manifest = CrewMediaManifest(transfer, source.mimeType, bytes.size.toLong(), CrewMediaDigest.sha256(bytes),
+            parts.mapIndexed { index, payload -> CrewMediaChunkDescriptor(index, payload.size, CrewMediaDigest.sha256(payload)) })
+        return manifest to parts.mapIndexed { index, payload -> CrewMediaChunk(transfer, manifest.objectIntegrity, index, payload) }
+    }
 }
 
 /** One user-visible setting, deliberately valid only for the current active Crew. */

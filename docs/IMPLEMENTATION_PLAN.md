@@ -66,7 +66,9 @@ through Auxio’s existing playback stack.
 - [x] Prevent rename/delete for permanent collections.
 - [ ] Preserve user playlist creation, edit, pin, sort, and deletion.
 - [ ] Support Local tracks inside user playlists and queue.
-- [ ] Add selected Local source folder management and rescan behavior.
+- [x] Add selected Local source folder management and rescan behavior.
+  - Retained Auxio's persisted SAF source/excluded-location selection,
+    `LocationsDialog`, indexing listener, and forced rescan path.
 - [x] Add selected Download destination with persisted Android access.
 - [ ] Index pre-existing supported media in the Download destination.
 - [x] Add download relationship/state without isolating tracks from normal views.
@@ -91,7 +93,9 @@ through Auxio’s existing playback stack.
       recording-version safeguards.
 - [x] Implement preferred/fallback provider settings.
 - [x] Port or reimplement the first viable provider adapter from Bloomee evidence.
-- [ ] Add additional viable provider adapters.
+- [x] Add additional viable provider adapters.
+  - Anonymous YouTube Music search/direct-stream adapter is implemented with
+    runtime bootstrap and an explicit cipher-only limitation.
 - [x] Implement provider playback URL resolution with expiry/cache behavior.
 - [x] Implement Shippy permanent download jobs, progress, retry, cancel, remove,
       and destination reconciliation.
@@ -115,6 +119,9 @@ code/test level, ready for later device verification.
 
 - [x] Lyrics retrieval, synchronization, caching, and offline use.
 - [ ] Last.fm authentication boundary and scrobbling.
+  - [x] Signed API client, encrypted credential repository, durable FIFO
+        outbox, listen policy, and playback lifecycle observer.
+  - [ ] Settings web-auth/credential entry, sign-out, and visible reauth state.
 - [ ] Equalizer and audio options.
 - [ ] Gapless/crossfade/normalization settings according to actual Media3 support.
 - [ ] Sleep timer utility.
@@ -194,8 +201,13 @@ Crew with relay fallback hooks.
 - [ ] Implement one active-Crew-scoped setting.
 - [ ] Implement supplier availability without exposing library contents.
 - [ ] Implement media manifest, chunking, integrity, encryption, and backpressure.
+  - [x] Bounded encrypted-channel wire frames, exact transfer identity,
+        SHA-256 manifest/chunks, receiver reservation, and explicit-resume
+        controller foundation.
+  - [ ] Connect the controller to authenticated peer lifecycle and end-to-end
+        request/acknowledgement callbacks.
 - [ ] Implement adaptive supplier selection independent of coordinator.
-- [ ] Implement bounded temporary Crew cache and crash/session cleanup.
+- [x] Implement bounded temporary Crew cache and crash/session cleanup.
 - [ ] Allow temporary chunks to redistribute within the same active Crew.
 - [ ] Implement rolling prefetch, prioritization, cancellation, and reprioritizing.
 - [ ] Bridge peer media into Media3 playback without a permanent library record.

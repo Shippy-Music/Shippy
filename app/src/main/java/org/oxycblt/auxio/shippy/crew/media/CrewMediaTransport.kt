@@ -13,16 +13,12 @@ class CrewMediaTransport(
     private val policy: ActiveCrewPushPullPolicy,
     private val peer: CrewPeerTransport,
 ) {
-    fun send(manifest: CrewMediaManifest): CrewSendResult = send(CrewMediaWireFrame.Manifest(manifest), manifest.sessionId)
-    fun send(chunk: CrewMediaChunk): CrewSendResult = send(CrewMediaWireFrame.Chunk(chunk), chunk.sessionId)
+    fun send(frame: CrewMediaWireFrame): CrewSendResult = send(frame, frame.transfer.sessionId)
 
     fun receive(frame: CrewTransportFrame): CrewMediaWireFrame? {
         if (frame.channel != CrewTransportChannel.MEDIA || !policy.accepts(activeSessionId)) return null
         return runCatching { CrewMediaWireCodec.decode(frame.copyPayload()) }.getOrNull()?.takeIf {
-            when (it) {
-                is CrewMediaWireFrame.Manifest -> it.value.sessionId == activeSessionId
-                is CrewMediaWireFrame.Chunk -> it.value.sessionId == activeSessionId
-            }
+            it.transfer.sessionId == activeSessionId
         }
     }
 

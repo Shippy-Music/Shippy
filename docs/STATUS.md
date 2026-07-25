@@ -240,9 +240,22 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   remain explicitly unresolved and Local keeps the exact Auxio route.
 - Push & Pull now has an active-Crew-only policy, path/secret-free bounded media
   manifest/chunk codec, per-chunk and whole-object integrity, media-channel adapter,
-  receiver backpressure, and API-24-compatible temporary session cache cleanup.
-  Supplier requests, prefetch integration, redistribution, and Media3 playback are
-  still incomplete.
+  exact target/supplier request identity, request/cancel/ack/retry/reject/complete
+  frames, reserved receiver windows, explicit-resume transfer controller, and
+  API-24-compatible temporary session cache cleanup. Authenticated-peer wiring,
+  supplier selection, prefetch integration, redistribution, and Media3 playback
+  are still incomplete.
+- Anonymous YouTube Music is now a second provider adapter: it bootstraps public
+  Innertube configuration at runtime, searches WEB_REMIX song results, retries
+  playback through Android Music/iOS client contexts, and accepts direct HTTPS
+  audio only. Cipher-only formats remain explicitly unsupported.
+- Last.fm now has a signed HTTPS client, Android-Keystore encrypted credential
+  boundary, Room v7 durable FIFO scrobble outbox, listen-threshold policy,
+  oldest-first batch delivery, and playback-service observer. The Settings
+  authentication/reauthentication surface is not implemented yet.
+- Auxio's existing persisted SAF source/excluded-folder selection, recursive
+  local indexing, and forced rescan path satisfy selected Local folder
+  management; this foundation is retained instead of duplicated.
 
 ## In Progress
 
@@ -254,6 +267,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
+- Adding the Last.fm Settings authentication/reauthentication surface and live
+  provider health verification.
 - Hosted signaling, remaining transport lifecycle, and active UI behind the new Crew destination.
 - Transport migration after a reconnect.
 - Connecting Push & Pull availability, requests, supplier preparation, prefetch,
@@ -274,14 +289,14 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   connection orchestration are source/API-inspected only. Loopback/simulation
   tests are authored but not run; NAT traversal, TURN, reconnection, and
   multi-phone behavior remain compile/device-unverified.
-- Crew control serialization, chunk reassembly, Room v5 checkpoint generation,
-  session-engine convergence, and persistence tests are authored/static-parsed
-  only and remain uncompiled.
+- Crew control serialization, chunk reassembly/media transfer, Room checkpoint
+  and Last.fm v7 generation, session-engine convergence, and persistence tests
+  are authored/static-parsed only and remain uncompiled.
 - Safe ungraceful election needs a strict majority. A direct two-member Crew
   pauses after coordinator loss until reconnection; the future relay/witness
   path must restore availability without weakening split-brain safety.
-- Room/Hilt generation, JioSaavn JSON parsing, and provider playback are
-  compile/device-unverified until the owner build.
+- Room/Hilt generation, JioSaavn/YouTube Music JSON parsing, Last.fm lifecycle,
+  and provider playback are compile/device-unverified until the owner build.
 - WorkManager/Hilt worker generation, SAF storage, and foreground download
   execution are code/static-checked but compile/device-unverified.
 - LRCLIB response shape was live-checked on 2026-07-25; Kotlin parsing, Hilt
@@ -297,8 +312,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 ## Next Concrete Actions
 
 1. Add direct collection-row download actions and unmanaged-folder indexing.
-2. Add the next viable provider/YouTube adapter and Last.fm scrobble boundary.
-3. Connect Push & Pull requests/suppliers/prefetch/cache to the resolver and player.
+2. Complete Last.fm Settings authentication/reauthentication and sleep timer.
+3. Connect Push & Pull requests/suppliers/prefetch/cache to authenticated peers,
+   the resolver, and the player.
 4. Wire the secure rejoin connector to real signaling; hosted signaling remains separate.
 
 ## Verification Ledger
@@ -310,8 +326,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media foundation, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
-| New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track migration/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache persistence/session convergence/signaling/direct-connection/transport policies |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider and Search-to-play paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
+| New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 351-file app AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 378-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |
