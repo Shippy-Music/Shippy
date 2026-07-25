@@ -440,6 +440,15 @@ each accepted state. Durable-control queue overflow or send timeout detaches the
 peer explicitly; it never silently drops a state event. Raw election votes from
 one payload are not treated as independently authenticated quorum evidence.
 
+Membership uses that same event authority. An authenticated pending peer is
+admitted only by the current coordinator, and receives a canonical snapshot
+after its `MemberJoined` event so provisional join state cannot become a second
+truth. Ordinary members cannot admit or remove another member. Graceful
+coordinator departure deterministically transfers to the lowest-ID connected
+successor, then sends a self-leave request through that new coordinator. The
+departing device clears only its exact active checkpoint after the accepted
+`MemberLeft` event reaches it.
+
 ### Transport adapters
 
 The 2026-07-25 focused spike selected:

@@ -156,6 +156,74 @@ class CrewSessionEngineTest {
         fixture.close()
     }
 
+    @Test
+    fun `authenticated pending peer is admitted by event then canonical snapshot`() = runBlocking {
+        val coordinatorState =
+            CrewState(
+                sessionId = sessionId,
+                protocolVersion = protocol,
+                term = CoordinatorTerm(1),
+                lastSequence = EventSequence(0),
+                coordinatorMemberId = coordinatorId,
+                members = listOf(CrewMember(coordinatorId, "Coordinator")),
+            )
+        val fixture = connectedEngines(coordinatorState, state())
+        val joiningMember = CrewMember(memberId, "Joined member")
+
+        val result =
+            fixture.coordinator.admitPeer(
+                transportMemberId = memberId,
+                member = joiningMember,
+                requestId = DurableEventId("admit-member"),
+                clientMonotonicTimestampMs = 30,
+            )
+        assertTrue(result is CrewAdmissionResult.Admitted)
+        val joined =
+            withTimeout(2_000) {
+                fixture.member.state
+                    .filter {
+                        it.lastSequence == EventSequence(1) &&
+                            it.members.any { member -> member == joiningMember }
+                    }
+                    .first()
+            }
+
+        assertEquals(joiningMember, joined.members.single { it.id == memberId })
+        fixture.close()
+    }
+
+    @Test
+    fun `coordinator gracefully transfers then leaves through new coordinator`() = runBlocking {
+        val fixture = connectedEngines(state(), state())
+
+        val result =
+            fixture.coordinator.gracefulLeave(
+                transferRequestId = DurableEventId("transfer"),
+                leaveRequestId = DurableEventId("leave"),
+                clientMonotonicTimestampMs = 40,
+            )
+        assertTrue(result is CrewGracefulLeaveResult.Requested)
+        val remaining =
+            withTimeout(2_000) {
+                fixture.member.state
+                    .filter {
+                        it.coordinatorMemberId == memberId &&
+                            it.members.map(CrewMember::id) == listOf(memberId)
+                    }
+                    .first()
+            }
+        withTimeout(2_000) {
+            fixture.coordinator.state
+                .filter { it.members.none { member -> member.id == coordinatorId } }
+                .first()
+        }
+
+        assertEquals(CoordinatorTerm(2), remaining.term)
+        assertEquals(EventSequence(2), remaining.lastSequence)
+        assertEquals(null, fixture.coordinatorStore.latest)
+        fixture.close()
+    }
+
     private suspend fun connectedEngines(
         coordinatorState: CrewState,
         memberState: CrewState,

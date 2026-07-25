@@ -146,7 +146,11 @@ code/test level, ready for later device verification.
 - [x] Implement availability summaries per member and queue item.
 - [x] Implement monotonic session clock probes and scheduled playback decisions.
 - [x] Implement readiness, buffering, late join, and drift decision logic.
-- [ ] Implement membership lifecycle.
+- [ ] Complete membership lifecycle:
+  - [x] Authenticated coordinator admission and canonical post-join snapshot.
+  - [x] Self-leave and deterministic graceful coordinator handoff.
+  - [ ] Liveness expiry, reconnect lease, and independently authenticated
+        ungraceful election votes.
 - [x] Implement bounded persistent active-session checkpoint format and Room
       store; secure rejoin credentials remain part of session orchestration.
 - [x] Implement ephemeral reactions.

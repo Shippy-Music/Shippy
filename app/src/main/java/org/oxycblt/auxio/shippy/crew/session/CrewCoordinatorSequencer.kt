@@ -114,6 +114,9 @@ class CrewCoordinatorSequencer(
         if (localMemberId != currentState.coordinatorMemberId) {
             return rejected(CrewSequenceRejection.NOT_COORDINATOR)
         }
+        if (!isAuthorizedAction(request.action, authenticatedRequester)) {
+            return rejected(CrewSequenceRejection.ACTION_REJECTED)
+        }
 
         val event =
             DurableCrewEvent(
@@ -156,6 +159,18 @@ class CrewCoordinatorSequencer(
             currentState.term.next()
         } else {
             currentState.term
+        }
+
+    private fun isAuthorizedAction(
+        action: CrewAction,
+        requester: CrewMemberId,
+    ): Boolean =
+        when (action) {
+            is CrewAction.MemberJoined -> requester == currentState.coordinatorMemberId
+            is CrewAction.MemberUpdated -> action.member.id == requester
+            is CrewAction.MemberLeft ->
+                action.memberId == requester || requester == currentState.coordinatorMemberId
+            else -> true
         }
 
     private fun eventSequence(action: CrewAction): EventSequence =

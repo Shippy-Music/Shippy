@@ -579,6 +579,14 @@ a bounded time and then becomes an explicit peer failure rather than a dropped
 event. Higher-term election snapshots remain rejected until their votes have
 been collected over independently authenticated peer paths.
 
+Admission and graceful departure now remain inside the ordered stream. The
+current coordinator alone admits an authenticated pending peer, then sends that
+peer the canonical post-admission snapshot. A normal member may update or remove
+itself but cannot admit or kick another member. A departing coordinator first
+transfers to the deterministic lowest-ID connected successor; its self-leave
+request follows the transfer on the same ordered channel. The leaving device
+clears its exact checkpoint only after receiving the accepted leave event.
+
 This decision and the join/NSD adapters satisfy the architecture gate at
 source/API level only. Authenticated local signaling sockets are implemented and
 have loopback tests authored, but are not compiled or device-proven. NAT, TURN,

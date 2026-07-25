@@ -209,6 +209,13 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Each peer has one bounded durable-control actor. Temporary backpressure retries
   without reordering; exhaustion or protocol corruption detaches the peer
   explicitly instead of silently losing a state event.
+- Crew admission now binds the proposed member to an attached authenticated
+  peer, permits only the current coordinator to publish `MemberJoined`, and
+  follows with the canonical snapshot. Membership actions prevent ordinary
+  members from admitting or removing someone else.
+- Graceful coordinator leave now transfers deterministically to the lowest-ID
+  connected successor before its self-leave request. The departing member
+  receives the accepted leave event and clears only its exact active checkpoint.
 
 ## In Progress
 
@@ -222,11 +229,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Crew persistence, hosted signaling, transport/session engine, and active UI
-  behind the new Crew destination.
-- Completing Crew admission/leave, graceful handoff, independently
-  authenticated election votes, and reconnect lifecycle around the session
-  engine.
+- Secure rejoin credentials, hosted signaling, remaining transport lifecycle,
+  and active UI behind the new Crew destination.
+- Completing liveness expiry, reconnect leases, and independently authenticated
+  ungraceful election votes around the session engine.
 
 ## Not Started
 

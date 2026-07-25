@@ -34,11 +34,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.oxycblt.auxio.shippy.crew.core.CrewEventResult
+import org.oxycblt.auxio.shippy.crew.core.CrewAction
+import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewReducer
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshotResult
 import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.DurableCrewEvent
+import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.toSnapshot
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFrameResult
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlCodec
@@ -76,6 +79,35 @@ sealed interface CrewSubmitResult {
     ) : CrewSubmitResult
 }
 
+sealed interface CrewAdmissionResult {
+    data class Admitted(
+        val member: CrewMember,
+        val event: DurableCrewEvent,
+    ) : CrewAdmissionResult
+
+    data class AlreadyActive(val member: CrewMember) : CrewAdmissionResult
+
+    data class Rejected(val reason: CrewAdmissionRejection) : CrewAdmissionResult
+}
+
+enum class CrewAdmissionRejection {
+    NOT_COORDINATOR,
+    PEER_NOT_ATTACHED,
+    PEER_ID_MISMATCH,
+    SEQUENCER_REJECTED,
+}
+
+sealed interface CrewGracefulLeaveResult {
+    data class Requested(
+        val transferRequest: CrewActionRequest?,
+        val leaveRequest: CrewActionRequest,
+    ) : CrewGracefulLeaveResult
+
+    data object NoConnectedSuccessor : CrewGracefulLeaveResult
+
+    data class Rejected(val submission: CrewSubmitResult) : CrewGracefulLeaveResult
+}
+
 sealed interface CrewSessionNotice {
     data class StateAdvanced(
         val event: DurableCrewEvent,
@@ -108,6 +140,8 @@ sealed interface CrewSessionNotice {
     ) : CrewSessionNotice
 
     data class EngineFailed(val reason: String) : CrewSessionNotice
+
+    data class LocalLeft(val finalState: CrewState) : CrewSessionNotice
 }
 
 enum class CrewPeerDetachReason {
@@ -294,6 +328,116 @@ class CrewSessionEngine(
             queued
         }
 
+    suspend fun admitPeer(
+        transportMemberId: CrewMemberId,
+        member: CrewMember,
+        requestId: DurableEventId,
+        clientMonotonicTimestampMs: Long = nowMonotonicMs(),
+    ): CrewAdmissionResult {
+        check(!closed.get()) { "Crew session engine is closed" }
+        require(clientMonotonicTimestampMs >= 0) {
+            "Crew admission monotonic timestamp cannot be negative"
+        }
+        return stateMutex.withLock {
+            val current = mutableState.value
+            current.members.firstOrNull { it.id == member.id }?.let {
+                return@withLock CrewAdmissionResult.AlreadyActive(it)
+            }
+            if (current.coordinatorMemberId != localMemberId || sequencer == null) {
+                return@withLock CrewAdmissionResult.Rejected(
+                    CrewAdmissionRejection.NOT_COORDINATOR
+                )
+            }
+            if (member.id != transportMemberId) {
+                return@withLock CrewAdmissionResult.Rejected(
+                    CrewAdmissionRejection.PEER_ID_MISMATCH
+                )
+            }
+            if (peers[transportMemberId] == null) {
+                return@withLock CrewAdmissionResult.Rejected(
+                    CrewAdmissionRejection.PEER_NOT_ATTACHED
+                )
+            }
+            val request =
+                CrewActionRequest(
+                    id = requestId,
+                    issuingMemberId = localMemberId,
+                    clientMonotonicTimestampMs = clientMonotonicTimestampMs,
+                    action = CrewAction.MemberJoined(member),
+                )
+            when (val result = checkNotNull(sequencer).sequence(request, localMemberId)) {
+                is CrewSequenceResult.Published -> {
+                    publishSequenceResultLocked(result, request, localMemberId)
+                    enqueueLocked(
+                        member.id,
+                        CrewControlMessage.SnapshotInstalled(result.state.toSnapshot()),
+                    )
+                    CrewAdmissionResult.Admitted(member, result.event)
+                }
+                is CrewSequenceResult.Duplicate -> {
+                    publishSequenceResultLocked(result, request, localMemberId)
+                    enqueueLocked(
+                        member.id,
+                        CrewControlMessage.SnapshotInstalled(result.state.toSnapshot()),
+                    )
+                    CrewAdmissionResult.Admitted(member, result.event)
+                }
+                is CrewSequenceResult.Rejected ->
+                    CrewAdmissionResult.Rejected(CrewAdmissionRejection.SEQUENCER_REJECTED)
+            }
+        }
+    }
+
+    suspend fun gracefulLeave(
+        transferRequestId: DurableEventId,
+        leaveRequestId: DurableEventId,
+        clientMonotonicTimestampMs: Long = nowMonotonicMs(),
+    ): CrewGracefulLeaveResult {
+        check(!closed.get()) { "Crew session engine is closed" }
+        val before = mutableState.value
+        var transferRequest: CrewActionRequest? = null
+        if (before.coordinatorMemberId == localMemberId) {
+            val successor =
+                before.members
+                    .asSequence()
+                    .map(CrewMember::id)
+                    .filter { it != localMemberId }
+                    .filter { peerStates.value[it] == CrewTransportState.CONNECTED }
+                    .minByOrNull(CrewMemberId::value)
+                    ?: return CrewGracefulLeaveResult.NoConnectedSuccessor
+            transferRequest =
+                CrewActionRequest(
+                    id = transferRequestId,
+                    issuingMemberId = localMemberId,
+                    clientMonotonicTimestampMs = clientMonotonicTimestampMs,
+                    action = CrewAction.CoordinatorTransferred(successor),
+                )
+            val transferResult = submit(transferRequest, clientMonotonicTimestampMs)
+            if (
+                transferResult !is CrewSubmitResult.Submitted &&
+                    transferResult !is CrewSubmitResult.AlreadyPending
+            ) {
+                return CrewGracefulLeaveResult.Rejected(transferResult)
+            }
+        }
+        val leaveRequest =
+            CrewActionRequest(
+                id = leaveRequestId,
+                issuingMemberId = localMemberId,
+                clientMonotonicTimestampMs = clientMonotonicTimestampMs,
+                action = CrewAction.MemberLeft(localMemberId),
+            )
+        val leaveResult = submit(leaveRequest, clientMonotonicTimestampMs)
+        return if (
+            leaveResult is CrewSubmitResult.Submitted ||
+                leaveResult is CrewSubmitResult.AlreadyPending
+        ) {
+            CrewGracefulLeaveResult.Requested(transferRequest, leaveRequest)
+        } else {
+            CrewGracefulLeaveResult.Rejected(leaveResult)
+        }
+    }
+
     fun expireOptimisticActions(nowMonotonicMs: Long = this.nowMonotonicMs()) {
         optimisticActions.expire(nowMonotonicMs).forEach {
             emit(CrewSessionNotice.OptimisticRejected(it))
@@ -453,7 +597,7 @@ class CrewSessionEngine(
             is CrewEventResult.Applied -> {
                 installStateLocked(result.state)
                 reconcileLocked(event)
-                checkpointRepository.save(result.state.toSnapshot(), nowEpochMs())
+                persistAcceptedStateLocked(result.state)
                 emit(CrewSessionNotice.StateAdvanced(event, result.state))
             }
             is CrewEventResult.DuplicateRejected -> reconcileLocked(event)
@@ -511,7 +655,7 @@ class CrewSessionEngine(
         ) {
             is CrewSnapshotResult.Applied -> {
                 installStateLocked(result.state)
-                checkpointRepository.save(result.state.toSnapshot(), nowEpochMs())
+                persistAcceptedStateLocked(result.state)
                 emit(CrewSessionNotice.SnapshotApplied(result.state))
             }
             is CrewSnapshotResult.Rejected ->
@@ -580,8 +724,11 @@ class CrewSessionEngine(
             is CrewSequenceResult.Published -> {
                 installStateLocked(result.state)
                 reconcileLocked(result.event)
-                checkpointRepository.save(result.state.toSnapshot(), nowEpochMs())
-                broadcastLocked(CrewControlMessage.Event(result.event))
+                persistAcceptedStateLocked(result.state)
+                broadcastLocked(
+                    CrewControlMessage.Event(result.event),
+                    additionalMemberIds = setOf(result.event.issuingMemberId),
+                )
                 emit(CrewSessionNotice.StateAdvanced(result.event, result.state))
             }
             is CrewSequenceResult.Duplicate -> {
@@ -645,9 +792,22 @@ class CrewSessionEngine(
             }
     }
 
-    private fun broadcastLocked(message: CrewControlMessage) {
-        mutableState.value.members
-            .map { it.id }
+    private suspend fun persistAcceptedStateLocked(state: CrewState) {
+        if (state.members.any { it.id == localMemberId }) {
+            checkpointRepository.save(state.toSnapshot(), nowEpochMs())
+        } else {
+            checkpointRepository.clear(state.sessionId)
+            emit(CrewSessionNotice.LocalLeft(state))
+            scope.launch { close() }
+        }
+    }
+
+    private fun broadcastLocked(
+        message: CrewControlMessage,
+        additionalMemberIds: Set<CrewMemberId> = emptySet(),
+    ) {
+        (mutableState.value.members.map { it.id } + additionalMemberIds)
+            .distinct()
             .filter { it != localMemberId }
             .sortedBy(CrewMemberId::value)
             .forEach { memberId ->

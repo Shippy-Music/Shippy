@@ -150,6 +150,36 @@ class CrewCoordinatorSequencerTest {
     }
 
     @Test
+    fun `ordinary member cannot admit or remove another member`() {
+        val fixture = Fixture()
+        val sequencer = CrewCoordinatorSequencer(fixture.state, fixture.coordinatorId)
+        val outsider = CrewMember(CrewMemberId("outsider", fixture.memberId.protocolVersion), "Outsider")
+
+        val admit =
+            sequencer.sequence(
+                fixture.request(
+                    "admit",
+                    fixture.memberId,
+                    CrewAction.MemberJoined(outsider),
+                ),
+                fixture.memberId,
+            )
+        val remove =
+            sequencer.sequence(
+                fixture.request(
+                    "remove",
+                    fixture.memberId,
+                    CrewAction.MemberLeft(fixture.coordinatorId),
+                ),
+                fixture.memberId,
+            )
+
+        assertTrue(admit is CrewSequenceResult.Rejected)
+        assertTrue(remove is CrewSequenceResult.Rejected)
+        assertEquals(EventSequence(0), sequencer.state().lastSequence)
+    }
+
+    @Test
     fun `restored replay id is not fabricated into a new event receipt`() {
         val fixture = Fixture()
         val replayId = DurableEventId("restored-request")
