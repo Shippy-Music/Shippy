@@ -283,6 +283,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   authorization, explicit completion after return, reconnect, and confirmed
   disconnect. Pending key/secret/token state is memory-only; process death
   during authorization honestly requires starting again.
+- Last.fm invalid-session delivery now raises a process-local visible
+  reauthorization state. Reconnect reuses the securely stored application
+  key/secret, successful authorization or delivery clears the signal, and no
+  credential is duplicated into settings state.
 - Auxio's existing persisted SAF source/excluded-folder selection, recursive
   local indexing, and forced rescan path satisfy selected Local folder
   management; this foundation is retained instead of duplicated.
@@ -295,8 +299,7 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Surfacing Last.fm invalid-session delivery as a visible reauthorization state
-  and adding live provider health verification.
+- Adding live provider health verification.
 - Hosted signaling, remaining transport lifecycle, and active UI behind the new Crew destination.
 - Transport migration after a reconnect.
 - Connecting Push & Pull availability, requests, supplier preparation, prefetch,
@@ -340,10 +343,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 ## Next Concrete Actions
 
 1. Complete unmanaged download-folder indexing and Shippy playlist creation.
-2. Surface Last.fm invalid-session delivery as a visible reauthentication state.
-3. Connect Push & Pull requests/suppliers/prefetch/cache to authenticated peers,
+2. Connect Push & Pull requests/suppliers/prefetch/cache to authenticated peers,
    the resolver, and the player.
-4. Wire the secure rejoin connector to real signaling; hosted signaling remains separate.
+3. Wire the secure rejoin connector to real signaling; hosted signaling remains separate.
 
 ## Verification Ledger
 

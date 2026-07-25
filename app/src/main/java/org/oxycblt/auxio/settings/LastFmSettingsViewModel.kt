@@ -21,6 +21,7 @@ import org.oxycblt.auxio.shippy.lastfm.LastFmAuthFailureCode
 import org.oxycblt.auxio.shippy.lastfm.LastFmAuthResult
 import org.oxycblt.auxio.shippy.lastfm.LastFmCredentialRepository
 import org.oxycblt.auxio.shippy.lastfm.LastFmCredentials
+import org.oxycblt.auxio.shippy.lastfm.LastFmReauthState
 
 /**
  * Drives the intentionally small Last.fm browser-authorization flow.
@@ -33,6 +34,7 @@ import org.oxycblt.auxio.shippy.lastfm.LastFmCredentials
 class LastFmSettingsViewModel @Inject constructor(
     private val credentials: LastFmCredentialRepository,
     private val auth: LastFmAuthClient,
+    private val reauth: LastFmReauthState,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow<LastFmSettingsState>(LastFmSettingsState.Working)
     val state: StateFlow<LastFmSettingsState> = mutableState.asStateFlow()
@@ -45,11 +47,19 @@ class LastFmSettingsViewModel @Inject constructor(
 
     init {
         refresh()
+        viewModelScope.launch {
+            reauth.required.collect {
+                if (pendingAuthorization == null && mutableState.value != LastFmSettingsState.Working) {
+                    refresh()
+                }
+            }
+        }
     }
 
     fun onPreferenceClicked() {
         when (val current = mutableState.value) {
             LastFmSettingsState.Disconnected -> eventChannel.trySend(LastFmSettingsEvent.ShowCredentialsDialog)
+            is LastFmSettingsState.ReauthorizationRequired -> reconnect()
             is LastFmSettingsState.PendingAuthorization -> completeAuthorization()
             is LastFmSettingsState.Error ->
                 when (current.retry) {
@@ -67,20 +77,7 @@ class LastFmSettingsViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            mutableState.value = LastFmSettingsState.Working
-            when (val result = auth.requestToken(apiKey.trim(), apiSecret.trim())) {
-                is LastFmAuthResult.Success -> {
-                    when (val url = auth.authorizationUrl(apiKey.trim(), result.value)) {
-                        is LastFmAuthResult.Success -> {
-                            pendingAuthorization = PendingAuthorization(apiKey.trim(), apiSecret.trim(), result.value)
-                            mutableState.value = LastFmSettingsState.PendingAuthorization
-                            eventChannel.send(LastFmSettingsEvent.OpenBrowser(url.value))
-                        }
-                        is LastFmAuthResult.Failure -> failStart(url)
-                    }
-                }
-                is LastFmAuthResult.Failure -> failStart(result)
-            }
+            startAuthorization(apiKey.trim(), apiSecret.trim())
         }
     }
 
@@ -90,6 +87,7 @@ class LastFmSettingsViewModel @Inject constructor(
             pendingAuthorization = null
             try {
                 credentials.clear()
+                reauth.clear()
                 mutableState.value = LastFmSettingsState.Disconnected
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -103,9 +101,13 @@ class LastFmSettingsViewModel @Inject constructor(
             mutableState.value = LastFmSettingsState.Working
             pendingAuthorization = null
             try {
-                credentials.clear()
-                mutableState.value = LastFmSettingsState.Disconnected
-                eventChannel.send(LastFmSettingsEvent.ShowCredentialsDialog)
+                val saved = credentials.load()
+                if (saved == null) {
+                    mutableState.value = LastFmSettingsState.Disconnected
+                    eventChannel.send(LastFmSettingsEvent.ShowCredentialsDialog)
+                } else {
+                    startAuthorization(saved.apiKey, saved.apiSecret)
+                }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 mutableState.value = LastFmSettingsState.Error(LastFmRetry.START, LastFmSettingsError.STORAGE)
@@ -117,14 +119,28 @@ class LastFmSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val saved = credentials.load()
-                if (pendingAuthorization == null) {
-                    mutableState.value = saved?.let { LastFmSettingsState.Connected(it.username) }
-                        ?: LastFmSettingsState.Disconnected
-                }
+                if (pendingAuthorization == null) mutableState.value = LastFmSettingsPresentation.state(saved?.username, reauth.required.value)
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 mutableState.value = LastFmSettingsState.Error(LastFmRetry.START, LastFmSettingsError.STORAGE)
             }
+        }
+    }
+
+    private suspend fun startAuthorization(apiKey: String, apiSecret: String) {
+        mutableState.value = LastFmSettingsState.Working
+        when (val result = auth.requestToken(apiKey, apiSecret)) {
+            is LastFmAuthResult.Success -> {
+                when (val url = auth.authorizationUrl(apiKey, result.value)) {
+                    is LastFmAuthResult.Success -> {
+                        pendingAuthorization = PendingAuthorization(apiKey, apiSecret, result.value)
+                        mutableState.value = LastFmSettingsState.PendingAuthorization
+                        eventChannel.send(LastFmSettingsEvent.OpenBrowser(url.value))
+                    }
+                    is LastFmAuthResult.Failure -> failStart(url)
+                }
+            }
+            is LastFmAuthResult.Failure -> failStart(result)
         }
     }
 
@@ -146,6 +162,7 @@ class LastFmSettingsViewModel @Inject constructor(
     private suspend fun save(value: LastFmCredentials) {
         try {
             credentials.save(value)
+            reauth.clear()
             pendingAuthorization = null
             mutableState.value = LastFmSettingsState.Connected(value.username)
         } catch (error: Exception) {
@@ -179,6 +196,7 @@ sealed interface LastFmSettingsState {
     data object Disconnected : LastFmSettingsState
     data object PendingAuthorization : LastFmSettingsState
     data class Connected(val username: String) : LastFmSettingsState
+    data class ReauthorizationRequired(val username: String) : LastFmSettingsState
     data class Error(val retry: LastFmRetry, val error: LastFmSettingsError) : LastFmSettingsState
 }
 
@@ -214,6 +232,15 @@ private data class PendingAuthorization(
     val apiSecret: String,
     val token: String,
 )
+
+internal object LastFmSettingsPresentation {
+    fun state(username: String?, reauthorizationRequired: Boolean): LastFmSettingsState =
+        when {
+            username == null -> LastFmSettingsState.Disconnected
+            reauthorizationRequired -> LastFmSettingsState.ReauthorizationRequired(username)
+            else -> LastFmSettingsState.Connected(username)
+        }
+}
 
 private fun LastFmAuthResult.Failure.toSettingsError(): LastFmSettingsError =
     when (this) {

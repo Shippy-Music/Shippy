@@ -188,6 +188,8 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 LastFmSettingsState.PendingAuthorization -> getString(R.string.set_lastfm_pending)
                 is LastFmSettingsState.Connected ->
                     getString(R.string.set_lastfm_connected, state.username)
+                is LastFmSettingsState.ReauthorizationRequired ->
+                    getString(R.string.set_lastfm_reauthorization_required)
                 is LastFmSettingsState.Error -> getString(state.error.summaryRes)
             }
     }

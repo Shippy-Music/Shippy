@@ -394,9 +394,12 @@ flow. Only a successfully exchanged API key, API secret, session key, and
 username enter the credential repository, which stores them in an
 Android-Keystore AES-GCM `AtomicFile` envelope. No reusable Last.fm credential is
 embedded in the APK. Settings supports connect, explicit completion after
-returning from the browser, reconnect, and disconnect. Delivery-level invalid
-session state still needs to be surfaced back to Settings as a reauthorization
-prompt.
+returning from the browser, reconnect, and disconnect. A process-local health
+signal carries delivery-level invalid-session results back to Settings without
+duplicating or persisting credentials. Reauthorization reuses the securely
+stored application key/secret, while a successful delivery or authorization
+clears the signal. A process restart remains honest: the startup outbox flush
+can raise the signal again if the saved session is still invalid.
 
 ## 11. Crew Architecture
 

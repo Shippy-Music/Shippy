@@ -287,6 +287,7 @@
     <string name="set_key_lastfm">lastfm</string>
     <string name="set_lastfm_disconnected">Not connected</string>
     <string name="set_lastfm_connected">Connected as %1$s</string>
+    <string name="set_lastfm_reauthorization_required">Session expired — reconnect</string>
     <string name="set_lastfm_pending">Browser authorization pending</string>
     <string name="set_lastfm_working">Workingâ€¦</string>
     <string name="set_lastfm_api_key">API key</string>

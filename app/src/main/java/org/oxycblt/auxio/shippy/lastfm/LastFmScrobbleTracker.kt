@@ -20,6 +20,7 @@ class LastFmScrobbleTracker @Inject constructor(
     private val dao: LastFmScrobbleDao,
     private val credentials: LastFmCredentialRepository,
     private val client: LastFmClient,
+    private val reauth: LastFmReauthState,
 ) : PlaybackStateManager.Listener {
     private val clock = Clock.systemUTC()
     private var attached = false
@@ -100,7 +101,15 @@ class LastFmScrobbleTracker @Inject constructor(
     private suspend fun flush() {
         val auth = credentials.load() ?: return
         val batch = dao.oldest(MAX_BATCH); if (batch.isEmpty()) return
-        when (client.scrobble(batch, auth)) { LastFmDelivery.DELIVERED -> dao.delete(batch.map { it.id }); LastFmDelivery.DROP -> dao.delete(batch.map { it.id }); LastFmDelivery.REAUTH, LastFmDelivery.RETRY -> Unit }
+        when (client.scrobble(batch, auth)) {
+            LastFmDelivery.DELIVERED -> {
+                dao.delete(batch.map { it.id })
+                reauth.clear()
+            }
+            LastFmDelivery.DROP -> dao.delete(batch.map { it.id })
+            LastFmDelivery.REAUTH -> reauth.markRequired()
+            LastFmDelivery.RETRY -> Unit
+        }
     }
     private companion object { const val MAX_BATCH = 50 }
 }

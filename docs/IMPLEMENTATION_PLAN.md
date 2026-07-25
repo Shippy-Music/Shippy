@@ -120,14 +120,14 @@ code/test level, ready for later device verification.
 ## Stage 4 — Player Integrations And Android Polish
 
 - [x] Lyrics retrieval, synchronization, caching, and offline use.
-- [ ] Last.fm authentication boundary and scrobbling.
+- [x] Last.fm authentication boundary and scrobbling.
   - [x] Signed API client, encrypted credential repository, durable FIFO
         outbox, listen policy, and playback lifecycle observer.
   - [x] Signed token/browser/session web-auth protocol with runtime-supplied
         application credentials and no embedded reusable secret.
   - [x] Settings credential entry, browser authorization, manual reconnect, and
         sign-out with pending application credentials kept memory-only.
-  - [ ] Surface an invalid-session delivery result as a visible reauth state.
+  - [x] Surface an invalid-session delivery result as a visible reauth state.
 - [ ] Equalizer and audio options.
 - [ ] Gapless/crossfade/normalization settings according to actual Media3 support.
 - [x] Sleep timer utility.
