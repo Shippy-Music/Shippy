@@ -54,6 +54,8 @@ import org.oxycblt.auxio.list.SelectionFragment
 import org.oxycblt.auxio.list.menu.Menu
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicType
+import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
+import org.oxycblt.auxio.shippy.library.usesAuxioLocalSurface
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
@@ -165,6 +167,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         // --- VIEWMODEL SETUP ---
         collect(homeModel.recreateTabs.flow, ::handleRecreate)
         collect(homeModel.chooseMusicLocations.flow, ::handleChooseFolders)
+        collect(homeModel.openShippyCollection.flow, ::handleOpenShippyCollection)
         collectImmediately(homeModel.currentTabType, ::updateCurrentTab)
         collect(detailModel.toShow.flow, ::handleShow)
         collect(listModel.menu.flow, ::handleMenu)
@@ -286,6 +289,24 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         }
         findNavController().navigateSafe(HomeFragmentDirections.chooseLocations())
         homeModel.chooseMusicLocations.consume()
+    }
+
+    private fun handleOpenShippyCollection(collectionId: LibraryCollectionId?) {
+        if (collectionId == null) return
+
+        if (collectionId.usesAuxioLocalSurface()) {
+            val songsIndex = homeModel.currentTabTypes.indexOf(MusicType.SONGS)
+            if (songsIndex >= 0) {
+                requireBinding().homePager.currentItem = songsIndex
+            } else {
+                L.w("Local Library requested while the Auxio Songs tab is unavailable")
+            }
+        } else {
+            findNavController().navigateSafe(
+                HomeFragmentDirections.showShippyCollection(collectionId.value)
+            )
+        }
+        homeModel.openShippyCollection.consume()
     }
 
     private fun updateIndexerState(state: IndexingState?) {

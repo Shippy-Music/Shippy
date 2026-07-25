@@ -196,6 +196,8 @@
     <string name="lbl_collections">Collections</string>
     <string name="lbl_liked">Liked</string>
     <string name="lbl_downloads">Downloads</string>
+    <string name="lbl_pin">Pin</string>
+    <string name="lbl_unpin">Unpin</string>
     <string name="lbl_local">Local</string>
     <string name="lbl_shippy_playlists">Playlists</string>
     <string name="lbl_on_this_device">On this device</string>
@@ -252,6 +254,10 @@
     <string name="lng_lyrics_instrumental">Instrumental</string>
     <string name="lng_local_indexing">Indexing local music…</string>
     <string name="lng_shippy_playlist">Playlist</string>
+    <string name="lng_collection_empty">No tracks here yet.</string>
+    <string name="lng_collection_metadata_pending">Track details will appear when Shippy can resolve their metadata.</string>
+    <string name="lng_collection_deleted">This playlist was deleted.</string>
+    <string name="lng_delete_shippy_playlist">Delete %1$s? Its saved track relationships will be removed.</string>
     <string name="lng_pinned_shippy_playlist">Pinned playlist</string>
     <string name="lng_file_picker">Load music from the folders that you select. Slower, but more reliable. Requires the vanilla file manager app to be installed.</string>
     <string name="lng_system_database">Load music that the Android OS automatically detects. Faster, but less reliable. No support for filesystem-dependent features like cover.jpg.</string>
@@ -518,6 +524,7 @@
     <string name="fmt_lib_total_size">Total size: %s</string>
     <string name="fmt_shippy_library_summary">%1$d songs · %2$d albums · %3$d artists</string>
     <string name="desc_library_collection">%1$s. %2$s.</string>
+    <string name="desc_loading_collection">Loading collection</string>
     <string name="desc_save_to_liked">Save to Liked</string>
     <string name="desc_saved_to_liked">Saved to Liked</string>
     <string name="desc_edit_saved_destinations">Edit saved destinations</string>

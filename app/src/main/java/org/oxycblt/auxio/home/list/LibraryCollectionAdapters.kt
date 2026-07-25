@@ -52,18 +52,21 @@ internal class LibrarySectionHeaderAdapter(@StringRes private val titleRes: Int)
 }
 
 /** Permanent rule-driven collection rows. They intentionally have no overflow or delete action. */
-internal class LibrarySystemCollectionAdapter :
+internal class LibrarySystemCollectionAdapter(
+    private val onClick: (LibrarySystemCollectionRow) -> Unit,
+) :
     ListAdapter<LibrarySystemCollectionRow, LibrarySystemCollectionAdapter.ViewHolder>(DIFF) {
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         ViewHolder(
             ItemLibraryCollectionBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         )
 
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) = holder.bind(getItem(position))
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) =
+        holder.bind(getItem(position), onClick)
 
     internal class ViewHolder(private val binding: ItemLibraryCollectionBinding) :
         RecyclerView.ViewHolder(binding.root) {
-        fun bind(row: LibrarySystemCollectionRow) {
+        fun bind(row: LibrarySystemCollectionRow, onClick: (LibrarySystemCollectionRow) -> Unit) {
             binding.collectionIcon.setImageResource(
                 when (row.kind) {
                     SystemCollectionKind.LIKED -> R.drawable.ic_save_24
@@ -109,6 +112,11 @@ internal class LibrarySystemCollectionAdapter :
                     binding.collectionTitle.text,
                     binding.collectionSummary.text,
                 )
+            binding.root.apply {
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { onClick(row) }
+            }
         }
     }
 
@@ -173,19 +181,28 @@ internal class LibraryOnboardingAdapter(
     }
 }
 
-/** Read-only names from the Shippy relationship store until their track projections can resolve. */
-internal class ShippyPlaylistProjectionAdapter :
+/**
+ * Shippy playlist rows open a management/detail surface. Track IDs alone are deliberately not
+ * rendered as song rows until a canonical metadata store can resolve them.
+ */
+internal class ShippyPlaylistProjectionAdapter(
+    private val onClick: (LibraryCollection.Playlist) -> Unit,
+) :
     ListAdapter<LibraryCollection.Playlist, ShippyPlaylistProjectionAdapter.ViewHolder>(DIFF) {
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         ViewHolder(
             ItemLibraryCollectionBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         )
 
-    override fun onBindViewHolder(holder: ViewHolder, position: Int) = holder.bind(getItem(position))
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) =
+        holder.bind(getItem(position), onClick)
 
     internal class ViewHolder(private val binding: ItemLibraryCollectionBinding) :
         RecyclerView.ViewHolder(binding.root) {
-        fun bind(playlist: LibraryCollection.Playlist) {
+        fun bind(
+            playlist: LibraryCollection.Playlist,
+            onClick: (LibraryCollection.Playlist) -> Unit,
+        ) {
             binding.collectionIcon.setImageResource(R.drawable.ic_playlist_24)
             binding.collectionTitle.text = playlist.displayName
             binding.collectionSummary.setText(
@@ -201,6 +218,11 @@ internal class ShippyPlaylistProjectionAdapter :
                     binding.collectionTitle.text,
                     binding.collectionSummary.text,
                 )
+            binding.root.apply {
+                isClickable = true
+                isFocusable = true
+                setOnClickListener { onClick(playlist) }
+            }
         }
     }
 

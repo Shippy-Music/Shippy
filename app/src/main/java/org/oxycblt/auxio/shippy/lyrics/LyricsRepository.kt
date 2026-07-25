@@ -20,6 +20,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -53,6 +54,7 @@ data class LyricsRecord(
     val instrumental: Boolean,
     val plainLyrics: String?,
     val syncedLyrics: String?,
+    val sourceId: String = "lrclib",
 ) {
     init {
         require(id >= 0) { "Lyrics ID cannot be negative" }
@@ -61,6 +63,7 @@ data class LyricsRecord(
         require(durationSeconds == null || durationSeconds >= 0) {
             "Lyrics duration cannot be negative"
         }
+        require(sourceId.isNotBlank()) { "Lyrics source ID cannot be blank" }
     }
 
     fun parse(): ParsedLyrics? {
@@ -111,19 +114,75 @@ class ChainedLyricsRepository
 @Inject
 constructor(
     sources: Set<@JvmSuppressWildcards LyricsSource>,
+    private val cache: LyricsCache,
+    private val clock: LyricsCacheClock,
 ) : LyricsRepository {
     private val sources = sources.sortedWith(compareBy(LyricsSource::priority, LyricsSource::id))
 
     override suspend fun lookup(request: LyricsRequest): LyricsLookupResult {
+        val nowEpochMs = clock.nowEpochMs()
+        val stale =
+            cache.getSafely(request)?.let { cached ->
+                cached.record.parse()?.let { lyrics ->
+                    val found = LyricsLookupResult.Found(cached.record, lyrics)
+                    if (cached.cachedAtEpochMs >= nowEpochMs - MAX_FRESH_CACHE_AGE_MS) {
+                        return found
+                    }
+                    found
+                } ?: run {
+                    cache.removeSafely(request)
+                    null
+                }
+            }
+
         var lastFailure: LyricsLookupResult.Failure? = null
         sources.forEach { source ->
             when (val result = source.lookup(request)) {
-                is LyricsLookupResult.Found -> return result
+                is LyricsLookupResult.Found -> {
+                    if (result.record.parse() != null) {
+                        cache.putSafely(request, result.record, nowEpochMs)
+                    }
+                    return result
+                }
                 LyricsLookupResult.NotFound -> Unit
                 is LyricsLookupResult.Failure -> lastFailure = result
             }
         }
-        return lastFailure ?: LyricsLookupResult.NotFound
+        if (lastFailure != null) return stale ?: lastFailure
+        if (stale != null) cache.removeSafely(request)
+        return LyricsLookupResult.NotFound
+    }
+
+    private suspend fun LyricsCache.getSafely(request: LyricsRequest): CachedLyrics? =
+        try {
+            get(request)
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            null
+        }
+
+    private suspend fun LyricsCache.putSafely(
+        request: LyricsRequest,
+        record: LyricsRecord,
+        cachedAtEpochMs: Long,
+    ) {
+        try {
+            put(request, record, cachedAtEpochMs)
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+        }
+    }
+
+    private suspend fun LyricsCache.removeSafely(request: LyricsRequest) {
+        try {
+            remove(request)
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+        }
+    }
+
+    private companion object {
+        const val MAX_FRESH_CACHE_AGE_MS = 7L * 24 * 60 * 60 * 1_000
     }
 }
 
@@ -384,4 +443,12 @@ abstract class LyricsModule {
     @Binds
     @IntoSet
     abstract fun lrclib(repository: LrclibLyricsRepository): LyricsSource
+
+    @Binds
+    @Singleton
+    abstract fun cache(cache: RoomLyricsCache): LyricsCache
+
+    @Binds
+    @Singleton
+    abstract fun cacheClock(clock: SystemLyricsCacheClock): LyricsCacheClock
 }

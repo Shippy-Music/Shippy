@@ -112,7 +112,7 @@ code/test level, ready for later device verification.
 
 ## Stage 4 — Player Integrations And Android Polish
 
-- [ ] Lyrics retrieval, synchronization, caching, and offline use.
+- [x] Lyrics retrieval, synchronization, caching, and offline use.
 - [ ] Last.fm authentication boundary and scrobbling.
 - [ ] Equalizer and audio options.
 - [ ] Gapless/crossfade/normalization settings according to actual Media3 support.

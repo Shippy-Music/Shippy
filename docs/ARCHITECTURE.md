@@ -98,9 +98,10 @@ shippy/download
 
 shippy/lyrics
   ordered source chain
+  musixmatch broker boundary
   lrclib
   parser
-  encrypted cache
+  Room-backed offline cache
 shippy/lastfm
 shippy/share
 
@@ -332,7 +333,28 @@ matches expected constraints, and is indexable/playable.
 Do not copy Bloomee’s in-memory task list, SSL-ignore behavior, path
 concatenation, rename bugs, or stale filename records.
 
-## 10. Crew Architecture
+## 10. Lyrics
+
+Lyrics are an ordered source chain behind one repository:
+
+1. Fresh exact offline cache entry.
+2. Musixmatch through a Shippy-controlled broker when configured.
+3. LRCLIB exact lookup, then conservative search fallback.
+4. Stale cached lyrics when the network sources are unavailable.
+
+Musixmatch's official API supports title/artist matching and synchronized LRC
+subtitles using duration constraints. It also requires an API key on every
+request. The key therefore belongs in a hosted broker or another owner-controlled
+secret boundary, never in the open-source APK. The Android client sends only the
+recording identity needed for matching and accepts a normalized lyrics document;
+the broker owns provider authentication and rate-limit handling.
+
+The cache stores provider/source identity, recording metadata used to validate
+the hit, plain/synchronized payloads, instrumental state, and fetch time. A
+TrackId hit is rejected if the cached recording metadata no longer matches the
+request. Lyrics do not require a separate encryption dependency.
+
+## 11. Crew Architecture
 
 Crew is layered so deterministic behavior can be tested without Android network
 or media runtime:
@@ -382,7 +404,7 @@ Crew never owns a second ExoPlayer. It emits canonical playback/queue commands
 to `PlaybackStateManager` and contributes temporary candidates to
 `PlaybackResolver`.
 
-## 11. UI Runtime
+## 12. UI Runtime
 
 Auxio is an Android Views/Fragments application. Preserve its real UI runtime
 and modify it in place. Build Shippy with:
@@ -395,7 +417,7 @@ and modify it in place. Build Shippy with:
 Compose is not prohibited, but introducing it requires a measured reason. Do not
 convert the entire application merely for design fashion.
 
-## 12. Dependency Rules
+## 13. Dependency Rules
 
 - UI depends on Shippy domain/presentation contracts, not provider DTOs or
   `musikr` types.
@@ -407,7 +429,7 @@ convert the entire application merely for design fashion.
 - MediaSession/widgets use the same player command surface as UI.
 - No package reads another feature’s Room tables directly; use repositories.
 
-## 13. Verification Strategy
+## 14. Verification Strategy
 
 Cheap/local:
 
@@ -428,7 +450,7 @@ Deferred owner/device:
 - Multi-phone LAN/remote/relay Crew
 - Audio synchronization and Push & Pull
 
-## 14. Known Constraints
+## 15. Known Constraints
 
 - Upstream `dev` requires Unix tooling/custom Media3/TagLib build; native Windows
   builds are explicitly unsupported.
@@ -439,7 +461,7 @@ Deferred owner/device:
 - Crew’s exact transport dependency is not yet proven and must not be guessed
   into the foundation.
 
-## 15. First Code Slice
+## 16. First Code Slice
 
 The first implementation slice is deliberately small but architectural:
 

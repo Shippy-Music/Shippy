@@ -21,6 +21,7 @@ import javax.inject.Singleton
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.RoomDownloadJobRepository
+import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -33,7 +34,11 @@ object ShippyPersistenceModule {
                 ShippyDatabase::class.java,
                 "shippy.db",
             )
-            .addMigrations(ShippyDatabase.MIGRATION_1_2, ShippyDatabase.MIGRATION_2_3)
+            .addMigrations(
+                ShippyDatabase.MIGRATION_1_2,
+                ShippyDatabase.MIGRATION_2_3,
+                ShippyDatabase.MIGRATION_3_4,
+            )
             .build()
 
     @Provides
@@ -49,6 +54,10 @@ object ShippyPersistenceModule {
     @Provides
     internal fun downloadJobDao(database: ShippyDatabase): DownloadJobDao =
         database.downloadJobDao()
+
+    @Provides
+    internal fun lyricsCacheDao(database: ShippyDatabase): LyricsCacheDao =
+        database.lyricsCacheDao()
 
     @Provides
     @Singleton

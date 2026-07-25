@@ -41,6 +41,7 @@ import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
+import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsState
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
 import org.oxycblt.auxio.shippy.library.systemRows
@@ -67,11 +68,15 @@ class PlaylistListFragment :
     override val playbackModel: PlaybackViewModel by activityViewModels()
     private val collectionsModel: LibraryCollectionsViewModel by viewModels()
     private val collectionsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_collections)
-    private val systemCollectionAdapter = LibrarySystemCollectionAdapter()
+    private val systemCollectionAdapter =
+        LibrarySystemCollectionAdapter { row ->
+            homeModel.openShippyCollection(LibraryCollection.System(row.kind).id)
+        }
     private val onboardingAdapter =
         LibraryOnboardingAdapter { homeModel.startChooseMusicLocations() }
     private val shippyPlaylistsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_shippy_playlists)
-    private val shippyPlaylistAdapter = ShippyPlaylistProjectionAdapter()
+    private val shippyPlaylistAdapter =
+        ShippyPlaylistProjectionAdapter { playlist -> homeModel.openShippyCollection(playlist.id) }
     private val devicePlaylistsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_on_this_device)
     private val playlistAdapter = PlaylistAdapter(this)
     private val libraryAdapter =

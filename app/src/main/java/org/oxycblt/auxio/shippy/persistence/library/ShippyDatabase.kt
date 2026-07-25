@@ -16,6 +16,8 @@ import androidx.room.migration.Migration
 import org.oxycblt.auxio.shippy.persistence.download.DownloadCandidateEntity
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobEntity
+import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
+import org.oxycblt.auxio.shippy.lyrics.LyricsCacheEntity
 
 @Database(
     entities =
@@ -25,14 +27,17 @@ import org.oxycblt.auxio.shippy.persistence.download.DownloadJobEntity
             PlaylistMembershipEntity::class,
             DownloadJobEntity::class,
             DownloadCandidateEntity::class,
+            LyricsCacheEntity::class,
         ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
     abstract fun libraryRelationshipDao(): LibraryRelationshipDao
 
     abstract fun downloadJobDao(): DownloadJobDao
+
+    abstract fun lyricsCacheDao(): LyricsCacheDao
 
     companion object {
         val MIGRATION_1_2 =
@@ -183,6 +188,38 @@ internal abstract class ShippyDatabase : RoomDatabase() {
                 database.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_download_candidate_jobId` " +
                         "ON `download_candidate` (`jobId`)"
+                )
+            }
+
+        val MIGRATION_3_4 =
+            Migration(3, 4) { database ->
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `lyrics_cache` (
+                        `trackId` TEXT NOT NULL,
+                        `fingerprint` TEXT NOT NULL,
+                        `titleKey` TEXT NOT NULL,
+                        `artistsKey` TEXT NOT NULL,
+                        `albumKey` TEXT NOT NULL,
+                        `durationSeconds` INTEGER NOT NULL,
+                        `sourceId` TEXT NOT NULL,
+                        `recordId` INTEGER NOT NULL,
+                        `trackName` TEXT NOT NULL,
+                        `artistName` TEXT NOT NULL,
+                        `albumName` TEXT,
+                        `recordDurationSeconds` REAL,
+                        `instrumental` INTEGER NOT NULL,
+                        `plainLyrics` TEXT,
+                        `syncedLyrics` TEXT,
+                        `cachedAtEpochMs` INTEGER NOT NULL,
+                        PRIMARY KEY(`trackId`, `fingerprint`)
+                    )
+                    """
+                        .trimIndent()
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_lyrics_cache_cachedAtEpochMs` " +
+                        "ON `lyrics_cache` (`cachedAtEpochMs`)"
                 )
             }
     }

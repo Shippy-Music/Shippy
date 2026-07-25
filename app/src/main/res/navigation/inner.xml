@@ -96,6 +96,19 @@
         <action
             android:id="@+id/choose_locations"
             app:destination="@id/music_locations_dialog" />
+        <action
+            android:id="@+id/show_shippy_collection"
+            app:destination="@id/shippy_collection_detail_fragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/shippy_collection_detail_fragment"
+        android:name="org.oxycblt.auxio.shippy.library.ui.ShippyCollectionDetailFragment"
+        android:label="shippy_collection_detail_fragment"
+        tools:layout="@layout/fragment_shippy_collection_detail">
+        <argument
+            android:name="collectionId"
+            app:argType="string" />
     </fragment>
 
     <fragment

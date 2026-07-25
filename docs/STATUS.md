@@ -110,16 +110,31 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   candidate, not from unrelated candidates attached to the same canonical track.
 - An entirely empty Library retains the permanent collection rows and adds an
   explicit folder-selection onboarding row.
+- Permanent Library projections now open real routes: Local switches to Auxio's
+  indexed Songs surface, while Liked, Downloads, and Shippy playlists show honest
+  relationship-backed counts without inventing playable metadata.
+- Persisted Shippy playlists expose rename, pin/unpin, and confirmed delete from
+  their detail toolbar. Arbitrary system collection IDs and management mutations
+  are rejected defensively.
+- Lyrics now persist in the shared Shippy Room database with exact recording
+  fingerprints, source identity, synchronized/plain/instrumental payloads, a
+  seven-day freshness window, deterministic refresh, and stale offline fallback
+  only when upstream lookup fails.
+- The lyrics cache is bounded to 500 records, has an explicit v3-to-v4 migration,
+  and invalidates corrupt or definitively obsolete entries.
+- Musixmatch is documented as the preferred optional synchronized-lyrics source
+  through a Shippy-controlled broker; no reusable credential will enter the APK.
 
 ## In Progress
 
-- Adding real detail/playback/edit flows for permanent collections and mixed
-  Shippy playlists; current Shippy rows are truthful projections only.
+- Resolving canonical track metadata into playable permanent-collection and mixed
+  Shippy-playlist rows; current detail routes deliberately stop at truthful
+  relationship counts.
 - Passing unmanaged existing download-folder audio into the canonical/local
   indexing path without filename-based adoption.
 - Wiring direct download state/actions into track and collection rows.
-- Adding durable offline lyrics cache and an expandable lyrics surface for compact
-  player configurations.
+- Adding an expandable lyrics surface for compact player configurations and the
+  optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
 - Crew transport/session engine behind the new Crew destination.
@@ -153,9 +168,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Add permanent collection and mixed-playlist detail/edit flows.
-2. Add durable offline lyrics cache and unmanaged-folder indexing.
-3. Add the next viable provider/YouTube adapter.
+1. Resolve canonical metadata into permanent collection and mixed-playlist rows.
+2. Add unmanaged-folder indexing and direct collection-row download state.
+3. Add the next viable provider/YouTube adapter and Musixmatch broker boundary.
 4. Continue Crew domain, transport, and active-session UI.
 
 ## Verification Ledger
@@ -167,8 +182,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/onboarding, LRCLIB/playback lyrics lookup and synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer |
-| New tests | Authored, not run | Resolver, collections/projections/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/active-line timing, player action presentation, Crew |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, LRCLIB/playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer |
+| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/active-line timing, player action presentation, Crew |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
 | Static structure | Parsed | Graphify 276-file AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

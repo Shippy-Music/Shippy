@@ -30,6 +30,7 @@ import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.auxio.playback.PlaybackSettings
+import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Album
@@ -167,6 +168,11 @@ constructor(
     val chooseMusicLocations: Event<Unit>
         get() = _chooseMusicLocations
 
+    private val _openShippyCollection = MutableEvent<LibraryCollectionId>()
+    /** Requests a Library collection route from one of the Library's child fragments. */
+    val openShippyCollection: Event<LibraryCollectionId>
+        get() = _openShippyCollection
+
     init {
         homeGenerator.attach()
     }
@@ -277,6 +283,10 @@ constructor(
 
     fun startChooseMusicLocations() {
         _chooseMusicLocations.put(Unit)
+    }
+
+    fun openShippyCollection(collectionId: LibraryCollectionId) {
+        _openShippyCollection.put(collectionId)
     }
 
     fun showSettings() {
