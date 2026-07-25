@@ -43,4 +43,13 @@ constructor(
 
     fun descriptors(): List<ProviderDescriptor> =
         providersById.values.map(MusicProvider::descriptor).sortedBy { it.displayName }
+
+    fun supporting(capability: ProviderCapability): List<MusicProvider> =
+        providersById.values
+            .filter {
+                capability in it.descriptor.capabilities &&
+                    it.health() != ProviderHealth.DISABLED &&
+                    it.health() != ProviderHealth.UNAVAILABLE
+            }
+            .sortedBy { it.descriptor.displayName }
 }
