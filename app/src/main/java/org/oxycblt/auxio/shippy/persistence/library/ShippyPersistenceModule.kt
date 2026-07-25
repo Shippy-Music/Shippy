@@ -18,6 +18,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
+import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
+import org.oxycblt.auxio.shippy.persistence.download.RoomDownloadJobRepository
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -30,6 +33,7 @@ object ShippyPersistenceModule {
                 ShippyDatabase::class.java,
                 "shippy.db",
             )
+            .addMigrations(ShippyDatabase.MIGRATION_1_2, ShippyDatabase.MIGRATION_2_3)
             .build()
 
     @Provides
@@ -41,4 +45,14 @@ object ShippyPersistenceModule {
     internal fun libraryRelationshipRepository(
         repository: RoomLibraryRelationshipRepository
     ): LibraryRelationshipRepository = repository
+
+    @Provides
+    internal fun downloadJobDao(database: ShippyDatabase): DownloadJobDao =
+        database.downloadJobDao()
+
+    @Provides
+    @Singleton
+    internal fun downloadJobRepository(
+        repository: RoomDownloadJobRepository
+    ): DownloadJobRepository = repository
 }

@@ -380,8 +380,8 @@ to `PlaybackStateManager` and contributes temporary candidates to
 
 ## 11. UI Runtime
 
-Auxio is an Android Views/Fragments application. Preserve that runtime initially.
-Build Shippy with:
+Auxio is an Android Views/Fragments application. Preserve its real UI runtime
+and modify it in place. Build Shippy with:
 
 - Existing navigation and lifecycle patterns
 - ViewBinding, RecyclerView, fragments, ViewModels, and Hilt
@@ -448,4 +448,3 @@ The first implementation slice is deliberately small but architectural:
 5. Keep existing playback behavior unchanged.
 
 Only after this passes should the shell/player presentation be replaced.
-

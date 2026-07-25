@@ -42,6 +42,9 @@ class DownloadReducerTest {
     @Test
     fun `retryable failure resumes through resolution`() {
         var job = apply(job(), DownloadEvent.Resolve)
+        job = apply(job, DownloadEvent.Enqueued(100))
+        job = apply(job, DownloadEvent.TransferStarted)
+        job = apply(job, DownloadEvent.Progress(40, 100))
         job =
             apply(
                 job,
@@ -51,7 +54,21 @@ class DownloadReducerTest {
         assertEquals(DownloadState.FAILED_RETRYABLE, job.state)
         job = apply(job, DownloadEvent.Retry)
         assertEquals(DownloadState.RESOLVING, job.state)
+        assertEquals(0L, job.bytesTransferred)
+        assertNull(job.expectedBytes)
         assertNull(job.failure)
+    }
+
+    @Test
+    fun `pause can stop queued work before transfer begins`() {
+        var job = apply(job(), DownloadEvent.Resolve)
+        job = apply(job, DownloadEvent.Pause)
+
+        assertEquals(DownloadState.PAUSED, job.state)
+        job = apply(job, DownloadEvent.Resume)
+        assertEquals(DownloadState.RESOLVING, job.state)
+        assertEquals(0L, job.bytesTransferred)
+        assertNull(job.expectedBytes)
     }
 
     @Test

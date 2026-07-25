@@ -18,18 +18,27 @@
  
 package org.oxycblt.auxio.settings
 
+import android.net.Uri
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import com.google.android.material.transition.MaterialFadeThrough
 import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
+import org.oxycblt.auxio.shippy.download.DownloadDestinationState
+import org.oxycblt.auxio.shippy.download.SafDownloadStorage
+import org.oxycblt.auxio.shippy.download.StorageResult
 import org.oxycblt.auxio.util.navigateSafe
+import org.oxycblt.auxio.util.showToast
 import timber.log.Timber as L
 
 /**
@@ -40,6 +49,19 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private val musicModel: MusicViewModel by activityViewModels()
+    @Inject lateinit var downloadStorage: SafDownloadStorage
+    private val downloadDestinationLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
+            if (uri != null) {
+                lifecycleScope.launch {
+                    when (downloadStorage.selectDestination(uri, null)) {
+                        is StorageResult.Success -> updateDownloadDestinationSummary()
+                        is StorageResult.Failure ->
+                            requireContext().showToast(R.string.msg_download_destination_failed)
+                    }
+                }
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -48,6 +70,11 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         returnTransition = MaterialFadeThrough()
         exitTransition = MaterialFadeThrough()
         reenterTransition = MaterialSharedAxis(MaterialSharedAxis.X, false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch { updateDownloadDestinationSummary() }
     }
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
@@ -82,11 +109,33 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 L.d("Navigating to audio preferences")
                 findNavController().navigateSafe(RootPreferenceFragmentDirections.audioPeferences())
             }
+            getString(R.string.set_key_download_destination_picker) -> {
+                downloadDestinationLauncher.launch(null)
+            }
             getString(R.string.set_key_reindex) -> musicModel.refresh()
             getString(R.string.set_key_rescan) -> musicModel.rescan()
             else -> return super.onPreferenceTreeClick(preference)
         }
 
         return true
+    }
+
+    private suspend fun updateDownloadDestinationSummary() {
+        val preference =
+            findPreference<Preference>(
+                getString(R.string.set_key_download_destination_picker)
+            ) ?: return
+        preference.summary =
+            when (val state = downloadStorage.inspectDestination()) {
+                DownloadDestinationState.NotSelected ->
+                    getString(R.string.set_download_destination_unselected)
+                is DownloadDestinationState.Ready ->
+                    getString(
+                        R.string.set_download_destination_selected,
+                        state.destination.displayName,
+                    )
+                is DownloadDestinationState.Unavailable ->
+                    getString(R.string.msg_download_destination_failed)
+            }
     }
 }

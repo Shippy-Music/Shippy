@@ -66,7 +66,7 @@ through Auxio’s existing playback stack.
 - [ ] Preserve user playlist creation, edit, pin, sort, and deletion.
 - [ ] Support Local tracks inside user playlists and queue.
 - [ ] Add selected Local source folder management and rescan behavior.
-- [ ] Add selected Download destination with persisted Android access.
+- [x] Add selected Download destination with persisted Android access.
 - [ ] Index pre-existing supported media in the Download destination.
 - [ ] Add download relationship/state without isolating tracks from normal views.
 - [x] Make queue the canonical playback order for UI, MediaSession, and later

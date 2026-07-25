@@ -23,6 +23,8 @@ import android.content.Intent
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import org.oxycblt.auxio.home.HomeSettings
@@ -38,11 +40,15 @@ import timber.log.Timber
  * @author Alexander Capehart (OxygenCobalt)
  */
 @HiltAndroidApp
-class Auxio : Application() {
+class Auxio : Application(), Configuration.Provider {
     @Inject lateinit var imageSettings: ImageSettings
     @Inject lateinit var playbackSettings: PlaybackSettings
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var homeSettings: HomeSettings
+    @Inject lateinit var workerFactory: HiltWorkerFactory
+
+    override fun getWorkManagerConfiguration(): Configuration =
+        Configuration.Builder().setWorkerFactory(workerFactory).build()
 
     override fun onCreate() {
         super.onCreate()

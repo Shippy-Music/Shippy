@@ -1,7 +1,7 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-25  
-**Current stage:** Stages 2–3 — library persistence and first provider vertical slice  
+**Current stage:** Stages 2–3 — library/download persistence and provider vertical slices  
 **Overall state:** In progress
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
@@ -68,13 +68,28 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   items; exact local artwork behavior is retained.
 - Legacy playback persistence remains local-only and never stores expiring
   provider URLs or headers.
+- User-playlist metadata and ordered membership are persisted with explicit Room
+  migrations; create, rename, pin, reorder, replace-tracks, and delete operations
+  enforce the permanent-system-collection boundary.
+- A user-selected SAF download destination now persists Android read/write access,
+  reports revoked access, scans supported existing audio, and releases a replaced
+  destination grant.
+- Durable download jobs now persist track/candidate provenance, progress, failures,
+  pending documents, and verified artifacts in the shared Shippy Room database.
+- WorkManager/Hilt execution, foreground progress, pause/resume/retry/cancel/remove,
+  exact-source resolution, bounded transfer, and content-length verification are
+  implemented at code level.
+- Duplicate in-process download requests reuse the existing job, and Downloads
+  membership is published only from verified available artifacts.
 
 ## In Progress
 
-- Extending initial relationship persistence into complete user playlists,
-  permanent collection projections, and download artifacts.
-- Implementing selected SAF download destination, existing-file reconciliation,
-  and durable download jobs.
+- Wiring persisted user playlists and permanent collection projections into the
+  existing Auxio Library UI.
+- Reconciling scanned files and persisted artifacts in the selected download
+  destination, including startup and revoked/missing-file repair.
+- Wiring direct download state/actions into track rows and the player without
+  duplicating overflow actions.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
 - Crew transport/session engine behind the new Crew destination.
@@ -94,6 +109,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   networking library.
 - Room/Hilt generation, JioSaavn JSON parsing, and provider playback are
   compile/device-unverified until the owner build.
+- WorkManager/Hilt worker generation, SAF storage, and foreground download
+  execution are code/static-checked but compile/device-unverified.
 - Canonical Media3 custom-cache-key/header routing is implemented and
   syntax-checked but remains runtime-unverified.
 - Remote provider artwork currently reaches in-app Coil surfaces and metadata
@@ -104,10 +121,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Complete user-playlist metadata and permanent collection projections.
-2. Implement download storage/jobs against the selected SAF destination.
-3. Add the next viable provider/YouTube adapter and full provider action surfaces.
-4. Continue player integrations and Crew transport/session implementation.
+1. Add download destination reconciliation and missing-artifact repair.
+2. Bind permanent collections/user playlists to the existing Auxio Library UI.
+3. Add direct save/download/player action surfaces without duplicates.
+4. Add the next viable provider/YouTube adapter, then continue Crew.
 
 ## Verification Ledger
 
@@ -118,8 +135,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers, Room relationships, live provider/Search-to-play, download reducer, local adapter, Crew reducer |
-| New tests | Authored, not run | Resolver, collections, provider registry, download, Crew |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers, Room library/download persistence, SAF destination, WorkManager transfer pipeline, live provider/Search-to-play, local adapter, Crew reducer |
+| New tests | Authored, not run | Resolver, collections, provider registry, download reducer/transfer/persistence, Crew |
 | External provider shape | Live-inspected | JioSaavn search response on 2026-07-25 |
-| Static structure | Parsed | Graphify 269-file AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 276-file AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

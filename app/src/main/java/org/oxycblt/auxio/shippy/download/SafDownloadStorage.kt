@@ -1,0 +1,324 @@
+/*
+ * Copyright (c) 2026 Shippy contributors
+ * SafDownloadStorage.kt is part of Shippy.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.shippy.download
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.documentfile.provider.DocumentFile
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.OutputStream
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+sealed interface DownloadDestinationState {
+    data object NotSelected : DownloadDestinationState
+
+    data class Ready(
+        val destination: DownloadDestination,
+        val existingAudio: List<StoredAudioDocument>,
+    ) : DownloadDestinationState
+
+    data class Unavailable(
+        val destination: DownloadDestination,
+        val reason: DownloadStorageFailure,
+    ) : DownloadDestinationState
+}
+
+enum class DownloadStorageFailure {
+    PERMISSION_REVOKED,
+    NOT_A_TREE,
+    NOT_READABLE,
+    NOT_WRITABLE,
+    CREATE_FAILED,
+    OPEN_FAILED,
+    VERIFY_FAILED,
+}
+
+data class StoredAudioDocument(
+    val contentUri: String,
+    val displayName: String,
+    val mimeType: String?,
+    val contentLength: Long?,
+)
+
+data class PendingDownloadDocument(
+    val contentUri: String,
+    val displayName: String,
+    val mimeType: String,
+)
+
+sealed interface StorageResult<out T> {
+    data class Success<T>(val value: T) : StorageResult<T>
+
+    data class Failure(val reason: DownloadStorageFailure) : StorageResult<Nothing>
+}
+
+@Singleton
+class SafDownloadStorage
+@Inject
+constructor(
+    @ApplicationContext private val context: Context,
+    private val settings: DownloadDestinationSettings,
+) {
+    private val resolver
+        get() = context.contentResolver
+
+    suspend fun selectDestination(
+        treeUri: Uri,
+        displayName: String?,
+        grantFlags: Int =
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+    ): StorageResult<DownloadDestination> =
+        withContext(Dispatchers.IO) {
+            val previous = settings.destination
+            try {
+                resolver.takePersistableUriPermission(
+                    treeUri,
+                    grantFlags and
+                        (Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_GRANT_WRITE_URI_PERMISSION),
+                )
+            } catch (_: SecurityException) {
+                return@withContext StorageResult.Failure(
+                    DownloadStorageFailure.PERMISSION_REVOKED
+                )
+            }
+            val root =
+                DocumentFile.fromTreeUri(context, treeUri)
+                    ?: return@withContext StorageResult.Failure(
+                        DownloadStorageFailure.NOT_A_TREE
+                    )
+            if (!root.canRead()) {
+                return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_READABLE)
+            }
+            if (!root.canWrite()) {
+                return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_WRITABLE)
+            }
+            val destination =
+                DownloadDestination(
+                    treeUri = treeUri.toString(),
+                    displayName =
+                        displayName?.takeIf(String::isNotBlank)
+                            ?: root.name?.takeIf(String::isNotBlank)
+                            ?: "Downloads",
+                )
+            settings.setDestination(destination)
+            previous
+                ?.treeUri
+                ?.takeIf { it != destination.treeUri }
+                ?.let(Uri::parse)
+                ?.let { previousUri ->
+                    try {
+                        resolver.releasePersistableUriPermission(
+                            previousUri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                        )
+                    } catch (_: SecurityException) {
+                        // The old grant may already be revoked.
+                    }
+                }
+            StorageResult.Success(destination)
+        }
+
+    suspend fun inspectDestination(): DownloadDestinationState =
+        withContext(Dispatchers.IO) {
+            val destination =
+                settings.destination ?: return@withContext DownloadDestinationState.NotSelected
+            val treeUri = Uri.parse(destination.treeUri)
+            if (!hasPersistedReadWriteGrant(treeUri)) {
+                return@withContext DownloadDestinationState.Unavailable(
+                    destination,
+                    DownloadStorageFailure.PERMISSION_REVOKED,
+                )
+            }
+            val root =
+                DocumentFile.fromTreeUri(context, treeUri)
+                    ?: return@withContext DownloadDestinationState.Unavailable(
+                        destination,
+                        DownloadStorageFailure.NOT_A_TREE,
+                    )
+            when {
+                !root.canRead() ->
+                    DownloadDestinationState.Unavailable(
+                        destination,
+                        DownloadStorageFailure.NOT_READABLE,
+                    )
+                !root.canWrite() ->
+                    DownloadDestinationState.Unavailable(
+                        destination,
+                        DownloadStorageFailure.NOT_WRITABLE,
+                    )
+                else -> DownloadDestinationState.Ready(destination, scan(root))
+            }
+        }
+
+    suspend fun createPendingDocument(
+        jobId: DownloadJobId,
+        title: String,
+        mimeType: String?,
+    ): StorageResult<PendingDownloadDocument> =
+        withContext(Dispatchers.IO) {
+            val ready = inspectDestination()
+            if (ready !is DownloadDestinationState.Ready) {
+                return@withContext StorageResult.Failure(
+                    when (ready) {
+                        is DownloadDestinationState.Unavailable -> ready.reason
+                        DownloadDestinationState.NotSelected ->
+                            DownloadStorageFailure.PERMISSION_REVOKED
+                        is DownloadDestinationState.Ready -> error("Handled above")
+                    }
+                )
+            }
+            val root =
+                DocumentFile.fromTreeUri(context, Uri.parse(ready.destination.treeUri))
+                    ?: return@withContext StorageResult.Failure(
+                        DownloadStorageFailure.NOT_A_TREE
+                    )
+            val normalizedMime = mimeType?.takeIf(String::isNotBlank) ?: DEFAULT_MIME
+            val fileName = uniqueFileName(root, title, jobId, normalizedMime)
+            val document =
+                root.createFile(normalizedMime, fileName)
+                    ?: return@withContext StorageResult.Failure(
+                        DownloadStorageFailure.CREATE_FAILED
+                    )
+            StorageResult.Success(
+                PendingDownloadDocument(
+                    contentUri = document.uri.toString(),
+                    displayName = document.name ?: fileName,
+                    mimeType = normalizedMime,
+                )
+            )
+        }
+
+    suspend fun openOutput(document: PendingDownloadDocument): StorageResult<OutputStream> =
+        withContext(Dispatchers.IO) {
+            try {
+                resolver.openOutputStream(Uri.parse(document.contentUri), "w")?.let {
+                    StorageResult.Success(it)
+                } ?: StorageResult.Failure(DownloadStorageFailure.OPEN_FAILED)
+            } catch (_: Exception) {
+                StorageResult.Failure(DownloadStorageFailure.OPEN_FAILED)
+            }
+        }
+
+    suspend fun verify(
+        document: PendingDownloadDocument,
+        expectedBytes: Long?,
+        verifiedAtEpochMs: Long,
+    ): StorageResult<DownloadArtifact> =
+        withContext(Dispatchers.IO) {
+            val file =
+                DocumentFile.fromSingleUri(context, Uri.parse(document.contentUri))
+                    ?: return@withContext StorageResult.Failure(
+                        DownloadStorageFailure.VERIFY_FAILED
+                    )
+            val length = file.length()
+            if (!file.exists() || length <= 0L || (expectedBytes != null && length != expectedBytes)) {
+                return@withContext StorageResult.Failure(
+                    DownloadStorageFailure.VERIFY_FAILED
+                )
+            }
+            StorageResult.Success(
+                DownloadArtifact(
+                    contentUri = document.contentUri,
+                    contentLength = length,
+                    mimeType = file.type ?: document.mimeType,
+                    verifiedAtEpochMs = verifiedAtEpochMs,
+                )
+            )
+        }
+
+    suspend fun delete(contentUri: String): Boolean =
+        withContext(Dispatchers.IO) {
+            DocumentFile.fromSingleUri(context, Uri.parse(contentUri))?.delete() == true
+        }
+
+    private fun hasPersistedReadWriteGrant(uri: Uri): Boolean =
+        resolver.persistedUriPermissions.any {
+            it.uri == uri && it.isReadPermission && it.isWritePermission
+        }
+
+    private fun scan(root: DocumentFile): List<StoredAudioDocument> {
+        val pending = ArrayDeque<DocumentFile>().apply { add(root) }
+        val found = mutableListOf<StoredAudioDocument>()
+        while (pending.isNotEmpty()) {
+            val document = pending.removeFirst()
+            for (child in document.listFiles()) {
+                when {
+                    child.isDirectory -> pending.add(child)
+                    child.isFile && child.isSupportedAudio() ->
+                        found +=
+                            StoredAudioDocument(
+                                contentUri = child.uri.toString(),
+                                displayName = child.name ?: "Audio",
+                                mimeType = child.type,
+                                contentLength = child.length().takeIf { it >= 0L },
+                            )
+                }
+            }
+        }
+        return found.sortedBy { it.displayName.lowercase() }
+    }
+
+    private fun uniqueFileName(
+        root: DocumentFile,
+        title: String,
+        jobId: DownloadJobId,
+        mimeType: String,
+    ): String {
+        val base =
+            title
+                .replace(UNSAFE_FILE_NAME, "_")
+                .trim(' ', '.', '_')
+                .take(MAX_BASE_LENGTH)
+                .ifBlank { "Track" }
+        val extension = extensionFor(mimeType)
+        val suffix = jobId.value.filter(Char::isLetterOrDigit).take(8).ifBlank { "download" }
+        var candidate = "$base-$suffix.$extension"
+        var attempt = 2
+        while (root.findFile(candidate) != null) {
+            candidate = "$base-$suffix-$attempt.$extension"
+            attempt++
+        }
+        return candidate
+    }
+
+    private fun DocumentFile.isSupportedAudio(): Boolean {
+        val mime = type?.lowercase()
+        if (mime?.startsWith("audio/") == true) return true
+        val extension = name?.substringAfterLast('.', missingDelimiterValue = "")?.lowercase()
+        return extension in SUPPORTED_EXTENSIONS
+    }
+
+    private fun extensionFor(mimeType: String): String =
+        when (mimeType.lowercase()) {
+            "audio/mpeg" -> "mp3"
+            "audio/mp4", "audio/x-m4a" -> "m4a"
+            "audio/flac", "audio/x-flac" -> "flac"
+            "audio/ogg", "application/ogg" -> "ogg"
+            "audio/opus" -> "opus"
+            "audio/wav", "audio/x-wav" -> "wav"
+            "audio/aac", "audio/aacp" -> "aac"
+            else -> "m4a"
+        }
+
+    private companion object {
+        const val DEFAULT_MIME = "audio/mp4"
+        const val MAX_BASE_LENGTH = 80
+        val UNSAFE_FILE_NAME = Regex("[\\\\/:*?\"<>|\\p{Cc}]")
+        val SUPPORTED_EXTENSIONS =
+            setOf("mp3", "m4a", "mp4", "wav", "flac", "ogg", "oga", "opus", "aac", "adts")
+    }
+}

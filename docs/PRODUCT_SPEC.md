@@ -35,8 +35,11 @@ These decisions came directly from the product owner.
 4. The primary destinations are **Home**, **Search**, **Library**, and **Crew**.
 5. Now Playing is not a navigation destination. A persistent mini-player expands
    into the full player and Android Back collapses it before leaving the app.
-6. The visual baseline is Auxio: native, restrained, clear, artwork-led, and
-   fast. Spotify is the interaction and information-architecture benchmark.
+6. The actual Auxio UI is retained and extended as Shippy's visual/runtime
+   foundation, not merely imitated. Its components, layouts, motion, player
+   choreography, and native restraint stay wherever they fit the product.
+   Spotify is the interaction and information-architecture benchmark for the
+   Shippy-specific changes.
 7. `Local`, `Downloads`, and `Liked` appear as permanent playlist-like system
    collections and cannot be deleted.
 8. User-created playlists can be created, pinned, sorted, edited, and deleted.

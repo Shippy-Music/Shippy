@@ -103,6 +103,12 @@
     <string name="fmt_provider_temporarily_unavailable">%1$s is temporarily unavailable</string>
     <string name="fmt_provider_unavailable">%1$s is unavailable</string>
     <string name="msg_provider_playback_unavailable">This track is unavailable right now</string>
+    <string name="set_download_destination">Download folder</string>
+    <string name="set_download_destination_unselected">Choose where Shippy saves downloaded music</string>
+    <string name="set_download_destination_selected">Saving to %1$s</string>
+    <string name="msg_download_destination_failed">Shippy could not use that folder</string>
+    <string name="download_channel_name">Downloads</string>
+    <string name="download_notification_title">Downloading %1$s</string>
     <string name="lbl_home">Home</string>
     <string name="lbl_library">Library</string>
     <string name="lbl_crew">Crew</string>

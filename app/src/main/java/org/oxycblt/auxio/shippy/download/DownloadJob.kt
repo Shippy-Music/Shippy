@@ -165,13 +165,20 @@ class DownloadReducer {
                         )
                 DownloadEvent.Pause ->
                     job.takeIf {
-                            it.state == DownloadState.QUEUED ||
+                            it.state == DownloadState.REQUESTED ||
+                                it.state == DownloadState.RESOLVING ||
+                                it.state == DownloadState.QUEUED ||
                                 it.state == DownloadState.TRANSFERRING
                         }
                         ?.copy(state = DownloadState.PAUSED)
                 DownloadEvent.Resume ->
                     job.takeIf { it.state == DownloadState.PAUSED }
-                        ?.copy(state = DownloadState.RESOLVING, failure = null)
+                        ?.copy(
+                            state = DownloadState.RESOLVING,
+                            bytesTransferred = 0,
+                            expectedBytes = null,
+                            failure = null,
+                        )
                 is DownloadEvent.Fail ->
                     job.takeIf { it.state.isActive() }
                         ?.copy(
@@ -182,7 +189,12 @@ class DownloadReducer {
                         )
                 DownloadEvent.Retry ->
                     job.takeIf { it.state == DownloadState.FAILED_RETRYABLE }
-                        ?.copy(state = DownloadState.RESOLVING, failure = null)
+                        ?.copy(
+                            state = DownloadState.RESOLVING,
+                            bytesTransferred = 0,
+                            expectedBytes = null,
+                            failure = null,
+                        )
                 DownloadEvent.Cancel ->
                     job.takeIf { it.state.isActive() || it.state == DownloadState.PAUSED }
                         ?.copy(state = DownloadState.CANCELLED)

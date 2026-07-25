@@ -31,8 +31,8 @@ class LibraryRelationshipMappingTest {
                     ),
                 playlistMemberships =
                     listOf(
-                        PlaylistMembershipEntity("provider:track", "playlist:road-trip"),
-                        PlaylistMembershipEntity("provider:track", "playlist:favorites"),
+                        PlaylistMembershipEntity("provider:track", "playlist:road-trip", 0),
+                        PlaylistMembershipEntity("provider:track", "playlist:favorites", 1),
                     ),
             )
 
@@ -56,7 +56,7 @@ class LibraryRelationshipMappingTest {
             StoredLibraryRelationship(
                 relationship = LibraryRelationshipEntity(trackId = "provider:track"),
                 playlistMemberships =
-                    listOf(PlaylistMembershipEntity("provider:track", "system:local")),
+                    listOf(PlaylistMembershipEntity("provider:track", "system:local", 0)),
             )
 
         assertThrows(IllegalArgumentException::class.java) {
@@ -68,5 +68,36 @@ class LibraryRelationshipMappingTest {
     fun `system namespace detection does not reject user playlist ids`() {
         assertTrue(LibraryCollectionId("system:liked").isSystem)
         assertFalse(LibraryCollectionId("playlist:system:liked").isSystem)
+    }
+
+    @Test
+    fun `user playlist metadata maps without exposing persistence position`() {
+        val playlist =
+            UserPlaylistEntity(
+                    playlistId = "playlist:road-trip",
+                    name = "Road trip",
+                    pinned = true,
+                    position = 7,
+                )
+                .toDomain()
+
+        assertEquals(LibraryCollectionId("playlist:road-trip"), playlist.id)
+        assertEquals("Road trip", playlist.displayName)
+        assertTrue(playlist.isPinned)
+    }
+
+    @Test
+    fun `ordered track projection preserves dao order`() {
+        assertEquals(
+            listOf(TrackId("track:second"), TrackId("track:first")),
+            toTrackIds(listOf("track:second", "track:first")),
+        )
+    }
+
+    @Test
+    fun `system collection ids cannot enter user playlist operations`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            requireUserPlaylistId(LibraryCollectionId("system:downloads"))
+        }
     }
 }

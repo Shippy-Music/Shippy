@@ -140,6 +140,14 @@ dependencies {
     ksp "androidx.room:room-compiler:$room_version"
     implementation "androidx.room:room-ktx:$room_version"
 
+    // User-selected download storage
+    implementation "androidx.documentfile:documentfile:1.1.0"
+
+    // Durable download jobs
+    implementation "androidx.work:work-runtime-ktx:2.11.2"
+    implementation "androidx.hilt:hilt-work:1.4.0"
+    ksp "androidx.hilt:hilt-compiler:1.4.0"
+
     // Build
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:$desugaring_version"
 

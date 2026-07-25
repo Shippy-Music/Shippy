@@ -34,6 +34,11 @@
             app:title="@string/set_locations" />
 
         <Preference
+            app:key="@string/set_key_download_destination_picker"
+            app:summary="@string/set_download_destination_unselected"
+            app:title="@string/set_download_destination" />
+
+        <Preference
             app:key="@string/set_key_reindex"
             app:summary="@string/set_reindex_desc"
             app:title="@string/set_reindex" />
