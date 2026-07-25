@@ -456,6 +456,15 @@ permits ungraceful election only when connected survivors are a strict majority
 of the full persisted checkpoint. The candidate is the lowest stable member ID;
 two-member coordinator loss therefore remains paused without a relay witness.
 
+`CrewElectionVoteCollector` is the bounded bridge from that pure decision into
+the session engine. A vote is accepted only when its voter matches the
+authenticated peer and its checkpoint/candidate match the current liveness
+decision. The active engine periodically turns ordinary expiry into sequenced
+membership removal, broadcasts each survivor's standalone vote, and lets only
+the majority-elected candidate publish the next-term snapshot. Snapshot votes
+are usable only when the receiver previously authenticated the same standalone
+votes; an early snapshot is held once until its certificate converges.
+
 ### Transport adapters
 
 The 2026-07-25 focused spike selected:

@@ -85,6 +85,14 @@ sealed interface CrewControlMessage {
         val electionVotes: List<CrewElectionVote> = emptyList(),
     ) : CrewControlMessage
 
+    /**
+     * One vote whose voter identity must be matched to the authenticated transport peer.
+     *
+     * Snapshot-carried votes are only a certificate copy. This standalone message is the path
+     * that lets every receiver independently authenticate and retain each vote.
+     */
+    data class ElectionVoteCast(val vote: CrewElectionVote) : CrewControlMessage
+
     data class RequestRejected(
         val sessionId: CrewSessionId,
         val protocolVersion: ProtocolVersion,
@@ -169,6 +177,10 @@ object CrewControlCodec {
                     output.writeMemberId(message.coordinatorMemberId)
                     output.writeByte(message.reason.wireCode())
                 }
+                is CrewControlMessage.ElectionVoteCast -> {
+                    output.writeByte(6)
+                    output.writeElectionVote(message.vote)
+                }
             }
         }
         return bytes.toByteArray().also {
@@ -228,6 +240,7 @@ object CrewControlCodec {
                                     } ?: throw IOException("Unknown Crew rejection code"),
                             )
                         }
+                        6 -> CrewControlMessage.ElectionVoteCast(input.readElectionVote())
                         else -> return CrewControlDecodeResult.Rejected.UNSUPPORTED_FORMAT
                     }
                 if (input.available() != 0) {

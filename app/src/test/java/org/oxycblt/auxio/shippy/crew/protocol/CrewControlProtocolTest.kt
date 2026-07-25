@@ -131,6 +131,7 @@ class CrewControlProtocolTest {
             )
 
         assertRoundTrip(CrewControlMessage.SnapshotInstalled(state.toSnapshot(), votes))
+        assertRoundTrip(CrewControlMessage.ElectionVoteCast(votes.last()))
         assertRoundTrip(
             CrewControlMessage.SnapshotRequested(
                 CrewSnapshotRequest(

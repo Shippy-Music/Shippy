@@ -11,6 +11,7 @@
 package org.oxycblt.auxio.shippy.crew.session
 
 import java.io.Closeable
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineDispatcher
@@ -35,6 +36,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.oxycblt.auxio.shippy.crew.core.CrewEventResult
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
+import org.oxycblt.auxio.shippy.crew.core.CrewElectionVote
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewReducer
@@ -59,6 +61,7 @@ private const val MAX_SESSION_PEERS = 63
 private const val OUTBOUND_CONTROL_CAPACITY = 32
 private const val CONTROL_SEND_TIMEOUT_MS = 10_000L
 private const val CONTROL_RETRY_DELAY_MS = 20L
+private const val LIVENESS_RECONCILE_INTERVAL_MS = 1_000L
 
 private enum class CrewRouteResult {
     ROUTED,
@@ -168,6 +171,7 @@ class CrewSessionEngine(
     private val nowMonotonicMs: () -> Long = { System.nanoTime() / 1_000_000L },
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val reducer: CrewReducer = CrewReducer(),
+    reconnectPolicy: CrewReconnectPolicy = CrewReconnectPolicy(),
 ) : Closeable {
     private data class PeerSession(
         val transport: CrewPeerTransport,
@@ -181,7 +185,11 @@ class CrewSessionEngine(
     private val stateMutex = Mutex()
     private val peers = ConcurrentHashMap<CrewMemberId, PeerSession>()
     private val optimisticActions = CrewOptimisticActionTracker()
-    private val liveness = CrewLivenessTracker(initialState, localMemberId)
+    private val liveness = CrewLivenessTracker(initialState, localMemberId, reconnectPolicy)
+    private val electionVotes = CrewElectionVoteCollector()
+    private var pendingElectionSnapshot:
+        Pair<CrewMemberId, CrewControlMessage.SnapshotInstalled>? = null
+    private var livenessJob: Job? = null
     private var sequencer: CrewCoordinatorSequencer? =
         if (initialState.coordinatorMemberId == localMemberId) {
             CrewCoordinatorSequencer(initialState, localMemberId, reducer)
@@ -213,6 +221,15 @@ class CrewSessionEngine(
     suspend fun start() {
         check(!closed.get()) { "Crew session engine is closed" }
         checkpointRepository.save(mutableState.value.toSnapshot(), nowEpochMs())
+        if (livenessJob == null) {
+            livenessJob =
+                scope.launch {
+                    while (!closed.get()) {
+                        delay(LIVENESS_RECONCILE_INTERVAL_MS)
+                        reconcileLiveness()
+                    }
+                }
+        }
     }
 
     @Synchronized
@@ -449,6 +466,30 @@ class CrewSessionEngine(
     fun livenessDecisions(nowMonotonicMs: Long = this.nowMonotonicMs()): List<CrewLivenessDecision> =
         liveness.evaluate(mutableState.value, nowMonotonicMs)
 
+    /**
+     * Converts expired liveness policy into ordered membership/election control messages.
+     *
+     * This is public for deterministic tests and manual lifecycle triggers; [start] also runs it
+     * periodically so transport loss cannot remain a presentation-only decision.
+     */
+    suspend fun reconcileLiveness(
+        nowMonotonicMs: Long = this.nowMonotonicMs()
+    ): List<CrewLivenessDecision> =
+        stateMutex.withLock {
+            val decisions = liveness.evaluate(mutableState.value, nowMonotonicMs)
+            decisions.forEach { decision ->
+                when (decision) {
+                    is CrewLivenessDecision.MemberRemovalEligible ->
+                        sequenceExpiredMemberRemovalLocked(decision, nowMonotonicMs)
+                    is CrewLivenessDecision.ElectionEligible ->
+                        beginOrContinueElectionLocked(decision)
+                    is CrewLivenessDecision.AwaitingReconnect,
+                    is CrewLivenessDecision.CoordinatorUnavailableWithoutQuorum -> Unit
+                }
+            }
+            decisions
+        }
+
     private suspend fun collectInbound(peer: PeerSession) {
         try {
             peer.transport.incoming.collect { frame ->
@@ -572,6 +613,8 @@ class CrewSessionEngine(
                     handleSnapshotRequestLocked(authenticatedMemberId, message.request)
                 is CrewControlMessage.SnapshotInstalled ->
                     handleSnapshotLocked(authenticatedMemberId, message)
+                is CrewControlMessage.ElectionVoteCast ->
+                    handleElectionVoteLocked(authenticatedMemberId, message.vote)
                 is CrewControlMessage.RequestRejected ->
                     handleRejectionLocked(authenticatedMemberId, message)
             }
@@ -643,23 +686,35 @@ class CrewSessionEngine(
         message: CrewControlMessage.SnapshotInstalled,
     ) {
         val current = mutableState.value
-        if (message.electionVotes.isNotEmpty()) {
-            protocolRejected(
-                authenticatedMemberId,
-                "Election votes require independent authenticated collection",
-            )
-            return
-        }
+        val authenticatedVotes =
+            if (message.electionVotes.isEmpty()) {
+                emptyList()
+            } else {
+                val eligibility = currentElectionEligibilityLocked()
+                val certificate =
+                    eligibility?.let {
+                        electionVotes.authenticatedCertificate(current, it)
+                    }
+                if (
+                    certificate == null ||
+                        message.electionVotes.any { it !in certificate }
+                ) {
+                    pendingElectionSnapshot = authenticatedMemberId to message
+                    return
+                }
+                message.electionVotes
+            }
         when (
             val result =
                 reducer.applySnapshot(
                     current,
                     message.snapshot,
                     authenticatedPublisher = authenticatedMemberId,
-                    authenticatedElectionVotes = emptyList(),
+                    authenticatedElectionVotes = authenticatedVotes,
                 )
         ) {
             is CrewSnapshotResult.Applied -> {
+                pendingElectionSnapshot = null
                 installStateLocked(result.state)
                 persistAcceptedStateLocked(result.state)
                 emit(CrewSessionNotice.SnapshotApplied(result.state))
@@ -667,6 +722,39 @@ class CrewSessionEngine(
             is CrewSnapshotResult.Rejected ->
                 protocolRejected(authenticatedMemberId, result.reason)
             is CrewSnapshotResult.StaleRejected -> Unit
+        }
+    }
+
+    private suspend fun handleElectionVoteLocked(
+        authenticatedMemberId: CrewMemberId,
+        vote: CrewElectionVote,
+    ) {
+        val current = mutableState.value
+        val eligibility = currentElectionEligibilityLocked()
+        if (eligibility == null) {
+            protocolRejected(authenticatedMemberId, "Crew election is not currently eligible")
+            return
+        }
+        when (
+            val result =
+                electionVotes.record(
+                    state = current,
+                    eligibility = eligibility,
+                    vote = vote,
+                    authenticatedVoter = authenticatedMemberId,
+                )
+        ) {
+            is CrewElectionVoteResult.Recorded,
+            is CrewElectionVoteResult.Duplicate -> {
+                completeElectionIfPossibleLocked(eligibility, result)
+                val pending = pendingElectionSnapshot
+                if (pending != null) {
+                    pendingElectionSnapshot = null
+                    handleSnapshotLocked(pending.first, pending.second)
+                }
+            }
+            is CrewElectionVoteResult.Rejected ->
+                protocolRejected(authenticatedMemberId, result.reason)
         }
     }
 
@@ -691,6 +779,115 @@ class CrewSessionEngine(
             )
             ?.let { emit(CrewSessionNotice.OptimisticRejected(it)) }
     }
+
+    private suspend fun sequenceExpiredMemberRemovalLocked(
+        decision: CrewLivenessDecision.MemberRemovalEligible,
+        nowMonotonicMs: Long,
+    ) {
+        val current = mutableState.value
+        val currentSequencer = sequencer ?: return
+        if (
+            current.coordinatorMemberId != localMemberId ||
+                decision.memberId == localMemberId ||
+                decision.memberId == current.coordinatorMemberId ||
+                current.members.none { it.id == decision.memberId }
+        ) {
+            return
+        }
+        val request =
+            CrewActionRequest(
+                id = DurableEventId("liveness-${UUID.randomUUID()}"),
+                issuingMemberId = localMemberId,
+                clientMonotonicTimestampMs = nowMonotonicMs,
+                action = CrewAction.MemberLeft(decision.memberId),
+            )
+        publishSequenceResultLocked(
+            currentSequencer.sequence(request, localMemberId),
+            request = request,
+            requester = localMemberId,
+        )
+    }
+
+    private suspend fun beginOrContinueElectionLocked(
+        eligibility: CrewLivenessDecision.ElectionEligible
+    ) {
+        val current = mutableState.value
+        if (localMemberId !in eligibility.connectedVoterIds) return
+        val vote =
+            CrewElectionVote(
+                voterMemberId = localMemberId,
+                candidateMemberId = eligibility.candidateMemberId,
+                checkpoint = eligibility.checkpoint,
+            )
+        when (
+            val result =
+                electionVotes.record(
+                    state = current,
+                    eligibility = eligibility,
+                    vote = vote,
+                    authenticatedVoter = localMemberId,
+                )
+        ) {
+            is CrewElectionVoteResult.Recorded -> {
+                eligibility.connectedVoterIds
+                    .filter { it != localMemberId }
+                    .forEach { memberId ->
+                        enqueueLocked(memberId, CrewControlMessage.ElectionVoteCast(vote))
+                    }
+                completeElectionIfPossibleLocked(eligibility, result)
+            }
+            is CrewElectionVoteResult.Duplicate ->
+                completeElectionIfPossibleLocked(eligibility, result)
+            is CrewElectionVoteResult.Rejected ->
+                emit(CrewSessionNotice.EngineFailed(result.reason))
+        }
+    }
+
+    private suspend fun completeElectionIfPossibleLocked(
+        eligibility: CrewLivenessDecision.ElectionEligible,
+        result: CrewElectionVoteResult,
+    ) {
+        val (hasStrictMajority, authenticatedVotes) =
+            when (result) {
+                is CrewElectionVoteResult.Recorded ->
+                    result.hasStrictMajority to result.authenticatedVotes
+                is CrewElectionVoteResult.Duplicate ->
+                    result.hasStrictMajority to result.authenticatedVotes
+                is CrewElectionVoteResult.Rejected -> return
+            }
+        if (!hasStrictMajority || eligibility.candidateMemberId != localMemberId) return
+        val current = mutableState.value
+        val snapshot = current.toElectedSnapshot(localMemberId)
+        when (
+            val applied =
+                reducer.applySnapshot(
+                    state = current,
+                    snapshot = snapshot,
+                    authenticatedPublisher = localMemberId,
+                    authenticatedElectionVotes = authenticatedVotes,
+                )
+        ) {
+            is CrewSnapshotResult.Applied -> {
+                pendingElectionSnapshot = null
+                installStateLocked(applied.state)
+                persistAcceptedStateLocked(applied.state)
+                broadcastLocked(
+                    CrewControlMessage.SnapshotInstalled(snapshot, authenticatedVotes)
+                )
+                emit(CrewSessionNotice.SnapshotApplied(applied.state))
+            }
+            is CrewSnapshotResult.Rejected ->
+                emit(CrewSessionNotice.EngineFailed(applied.reason))
+            is CrewSnapshotResult.StaleRejected -> Unit
+        }
+    }
+
+    private fun currentElectionEligibilityLocked():
+        CrewLivenessDecision.ElectionEligible? =
+        liveness
+            .evaluate(mutableState.value, nowMonotonicMs())
+            .filterIsInstance<CrewLivenessDecision.ElectionEligible>()
+            .singleOrNull()
 
     private suspend fun routeRequestLocked(request: CrewActionRequest): CrewRouteResult {
         val current = mutableState.value
@@ -791,6 +988,7 @@ class CrewSessionEngine(
     private fun installStateLocked(state: CrewState) {
         mutableState.value = state
         liveness.reconcile(state)
+        electionVotes.resetUnless(state)
         sequencer =
             when {
                 state.coordinatorMemberId != localMemberId -> null
@@ -942,6 +1140,9 @@ class CrewSessionEngine(
         optimisticActions.clearForSessionChange().forEach {
             emit(CrewSessionNotice.OptimisticRejected(it))
         }
+        pendingElectionSnapshot = null
+        electionVotes.reset()
+        livenessJob = null
         scope.cancel()
     }
 }

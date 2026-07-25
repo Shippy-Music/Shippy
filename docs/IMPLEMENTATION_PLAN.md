@@ -141,7 +141,7 @@ code/test level, ready for later device verification.
 - [x] Implement equal member control and optimistic reconciliation.
 - [x] Route authenticated requests/events/rejections/snapshots through one
       persistent active-session engine with ordered per-peer output.
-- [ ] Implement coordinator terms, election, handoff, and stale-message rejection.
+- [x] Implement coordinator terms, election, handoff, and stale-message rejection.
 - [x] Implement queue replacement from any member’s song/playlist selection.
 - [x] Implement availability summaries per member and queue item.
 - [x] Implement monotonic session clock probes and scheduled playback decisions.
@@ -150,7 +150,7 @@ code/test level, ready for later device verification.
   - [x] Authenticated coordinator admission and canonical post-join snapshot.
   - [x] Self-leave and deterministic graceful coordinator handoff.
   - [x] Monotonic reconnect grace and strict-majority election eligibility.
-  - [ ] Sequence expired-member removal and independently authenticated
+  - [x] Sequence expired-member removal and independently authenticated
         ungraceful election votes.
 - [x] Implement bounded persistent active-session checkpoint format and Room
       store; secure rejoin credentials remain part of session orchestration.

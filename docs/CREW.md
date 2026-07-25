@@ -594,6 +594,16 @@ loss produces an election opportunity only when connected survivors are a
 strict majority of the full checkpoint, with the lowest stable member ID as
 candidate. A two-member Crew still pauses safely after coordinator loss.
 
+The session engine now consumes those decisions on a bounded periodic loop.
+Ordinary-member expiry becomes a normal ordered `MemberLeft` event. Ungraceful
+election votes travel as standalone control messages, so each receiver matches
+the embedded voter to its authenticated peer before retaining the vote. Votes
+are bound to the exact term/sequence/membership checkpoint and deterministic
+candidate, and one voter cannot change its vote. The elected candidate installs
+and broadcasts the next-term snapshot only after strict majority. A receiver
+may hold one early election snapshot until every vote in its attached
+certificate has arrived over those independently authenticated paths.
+
 This decision and the join/NSD adapters satisfy the architecture gate at
 source/API level only. Authenticated local signaling sockets are implemented and
 have loopback tests authored, but are not compiled or device-proven. NAT, TURN,

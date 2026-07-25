@@ -220,6 +220,15 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   activity recovery. It exposes coordinator-only ordinary-member removal and
   strict-full-checkpoint-majority election eligibility with deterministic
   candidate choice; two-member split brain remains refused.
+- The active session engine now reconciles liveness periodically: expired
+  ordinary members leave through the ordered coordinator sequencer, while
+  ungraceful coordinator loss emits standalone checkpoint-bound votes from each
+  authenticated surviving peer.
+- Election votes are retained once per authenticated voter, reject transport
+  identity/candidate/checkpoint conflicts, and install a next-term snapshot only
+  after a strict majority. A snapshot that arrives before all of its certificate
+  votes is held once and retried as those independently authenticated votes
+  arrive.
 
 ## In Progress
 
@@ -235,8 +244,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   vertical slice.
 - Secure rejoin credentials, hosted signaling, remaining transport lifecycle,
   and active UI behind the new Crew destination.
-- Sequencing liveness-removal decisions and independently authenticated
-  ungraceful election votes around the session engine.
+- Secure active-session rejoin credentials and transport migration after a
+  reconnect.
 
 ## Not Started
 
@@ -278,8 +287,7 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 1. Resolve canonical metadata into permanent collection and mixed-playlist rows.
 2. Add unmanaged-folder indexing and direct collection-row download state.
 3. Add the next viable provider/YouTube adapter and Musixmatch broker boundary.
-4. Complete Crew membership/handoff/reconnect lifecycle, then add hosted
-   signaling exchange.
+4. Add secure Crew rejoin credentials and hosted signaling exchange.
 
 ## Verification Ledger
 
@@ -291,7 +299,7 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
 | App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics/Crew-checkpoint persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
-| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/control codec/framing/checkpoint persistence/session convergence/signaling/direct-connection/transport policies |
+| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint persistence/session convergence/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 349-file app AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 351-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |
