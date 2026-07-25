@@ -26,6 +26,12 @@ document and relevant companion/status files in the same change.
 
 - Engineer exactly to the requirement: neither speculative over-engineering nor
   fragile shortcuts.
+- Ship top-down: establish the complete visible end-to-end product path first,
+  then refine each hidden subsystem to the exact quality its real behavior,
+  measurements, and device failures require.
+- Do not finish increasingly deep infrastructure layers while a required
+  user-facing workflow is still disconnected. Preserve sound foundations, but
+  prioritize the next broad vertical connection.
 - Reuse Auxio behavior and structure before replacing it.
 - Treat Bloomee as inspected donor behavior, not directly reusable Kotlin code.
 - Work in complete vertical slices.

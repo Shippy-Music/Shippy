@@ -16,6 +16,11 @@ next stage from unstable foundations. The final target remains the complete app.
 - Never label a placeholder as implemented.
 - Do not expand scope beyond the canonical documents without updating them.
 - Engineer exactly enough for the locked requirements.
+- Use a top-down shipping sequence: complete the broad visible Shippy workflow
+  across UI, player, library/providers, and Crew before deepening an already
+  adequate subsystem. Refinement follows real integration and device evidence;
+  it is neither skipped nor performed speculatively ahead of disconnected
+  product paths.
 - Complete functional behavior and product polish first. Accessibility is the
   dedicated release-hardening pass and does not block earlier stages.
 
