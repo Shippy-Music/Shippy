@@ -305,6 +305,9 @@
     <string name="set_lastfm_malformed_response">Last.fm returned an unreadable response. Try again.</string>
     <string name="set_lastfm_unknown_error">Last.fm could not complete authorization. Try again.</string>
     <string name="set_lastfm_storage_error">Shippy could not safely save Last.fm credentials. Try again.</string>
+    <string name="set_crew_push_pull_enabled">Crew Push &amp; Pull</string>
+    <string name="set_crew_push_pull_enabled_desc">Temporarily share missing media only with authenticated members of your active Crew. Never with discovered devices or as a download.</string>
+    <string name="set_key_crew_push_pull_enabled">crew_push_pull_enabled</string>
 
     <string name="set_ui">Look and feel</string>
     <string name="set_ui_desc">Change the theme and colors of the app</string>

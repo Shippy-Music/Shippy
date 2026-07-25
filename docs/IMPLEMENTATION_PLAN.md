@@ -208,7 +208,9 @@ Crew with relay fallback hooks.
 
 ## Stage 7 — Push & Pull Media Plane
 
-- [ ] Implement one active-Crew-scoped setting.
+- [x] Implement one active-Crew-scoped setting.
+  - The persisted default-off preference exposes live changes to the future
+    active runtime; media policy still scopes acceptance to its exact session.
 - [ ] Implement supplier availability without exposing library contents.
 - [ ] Implement media manifest, chunking, integrity, encryption, and backpressure.
   - [x] Bounded encrypted-channel wire frames, exact transfer identity,

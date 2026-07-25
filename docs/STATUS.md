@@ -252,6 +252,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   overlay without contaminating canonical Crew state. Active runtime composition,
   supplier selection, prefetch integration, redistribution, and player preparation
   are still incomplete.
+- Settings now exposes one default-off Push & Pull toggle with a typed live-change
+  contract. Its copy and policy limit automatic temporary media exchange to
+  authenticated members of the active Crew, never merely discovered devices.
 - Anonymous YouTube Music is now a second provider adapter: it bootstraps public
   Innertube configuration at runtime, searches WEB_REMIX song results, retries
   playback through Android Music/iOS client contexts, and accepts direct HTTPS
