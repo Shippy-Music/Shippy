@@ -582,16 +582,19 @@ behavior remain explicit implementation and device-verification work. The LAN
 socket path has focused loopback tests authored but not run on this machine. QR
 is invitation/authentication, never the transport itself.
 
-The media channel now carries an exact active-session/request/candidate/target/
-supplier identity. Request, cancel, manifest acknowledgement, retry, rejection,
-completion, manifest, and chunk frames are bounded below the WebRTC media
-channel limit. Authorized suppliers expose bytes only—never paths, provider
-URLs, or credentials. The receiver reserves declared object bytes before
-accepting a manifest, verifies every chunk and the complete SHA-256 object, and
-publishes only into the session-temporary cache. The controller is deliberately
-event-driven: a writable callback or acknowledgement resumes one bounded send;
-it never busy-loops. Authenticated-peer lifecycle, rolling prefetch, supplier
-selection, and cache-to-player integration remain the next seam.
+The version-3 media channel now carries an exact active-session/request/
+duplicate-safe-queue-item/candidate/target/supplier identity. Request, cancel,
+manifest acknowledgement, retry, rejection, completion, manifest, and chunk
+frames are bounded below the WebRTC media-channel limit. Authorized suppliers
+expose bytes only—never paths, provider URLs, or credentials. The receiver
+reserves declared object bytes before accepting a manifest, verifies every
+chunk and the complete SHA-256 object, and publishes only into the
+session-temporary cache. Completion is acknowledged only after the verified
+file is published to the local playback overlay. The controller is
+deliberately event-driven: a writable callback or acknowledgement resumes one
+bounded send; it never busy-loops. Active-session runtime composition, rolling
+prefetch, supplier selection, and cache-to-player integration remain the next
+seam.
 
 Primary evidence:
 
@@ -605,7 +608,11 @@ Primary evidence:
 
 Crew never owns a second ExoPlayer. It emits canonical playback/queue commands
 to `PlaybackStateManager` and contributes temporary candidates to
-`PlaybackResolver`.
+`PlaybackResolver`. `CrewTemporaryMediaIndex` is a per-device, active-session
+overlay keyed by exact QueueItem and source-candidate identity. It may augment a
+local copy of a queue item with a `CREW_TEMPORARY` file candidate, but that
+candidate is never serialized into canonical Crew state and is cleared at
+session end.
 
 ## 12. UI Runtime
 

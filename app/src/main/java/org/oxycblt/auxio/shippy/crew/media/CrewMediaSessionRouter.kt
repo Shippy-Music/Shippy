@@ -11,8 +11,10 @@
 package org.oxycblt.auxio.shippy.crew.media
 
 import java.util.concurrent.ConcurrentHashMap
+import java.io.File
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
+import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 
 /**
  * Product-specific authorization stays outside the media wire protocol. Implementations resolve
@@ -28,7 +30,8 @@ interface CrewMediaSessionCallbacks {
     fun onTemporaryMediaComplete(
         manifest: CrewMediaManifest,
         supplyingMemberId: CrewMemberId,
-    )
+        file: File,
+    ): Boolean
 
     fun onTransferRetryLater(
         transfer: CrewMediaTransferRef,
@@ -144,6 +147,30 @@ class CrewMediaSessionRouter(
         peers[peerMemberId]?.controller?.resume(transfer)
     }
 
+    /** Requests one exact candidate from an already authenticated, attached supplier. */
+    fun requestTemporaryMedia(supplierMemberId: CrewMemberId, transfer: CrewMediaTransferRef): CrewSendResult? {
+        val state = peers[supplierMemberId]
+            ?.takeIf { it.peer.memberId == supplierMemberId && it.peer.transport.remoteMemberId == supplierMemberId }
+            ?: return null
+        if (
+            !pushPullPolicy.accepts(activeSessionId) || transfer.sessionId != activeSessionId ||
+                transfer.targetMemberId != localMemberId || transfer.supplierMemberId != supplierMemberId
+        ) return null
+        return state.controller.request(transfer)
+    }
+
+    /** Cancels one exact outbound request through its authenticated supplier peer. */
+    fun cancelTemporaryMediaRequest(supplierMemberId: CrewMemberId, transfer: CrewMediaTransferRef): CrewSendResult? {
+        val state = peers[supplierMemberId]
+            ?.takeIf { it.peer.memberId == supplierMemberId && it.peer.transport.remoteMemberId == supplierMemberId }
+            ?: return null
+        if (
+            !pushPullPolicy.accepts(activeSessionId) || transfer.sessionId != activeSessionId ||
+                transfer.targetMemberId != localMemberId || transfer.supplierMemberId != supplierMemberId
+        ) return null
+        return state.controller.cancel(transfer)
+    }
+
     private fun handleRequest(state: PeerState, frame: CrewMediaWireFrame.Request): CrewMediaFrameResult {
         val source = runCatching {
             callbacks.authorizeSupplierSource(frame.transfer, state.peer.memberId)
@@ -187,7 +214,22 @@ class CrewMediaSessionRouter(
                 CrewMediaFrameResult.Accepted
             }
             is CrewMediaReceiveResult.Complete -> {
-                runCatching { callbacks.onTemporaryMediaComplete(result.manifest, state.peer.memberId) }
+                val published =
+                    runCatching {
+                            callbacks.onTemporaryMediaComplete(
+                                result.manifest,
+                                state.peer.memberId,
+                                result.file,
+                            )
+                        }
+                        .getOrDefault(false)
+                if (!published) {
+                    return reject(
+                        state,
+                        frame.transfer,
+                        "temporary media could not be published for playback",
+                    )
+                }
                 state.media.send(CrewMediaWireFrame.ObjectComplete(frame.transfer))
                 state.receivingTransfers.remove(frame.transfer)
                 state.controller.forget(frame.transfer)

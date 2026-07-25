@@ -13,7 +13,7 @@ data class CrewMediaReceiverPolicy(
 
 sealed interface CrewMediaReceiveResult {
     data object Accepted : CrewMediaReceiveResult
-    data class Complete(val manifest: CrewMediaManifest) : CrewMediaReceiveResult
+    data class Complete(val manifest: CrewMediaManifest, val file: java.io.File) : CrewMediaReceiveResult
     data class Retry(val reason: String) : CrewMediaReceiveResult
     data class Rejected(val reason: String) : CrewMediaReceiveResult
 }
@@ -78,9 +78,9 @@ class CrewMediaReceiver(
         }
         return runCatching { cache.put(assembly.manifest, objectBytes) }
             .fold(
-                onSuccess = {
+                onSuccess = { file ->
                     cancel(chunk.transfer)
-                    CrewMediaReceiveResult.Complete(assembly.manifest)
+                    CrewMediaReceiveResult.Complete(assembly.manifest, file)
                 },
                 onFailure = {
                     // Keep the complete bounded assembly so an explicit retry can re-attempt the

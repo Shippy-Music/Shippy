@@ -15,8 +15,10 @@ import org.oxycblt.auxio.playback.state.PlaybackCommandFactoryImpl
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
 import org.oxycblt.auxio.shippy.domain.PlaybackResolutionCoordinator
+import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.domain.QueueItemFactory
 import org.oxycblt.auxio.shippy.domain.QueueItemId
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.shippy.domain.ResolutionPolicy
 import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
@@ -49,8 +51,24 @@ constructor(
         contextId: String? = null,
         contributorId: String? = null,
         pushPullEnabled: Boolean = false,
+    ): PlaybackStartResult =
+        playQueue(
+            tracks = listOf(track),
+            selectedIndex = 0,
+            contextId = contextId,
+            contributorId = contributorId,
+            pushPullEnabled = pushPullEnabled,
+        )
+
+    /** Replaces playback with one already-ordered collection context through the single player. */
+    suspend fun playQueue(
+        tracks: List<Track>,
+        selectedIndex: Int,
+        contextId: String? = null,
+        contributorId: String? = null,
+        pushPullEnabled: Boolean = false,
     ): PlaybackStartResult {
-        val item = queueItemFactory.fromTrack(track, contextId, contributorId)
+        val plan = queuePlaybackPlan(queueItemFactory, tracks, selectedIndex, contextId, contributorId)
         val policy =
             ResolutionPolicy(
                 providerPriority =
@@ -63,19 +81,39 @@ constructor(
                         .priority,
                 pushPullEnabled = pushPullEnabled,
             )
-        return when (val preparation = resolutionCoordinator.prepare(item, policy)) {
-            is PlaybackPreparation.Ready -> {
-                playbackManager.play(
-                    PlaybackCommandFactoryImpl.PlaybackCommandImpl(
-                        selectedItemId = item.id,
-                        queue = listOf(preparation.value),
-                        parent = null,
-                        shuffled = false,
-                    )
-                )
-                PlaybackStartResult.Started(item.id)
+        val queue = mutableListOf<ResolvedQueueItem>()
+        for (item in plan.items) {
+            when (val preparation = resolutionCoordinator.prepare(item, policy)) {
+                is PlaybackPreparation.Ready -> queue += preparation.value
+                is PlaybackPreparation.Failed -> return PlaybackStartResult.Failed(preparation)
             }
-            is PlaybackPreparation.Failed -> PlaybackStartResult.Failed(preparation)
         }
+        playbackManager.play(
+            PlaybackCommandFactoryImpl.PlaybackCommandImpl(
+                selectedItemId = plan.selectedItemId,
+                queue = queue,
+                parent = null,
+                shuffled = false,
+            )
+        )
+        return PlaybackStartResult.Started(plan.selectedItemId)
     }
+}
+
+internal data class QueuePlaybackPlan(
+    val items: List<QueueItem>,
+    val selectedItemId: QueueItemId,
+)
+
+internal fun queuePlaybackPlan(
+    queueItemFactory: QueueItemFactory,
+    tracks: List<Track>,
+    selectedIndex: Int,
+    contextId: String?,
+    contributorId: String?,
+): QueuePlaybackPlan {
+    require(tracks.isNotEmpty()) { "Playback queue cannot be empty" }
+    require(selectedIndex in tracks.indices) { "Selected queue index is out of bounds" }
+    val items = tracks.map { queueItemFactory.fromTrack(it, contextId, contributorId) }
+    return QueuePlaybackPlan(items, items[selectedIndex].id)
 }

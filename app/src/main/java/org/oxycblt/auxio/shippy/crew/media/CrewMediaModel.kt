@@ -10,6 +10,7 @@ import java.io.InputStream
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.domain.CandidateId
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 
 /** Wire bounds intentionally leave room below the 48 KiB Crew media-channel payload limit. */
 const val CREW_MEDIA_MAX_CHUNK_BYTES = 44 * 1024
@@ -30,6 +31,7 @@ value class CrewMediaRequestId(val value: String) {
 data class CrewMediaTransferRef(
     val sessionId: CrewSessionId,
     val requestId: CrewMediaRequestId,
+    val queueItemId: QueueItemId,
     val candidateId: CandidateId,
     val targetMemberId: CrewMemberId,
     val supplierMemberId: CrewMemberId,

@@ -28,8 +28,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
-import org.oxycblt.auxio.shippy.library.CollectionRowDownloadPresentation
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
+import org.oxycblt.auxio.shippy.library.CollectionRowDownloadPresentation
 import org.oxycblt.auxio.shippy.library.CollectionDetailMessage
 import org.oxycblt.auxio.shippy.library.ShippyCollectionDetailState
 import org.oxycblt.auxio.shippy.library.ShippyCollectionTrackRow
@@ -56,7 +56,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     private lateinit var message: TextView
     private val tracksAdapter =
         ShippyCollectionTrackAdapter(
-            onClick = { model.play(collectionId, it) },
+            onClick = { row -> model.play(collectionId, currentState?.rows.orEmpty(), row) },
             onDownloadAction = ::onDownloadAction,
         )
     private var currentState: ShippyCollectionDetailState? = null

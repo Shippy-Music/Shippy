@@ -67,7 +67,11 @@ through Auxio’s existing playback stack.
 - [ ] Preserve user playlist creation, edit, pin, sort, and deletion.
   - [x] Create Room-backed Shippy playlists from Library while retaining device
         playlist import as a separate action.
-- [ ] Support Local tracks inside user playlists and queue.
+- [x] Support Local tracks inside user playlists and queue.
+  - Relationship-backed collection playback now creates a duplicate-safe
+    canonical queue in visible playlist order, selects the exact tapped
+    occurrence, resolves local candidates through the same player authority,
+    and aborts without mutating playback if preparation fails.
 - [x] Add selected Local source folder management and rescan behavior.
   - Retained Auxio's persisted SAF source/excluded-location selection,
     `LocationsDialog`, indexing listener, and forced rescan path.
@@ -214,8 +218,12 @@ Crew with relay fallback hooks.
         peer lifecycle boundary without adding another transport collector.
   - [x] Add the authenticated per-peer router for bounded request, manifest,
         chunk, acknowledgement, retry, reject, cancel, and completion callbacks.
+  - [x] Bind every transfer to the exact duplicate-safe QueueItem ID and expose
+        authenticated outbound request/cancel operations.
+  - [x] Publish verified completed media into an active-session-only local
+        candidate overlay without mutating canonical Crew state.
   - [ ] Connect the controller to authenticated peer lifecycle and end-to-end
-        request/acknowledgement callbacks.
+        runtime request, supplier, index, and playback callbacks.
 - [ ] Implement adaptive supplier selection independent of coordinator.
 - [x] Implement bounded temporary Crew cache and crash/session cleanup.
 - [ ] Allow temporary chunks to redistribute within the same active Crew.

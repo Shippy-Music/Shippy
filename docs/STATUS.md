@@ -238,12 +238,19 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   ordered playable rows from a durable canonical Track catalog. Saving a provider
   track persists its metadata independently of download state; unknown legacy IDs
   remain explicitly unresolved and Local keeps the exact Auxio route.
+- Tapping a relationship-backed collection row now replaces playback with the
+  complete visible collection order, selects the exact duplicate-safe queue
+  occurrence, and supports exact Local candidates through the same player
+  authority. The current provider path prepares the whole queue before mutation;
+  lazy expiry refresh for long provider queues remains future hardening.
 - Push & Pull now has an active-Crew-only policy, path/secret-free bounded media
   manifest/chunk codec, per-chunk and whole-object integrity, media-channel adapter,
-  exact target/supplier request identity, request/cancel/ack/retry/reject/complete
-  frames, reserved receiver windows, explicit-resume transfer controller, and
-  API-24-compatible temporary session cache cleanup. Authenticated-peer wiring,
-  supplier selection, prefetch integration, redistribution, and Media3 playback
+  exact QueueItem/candidate/target/supplier request identity, authenticated
+  outbound request/cancel operations, reserved receiver windows, explicit-resume
+  transfer control, and API-24-compatible temporary session cache cleanup.
+  Verified completion can now publish a per-device `CREW_TEMPORARY` candidate
+  overlay without contaminating canonical Crew state. Active runtime composition,
+  supplier selection, prefetch integration, redistribution, and player preparation
   are still incomplete.
 - Anonymous YouTube Music is now a second provider adapter: it bootstraps public
   Innertube configuration at runtime, searches WEB_REMIX song results, retries
@@ -251,9 +258,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   audio only. Cipher-only formats remain explicitly unsupported.
 - Last.fm now has a signed HTTPS client, Android-Keystore encrypted credential
   boundary, Room v7 durable FIFO scrobble outbox, listen-threshold policy,
-  oldest-first batch delivery including restart flush, and playback-service
-  observer. The Settings authentication/reauthentication surface is not
-  implemented yet.
+  oldest-first batch delivery including restart flush, playback-service observer,
+  Settings web authentication, encrypted reconnect, sign-out, and visible
+  invalid-session reauthorization state.
 - Liked, Downloads, and user-playlist track rows now expose direct download,
   resume, and retry actions from the same durable state used by the full player.
   Local rows remain outside provider-download behavior.
@@ -302,8 +309,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Adding live provider health verification.
 - Hosted signaling, remaining transport lifecycle, and active UI behind the new Crew destination.
 - Transport migration after a reconnect.
-- Connecting Push & Pull availability, requests, supplier preparation, prefetch,
-  cache candidates, and the one player authority around the new bounded media seam.
+- Composing the active Crew runtime around Push & Pull availability, supplier
+  authorization, request scheduling, prefetch, the temporary candidate overlay,
+  and the one player authority.
 
 ## Not Started
 
@@ -342,9 +350,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Complete unmanaged download-folder indexing and Shippy playlist creation.
-2. Connect Push & Pull requests/suppliers/prefetch/cache to authenticated peers,
-   the resolver, and the player.
+1. Complete unmanaged download-folder indexing.
+2. Compose the active Crew host/join runtime and connect Push & Pull requests,
+   suppliers, prefetch, cache overlays, the resolver, and the player.
 3. Wire the secure rejoin connector to real signaling; hosted signaling remains separate.
 
 ## Verification Ledger
@@ -359,5 +367,5 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider and Search-to-play paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
 | New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 378-file app AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 396-file app AST extraction (7,718 nodes), XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

@@ -18,11 +18,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import org.oxycblt.auxio.shippy.domain.LibraryCollection
-import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
+import org.oxycblt.auxio.shippy.domain.LibraryCollection
+import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 import org.oxycblt.auxio.shippy.domain.Track
@@ -33,8 +33,8 @@ import org.oxycblt.auxio.shippy.download.DownloadState
 import org.oxycblt.auxio.shippy.download.DownloadWorkCoordinator
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
-import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
 import org.oxycblt.auxio.shippy.persistence.library.CanonicalTrackMetadataRepository
+import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
 import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
@@ -97,9 +97,18 @@ constructor(
 
     fun play(
         collectionId: LibraryCollectionId,
+        rows: List<ShippyCollectionTrackRow>,
         row: ShippyCollectionTrackRow,
     ) {
-        viewModelScope.launch { playback.play(row.track, contextId = collectionId.value) }
+        val selectedIndex = rows.indexOf(row)
+        if (selectedIndex < 0) return
+        viewModelScope.launch {
+            playback.playQueue(
+                tracks = rows.map(ShippyCollectionTrackRow::track),
+                selectedIndex = selectedIndex,
+                contextId = collectionId.value,
+            )
+        }
     }
 
     fun performDownloadAction(row: ShippyCollectionTrackRow) {

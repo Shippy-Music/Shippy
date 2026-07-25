@@ -76,6 +76,39 @@ class CollectionDetailPresentationTest {
     }
 
     @Test
+    fun `persisted local metadata keeps its exact candidate in playlist order`() {
+        val localId = TrackId("local:umas123e4567-e89b-12d3-a456-426614174000")
+        val local =
+            Track(
+                id = localId,
+                realm = TrackRealm.LOCAL,
+                title = "Exact local song",
+                artists = listOf("Artist"),
+                candidates =
+                    listOf(
+                        TrackCandidate(
+                            id = CandidateId(localId.value),
+                            trackId = localId,
+                            kind = CandidateKind.LOCAL,
+                            sourceId = "device-local",
+                            sourceItemId = "umas123e4567-e89b-12d3-a456-426614174000",
+                            availability = CandidateAvailability.AVAILABLE,
+                            locator = "content://device/music/exact-song",
+                        )
+                    ),
+            )
+
+        val resolved =
+            listOf(TrackId("provider:other"), local.id)
+                .resolveRows(listOf(local to CollectionRowDownloadPresentation.Hidden))
+
+        assertEquals(listOf(local), resolved.rows.map { it.track })
+        assertEquals(CandidateKind.LOCAL, resolved.rows.single().track.candidates.single().kind)
+        assertEquals("umas123e4567-e89b-12d3-a456-426614174000", resolved.rows.single().track.candidates.single().sourceItemId)
+        assertEquals(1, resolved.unresolvedCount)
+    }
+
+    @Test
     fun `saved provider track remains a playable row without a download`() {
         val saved = track("provider:saved")
 

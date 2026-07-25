@@ -13,6 +13,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.domain.CandidateId
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
@@ -48,7 +49,9 @@ class CrewMediaTest {
 
         assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(manifest))
         assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(chunk(manifest, 1, second)))
-        assertEquals(CrewMediaReceiveResult.Complete(manifest), receiver.accept(chunk(manifest, 0, first)))
+        val complete = receiver.accept(chunk(manifest, 0, first)) as CrewMediaReceiveResult.Complete
+        assertEquals(manifest, complete.manifest)
+        assertTrue(complete.file.isFile)
         assertArrayEquals(first + second, cache.read(manifest.transfer.sessionId, manifest.objectIntegrity))
     }
 
@@ -146,6 +149,19 @@ class CrewMediaTest {
     }
 
     @Test
+    fun `transfer codec preserves exact queue item identity and bounds it`() {
+        val transfer = manifest(byteArrayOf(1)).transfer
+        val decoded = CrewMediaWireCodec.decode(CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(transfer)))
+            as CrewMediaWireFrame.Request
+        assertEquals(transfer.queueItemId, decoded.transfer.queueItemId)
+        val previousVersion = CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(transfer))
+            .also { it[0] = 2 }
+        assertTrue(runCatching { CrewMediaWireCodec.decode(previousVersion) }.isFailure)
+        val tooLong = transfer.copy(queueItemId = QueueItemId("q".repeat(CREW_MEDIA_MAX_ID_BYTES + 1)))
+        assertTrue(runCatching { CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(tooLong)) }.isFailure)
+    }
+
+    @Test
     fun `producer bounds source before transfer and emits verified chunks`() {
         val bytes = byteArrayOf(1, 2, 3)
         val source = object : CrewAuthorizedMediaSource {
@@ -178,7 +194,7 @@ class CrewMediaTest {
         return CrewMediaManifest(
             CrewMediaTransferRef(
                 CrewSessionId("session", ProtocolVersion(1)), CrewMediaRequestId("request-1"),
-                CandidateId("crew-temporary:exact"), CrewMemberId("target", ProtocolVersion(1)),
+                QueueItemId("queue-item-1"), CandidateId("crew-temporary:exact"), CrewMemberId("target", ProtocolVersion(1)),
                 CrewMemberId("supplier", ProtocolVersion(1)),
             ),
             "audio/test",

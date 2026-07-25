@@ -9,6 +9,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 import org.oxycblt.auxio.shippy.domain.CandidateId
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 
 sealed interface CrewMediaWireFrame {
     val transfer: CrewMediaTransferRef
@@ -24,7 +25,7 @@ sealed interface CrewMediaWireFrame {
 
 /** Strict bounded binary framing. It carries no filesystem locator, provider URL, or credential. */
 object CrewMediaWireCodec {
-    private const val VERSION = 2
+    private const val VERSION = 3
     private const val MANIFEST = 1; private const val CHUNK = 2; private const val REQUEST = 3
     private const val CANCEL = 4; private const val ACCEPTED = 5; private const val RETRY = 6
     private const val REJECTED = 7; private const val COMPLETE = 8
@@ -65,8 +66,8 @@ object CrewMediaWireCodec {
     private fun CrewMediaChunk.writeTo(out: DataOutputStream) { out.writeTransfer(transfer); out.write(objectIntegrity.copyBytes()); out.writeInt(index); out.writeInt(sizeBytes); out.write(copyPayload()) }
     private fun DataInputStream.readManifest(): CrewMediaManifest { val transfer = readTransfer(); val mime = readNullableString(256); val size = readLong(); val integrity = CrewMediaDigest(readExact(CREW_MEDIA_DIGEST_BYTES)); val count = readUnsignedShort().also { require(it in 1..CREW_MEDIA_MAX_CHUNKS) }; val chunks = List(count) { CrewMediaChunkDescriptor(readInt(), readInt(), CrewMediaDigest(readExact(CREW_MEDIA_DIGEST_BYTES))) }; return CrewMediaManifest(transfer, mime, size, integrity, chunks) }
     private fun DataInputStream.readChunk(): CrewMediaChunk { val transfer = readTransfer(); val integrity = CrewMediaDigest(readExact(CREW_MEDIA_DIGEST_BYTES)); val index = readInt(); val size = readInt().also { require(it in 1..CREW_MEDIA_MAX_CHUNK_BYTES) }; return CrewMediaChunk(transfer, integrity, index, readExact(size)) }
-    private fun DataOutputStream.writeTransfer(v: CrewMediaTransferRef) { writeSession(v.sessionId); writeString(v.requestId.value, CREW_MEDIA_MAX_REQUEST_ID_BYTES); writeString(v.candidateId.value, CREW_MEDIA_MAX_ID_BYTES); writeMember(v.targetMemberId); writeMember(v.supplierMemberId) }
-    private fun DataInputStream.readTransfer() = CrewMediaTransferRef(readSession(), CrewMediaRequestId(readString(CREW_MEDIA_MAX_REQUEST_ID_BYTES)), CandidateId(readString(CREW_MEDIA_MAX_ID_BYTES)), readMember(), readMember())
+    private fun DataOutputStream.writeTransfer(v: CrewMediaTransferRef) { writeSession(v.sessionId); writeString(v.requestId.value, CREW_MEDIA_MAX_REQUEST_ID_BYTES); writeString(v.queueItemId.value, CREW_MEDIA_MAX_ID_BYTES); writeString(v.candidateId.value, CREW_MEDIA_MAX_ID_BYTES); writeMember(v.targetMemberId); writeMember(v.supplierMemberId) }
+    private fun DataInputStream.readTransfer() = CrewMediaTransferRef(readSession(), CrewMediaRequestId(readString(CREW_MEDIA_MAX_REQUEST_ID_BYTES)), QueueItemId(readString(CREW_MEDIA_MAX_ID_BYTES)), CandidateId(readString(CREW_MEDIA_MAX_ID_BYTES)), readMember(), readMember())
     private fun DataOutputStream.writeSession(v: CrewSessionId) { writeString(v.value, CREW_MEDIA_MAX_ID_BYTES); writeInt(v.protocolVersion.value) }
     private fun DataInputStream.readSession() = CrewSessionId(readString(CREW_MEDIA_MAX_ID_BYTES), ProtocolVersion(readInt()))
     private fun DataOutputStream.writeMember(v: CrewMemberId) { writeString(v.value, CREW_MEDIA_MAX_ID_BYTES); writeInt(v.protocolVersion.value) }

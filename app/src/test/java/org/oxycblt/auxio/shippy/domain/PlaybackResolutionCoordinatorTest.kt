@@ -63,6 +63,47 @@ class PlaybackResolutionCoordinatorTest {
         assertEquals(first.track.id, second.track.id)
     }
 
+    @Test
+    fun `exact local queue item bypasses provider resolution and retains identity`() = runBlocking {
+        val callsBefore = provider.resolveCalls
+        val localTrackId = TrackId("local:umas123e4567-e89b-12d3-a456-426614174000")
+        val localCandidate =
+            TrackCandidate(
+                id = CandidateId("local:umas123e4567-e89b-12d3-a456-426614174000"),
+                trackId = localTrackId,
+                kind = CandidateKind.LOCAL,
+                sourceId = "device-local",
+                sourceItemId = "umas123e4567-e89b-12d3-a456-426614174000",
+                availability = CandidateAvailability.AVAILABLE,
+                locator = "content://device/music/exact-song",
+            )
+        val item =
+            QueueItem(
+                id = QueueItemId("playlist-occurrence-2"),
+                track =
+                    Track(
+                        id = localTrackId,
+                        realm = TrackRealm.LOCAL,
+                        title = "Exact local song",
+                        artists = listOf("Artist"),
+                        candidates = listOf(localCandidate),
+                    ),
+            )
+
+        val result =
+            coordinator.prepare(
+                item,
+                ResolutionPolicy(listOf(provider.descriptor.id), pushPullEnabled = false),
+            )
+
+        assertTrue(result is PlaybackPreparation.Ready)
+        val playback = (result as PlaybackPreparation.Ready).value.playback
+        assertEquals(item.id, playback.queueItemId)
+        assertEquals(localCandidate.id, playback.candidateId)
+        assertEquals(localCandidate.locator, playback.uri)
+        assertEquals(callsBefore, provider.resolveCalls)
+    }
+
     private fun queueItem(queueId: String): QueueItem {
         val providerId = provider.descriptor.id
         val trackId = TrackId("provider:track")
@@ -91,6 +132,8 @@ class PlaybackResolutionCoordinatorTest {
     }
 
     private class FakeProvider : MusicProvider {
+        var resolveCalls = 0
+
         override val descriptor =
             ProviderDescriptor(
                 id = ProviderId("provider"),
@@ -106,8 +149,9 @@ class PlaybackResolutionCoordinatorTest {
         override suspend fun resolve(
             candidate: TrackCandidate,
             constraints: StreamConstraints,
-        ) =
-            ProviderResult.Success(
+        ): ProviderResult<ResolvedStream> {
+            resolveCalls++
+            return ProviderResult.Success(
                 ResolvedStream(
                     candidateId = candidate.id,
                     uri = "https://media.test/track.m4a",
@@ -115,5 +159,6 @@ class PlaybackResolutionCoordinatorTest {
                     headers = mapOf("Referer" to "https://provider.test"),
                 )
             )
+        }
     }
 }
