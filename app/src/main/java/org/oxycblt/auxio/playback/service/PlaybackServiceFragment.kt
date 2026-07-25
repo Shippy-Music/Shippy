@@ -36,6 +36,7 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleTracker
+import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
 import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Song
@@ -52,6 +53,7 @@ private constructor(
     widgetComponentFactory: WidgetComponent.Factory,
     systemReceiverFactory: SystemPlaybackReceiver.Factory,
     private val lastFmScrobbleTracker: LastFmScrobbleTracker,
+    private val sleepTimerController: SleepTimerController,
 ) : PlaybackStateManager.Listener {
     class Factory
     @Inject
@@ -63,6 +65,7 @@ private constructor(
         private val widgetComponentFactory: WidgetComponent.Factory,
         private val systemReceiverFactory: SystemPlaybackReceiver.Factory,
         private val lastFmScrobbleTracker: LastFmScrobbleTracker,
+        private val sleepTimerController: SleepTimerController,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
             PlaybackServiceFragment(
@@ -75,6 +78,7 @@ private constructor(
                 widgetComponentFactory,
                 systemReceiverFactory,
                 lastFmScrobbleTracker,
+                sleepTimerController,
             )
     }
 
@@ -125,6 +129,7 @@ private constructor(
         systemReceiver.attach()
         playbackManager.addListener(this)
         lastFmScrobbleTracker.attach(playbackManager)
+        sleepTimerController.attach(playbackManager)
         updateAutoStopTimer(playbackManager.progression.isPlaying)
         return sessionHolder.token
     }
@@ -182,6 +187,7 @@ private constructor(
         waitJob.cancel()
         playbackManager.removeListener(this)
         lastFmScrobbleTracker.release(playbackManager)
+        sleepTimerController.release(playbackManager)
         systemReceiver.release()
         widgetComponent.release()
         sessionHolder.release()

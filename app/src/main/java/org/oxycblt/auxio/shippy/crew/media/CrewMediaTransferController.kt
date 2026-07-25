@@ -27,12 +27,20 @@ class CrewMediaTransferController(
     /** Supplier-only: source must already have passed authorization. */
     fun offer(transfer: CrewMediaTransferRef, source: CrewAuthorizedMediaSource): CrewSendResult? {
         if (!valid(transfer) || transfer.supplierMemberId != localMemberId || peer.remoteMemberId != transfer.targetMemberId || !policy.accepts(activeSessionId)) return null
-        if (states.putIfAbsent(transfer, CrewMediaTransferState.MANIFEST_WAIT) != null) return null
+        val prior = states[transfer]
+        if (prior != null && prior != CrewMediaTransferState.REQUESTED) return null
+        states[transfer] = CrewMediaTransferState.MANIFEST_WAIT
         val (manifest, chunks) = CrewMediaProducer.produce(transfer, source)
         outgoing[transfer] = listOf(CrewMediaWireFrame.Manifest(manifest)) + chunks.map(CrewMediaWireFrame::Chunk)
         return resume(transfer)
     }
     fun cancel(transfer: CrewMediaTransferRef): CrewSendResult? { states[transfer] = CrewMediaTransferState.CANCELLED; outgoing.remove(transfer); return send(transfer, CrewMediaWireFrame.Cancel(transfer)) }
+
+    /** Releases terminal or abandoned transfer bookkeeping; callers own retry scheduling. */
+    fun forget(transfer: CrewMediaTransferRef) {
+        states.remove(transfer)
+        outgoing.remove(transfer)
+    }
     fun resume(transfer: CrewMediaTransferRef): CrewSendResult? {
         if (states[transfer] == CrewMediaTransferState.CANCELLED) return null
         val next = outgoing[transfer]?.firstOrNull() ?: return null

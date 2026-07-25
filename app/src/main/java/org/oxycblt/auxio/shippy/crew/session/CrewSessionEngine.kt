@@ -45,6 +45,9 @@ import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.DurableCrewEvent
 import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.toSnapshot
+import org.oxycblt.auxio.shippy.crew.media.CrewAuthenticatedMediaLifecycle
+import org.oxycblt.auxio.shippy.crew.media.CrewAuthenticatedMediaPeer
+import org.oxycblt.auxio.shippy.crew.media.CrewMediaFrameResult
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFrameResult
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlCodec
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFramer
@@ -172,11 +175,13 @@ class CrewSessionEngine(
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val reducer: CrewReducer = CrewReducer(),
     reconnectPolicy: CrewReconnectPolicy = CrewReconnectPolicy(),
+    private val mediaLifecycle: CrewAuthenticatedMediaLifecycle? = null,
 ) : Closeable {
     private data class PeerSession(
         val transport: CrewPeerTransport,
         val reassembler: CrewControlReassembler,
         val outgoing: Channel<CrewControlMessage>,
+        val mediaPeer: CrewAuthenticatedMediaPeer,
         val jobs: MutableList<Job> = mutableListOf(),
     )
 
@@ -249,6 +254,7 @@ class CrewSessionEngine(
                 transport = transport,
                 reassembler = CrewControlReassembler(),
                 outgoing = Channel(OUTBOUND_CONTROL_CAPACITY),
+                mediaPeer = CrewAuthenticatedMediaPeer(transport.remoteMemberId, transport),
             )
         val replaced = peers.put(transport.remoteMemberId, peer)
         replaced?.let {
@@ -258,6 +264,17 @@ class CrewSessionEngine(
                 CrewPeerDetachReason.REPLACED,
                 closeTransport = true,
             )
+        }
+        try {
+            mediaLifecycle?.onPeerAttached(peer.mediaPeer)
+        } catch (_: Exception) {
+            emit(CrewSessionNotice.EngineFailed("Crew media processing failed"))
+            detachPeer(
+                transport.remoteMemberId,
+                CrewPeerDetachReason.ENGINE_FAILURE,
+                expectedPeer = peer,
+            )
+            return
         }
         peer.jobs += scope.launch { pumpOutbound(peer) }
         peer.jobs += scope.launch { collectInbound(peer) }
@@ -494,6 +511,31 @@ class CrewSessionEngine(
         try {
             peer.transport.incoming.collect { frame ->
                 liveness.connected(peer.transport.remoteMemberId, nowMonotonicMs())
+                if (frame.channel == CrewTransportChannel.MEDIA) {
+                    val result =
+                        try {
+                            mediaLifecycle?.onMediaFrame(peer.mediaPeer, frame)
+                        } catch (_: Exception) {
+                            emit(CrewSessionNotice.EngineFailed("Crew media processing failed"))
+                            detachPeer(
+                                peer.transport.remoteMemberId,
+                                CrewPeerDetachReason.ENGINE_FAILURE,
+                                expectedPeer = peer,
+                            )
+                            return@collect
+                        }
+                    when (result) {
+                        null,
+                        CrewMediaFrameResult.Accepted -> Unit
+                        is CrewMediaFrameResult.Rejected -> {
+                            protocolViolation(
+                                peer,
+                                "Crew media frame rejected: ${result.reason}",
+                            )
+                        }
+                    }
+                    return@collect
+                }
                 if (frame.channel != CrewTransportChannel.CONTROL) return@collect
                 when (
                     val result =
@@ -1105,6 +1147,11 @@ class CrewSessionEngine(
         peer.outgoing.close()
         peer.jobs.forEach { it.cancel() }
         peer.reassembler.reset()
+        try {
+            mediaLifecycle?.onPeerDetached(peer.mediaPeer)
+        } catch (_: Exception) {
+            emit(CrewSessionNotice.EngineFailed("Crew media cleanup failed"))
+        }
         if (reason != CrewPeerDetachReason.ENGINE_CLOSED) {
             liveness.disconnected(memberId, nowMonotonicMs())
         }

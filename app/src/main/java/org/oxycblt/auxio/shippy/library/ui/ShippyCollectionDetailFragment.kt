@@ -28,9 +28,11 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.shippy.library.CollectionRowDownloadPresentation
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.library.CollectionDetailMessage
 import org.oxycblt.auxio.shippy.library.ShippyCollectionDetailState
+import org.oxycblt.auxio.shippy.library.ShippyCollectionTrackRow
 import org.oxycblt.auxio.shippy.library.ShippyCollectionDetailViewModel
 import org.oxycblt.auxio.shippy.library.messageKind
 import org.oxycblt.auxio.ui.AuxioToolbar
@@ -52,7 +54,11 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     private lateinit var count: TextView
     private lateinit var progress: ProgressBar
     private lateinit var message: TextView
-    private val tracksAdapter = ShippyCollectionTrackAdapter { model.play(collectionId, it) }
+    private val tracksAdapter =
+        ShippyCollectionTrackAdapter(
+            onClick = { model.play(collectionId, it) },
+            onDownloadAction = ::onDownloadAction,
+        )
     private var currentState: ShippyCollectionDetailState? = null
     private var playlistMenuInflated = false
 
@@ -127,6 +133,19 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         }
         toolbar.menu.findItem(R.id.action_shippy_pin)?.title =
             getString(if (state.playlist.isPinned) R.string.lbl_unpin else R.string.lbl_pin)
+    }
+
+    private fun onDownloadAction(row: ShippyCollectionTrackRow) {
+        if (row.download is CollectionRowDownloadPresentation.Available) {
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.desc_remove_download)
+                .setMessage(R.string.lng_remove_download_confirmation)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.lbl_delete) { _, _ -> model.performDownloadAction(row) }
+                .show()
+        } else {
+            model.performDownloadAction(row)
+        }
     }
 
     private fun showRenameDialog(playlistId: LibraryCollectionId, currentName: String) {

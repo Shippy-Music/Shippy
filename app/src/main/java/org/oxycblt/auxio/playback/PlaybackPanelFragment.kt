@@ -38,6 +38,7 @@ import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlin.math.abs
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
@@ -55,8 +56,11 @@ import org.oxycblt.auxio.playback.ui.swiper.CoverPagerAdapter
 import org.oxycblt.auxio.playback.ui.swiper.UserAwarePagerCallback
 import org.oxycblt.auxio.shippy.lyrics.PlainLyrics
 import org.oxycblt.auxio.shippy.lyrics.SyncedLyrics
+import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
+import org.oxycblt.auxio.shippy.playback.timer.SleepTimerMode
 import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.download.DownloadJobId
+import org.oxycblt.auxio.shippy.share.ProviderTrackSharing
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.dampen
@@ -82,6 +86,7 @@ class PlaybackPanelFragment :
     Toolbar.OnMenuItemClickListener,
     StyledSeekBar.Listener,
     StepperOverlay.Listener {
+    @Inject lateinit var sleepTimerController: SleepTimerController
     private val coverPagerAdapter = CoverPagerAdapter(this)
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
@@ -260,6 +265,10 @@ class PlaybackPanelFragment :
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_sleep_timer) {
+            showSleepTimerDialog()
+            return true
+        }
         if (item.itemId == R.id.action_open_equalizer) {
             // Launch the system equalizer app, if possible.
             L.d("Launching equalizer")
@@ -480,6 +489,10 @@ class PlaybackPanelFragment :
                 ?.jobId
         PopupMenu(requireContext(), anchor).apply {
             inflate(R.menu.playback_provider)
+            val originalLink = ProviderTrackSharing.originalLink(track)
+            val shippyLink = ProviderTrackSharing.shippyLink(track)
+            menu.findItem(R.id.action_share_original_link).isVisible = originalLink != null
+            menu.findItem(R.id.action_share_with_shippy).isVisible = shippyLink != null
             menu.findItem(R.id.action_remove_download).isVisible = availableJobId != null
             setOnMenuItemClickListener { item ->
                 when (item.itemId) {
@@ -491,8 +504,12 @@ class PlaybackPanelFragment :
                         showProviderTrackInfo(track)
                         true
                     }
-                    R.id.action_provider_track_share -> {
-                        shareProviderTrack(track)
+                    R.id.action_share_original_link -> {
+                        originalLink?.let(::shareProviderText)
+                        true
+                    }
+                    R.id.action_share_with_shippy -> {
+                        shippyLink?.let(::shareProviderText)
                         true
                     }
                     R.id.action_remove_download -> {
@@ -505,6 +522,32 @@ class PlaybackPanelFragment :
             show()
         }
     }
+
+    private fun showSleepTimerDialog() {
+        val modes = SleepTimerMode.entries
+        val labels = modes.map(::sleepTimerLabel).toTypedArray()
+        val selected = modes.indexOf(sleepTimerController.state.value.mode).coerceAtLeast(0)
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.lbl_sleep_timer)
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                sleepTimerController.select(modes[which])
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun sleepTimerLabel(mode: SleepTimerMode): String =
+        getString(
+            when (mode) {
+                SleepTimerMode.OFF -> R.string.lbl_sleep_timer_off
+                SleepTimerMode.FINISH_CURRENT -> R.string.lbl_sleep_timer_finish_current
+                SleepTimerMode.MINUTES_15 -> R.string.lbl_sleep_timer_15_minutes
+                SleepTimerMode.MINUTES_30 -> R.string.lbl_sleep_timer_30_minutes
+                SleepTimerMode.MINUTES_45 -> R.string.lbl_sleep_timer_45_minutes
+                SleepTimerMode.MINUTES_60 -> R.string.lbl_sleep_timer_60_minutes
+            }
+        )
 
     private fun showSavedDestinations(state: PlayerActionsState) {
         val labels =
@@ -571,24 +614,7 @@ class PlaybackPanelFragment :
             .show()
     }
 
-    private fun shareProviderTrack(track: Track) {
-        val originalLink =
-            track.candidates
-                .asSequence()
-                .mapNotNull { it.locator }
-                .firstOrNull { it.startsWith("https://") }
-        val text =
-            buildString {
-                append(track.title)
-                track.artists.takeIf { it.isNotEmpty() }?.let {
-                    append(" — ")
-                    append(it.joinToString(", "))
-                }
-                originalLink?.let {
-                    append('\n')
-                    append(it)
-                }
-            }
+    private fun shareProviderText(text: String) {
         startActivity(
             Intent.createChooser(
                 Intent(Intent.ACTION_SEND)

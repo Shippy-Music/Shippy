@@ -131,13 +131,14 @@ constructor(
                 message = "Candidate does not belong to JioSaavn",
             )
         }
-        val baseUrl =
-            candidate.locator?.takeIf(String::isNotBlank)
-                ?: return ProviderResult.Failure(
-                    kind = ProviderFailureKind.UNAVAILABLE,
-                    retryable = true,
-                    message = "JioSaavn stream URL is unavailable",
-                )
+        val baseUrl = candidate.locator?.takeIf(String::isNotBlank) ?: resolveSongMediaUrl(candidate)
+        if (baseUrl == null) {
+            return ProviderResult.Failure(
+                kind = ProviderFailureKind.UNAVAILABLE,
+                retryable = true,
+                message = "JioSaavn stream URL is unavailable",
+            )
+        }
         val quality = selectQuality(constraints.preferredBitrateBps, candidate.media?.bitrateBps)
         return ProviderResult.Success(
             ResolvedStream(
@@ -152,6 +153,36 @@ constructor(
     private fun searchUrl(query: String, page: Int): String {
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
         return "$API_ENDPOINT&__call=search.getResults&p=$page&q=$encoded&n=$PAGE_SIZE"
+    }
+
+    /** Deep links carry provenance but never an expiring media locator, so look up this exact song. */
+    private suspend fun resolveSongMediaUrl(candidate: TrackCandidate): String? {
+        val sourceItemId = candidate.sourceItemId.trim()
+        if (sourceItemId.isEmpty()) return null
+        val encoded = URLEncoder.encode(sourceItemId, StandardCharsets.UTF_8.name())
+        val response =
+            try {
+                transport.execute(
+                    ProviderHttpRequest(
+                        url = "$API_ENDPOINT&__call=song.getDetails&pids=$encoded",
+                        headers = REQUEST_HEADERS,
+                    )
+                )
+            } catch (_: IOException) {
+                return null
+            }
+        if (response.statusCode !in 200..299) return null
+        return runCatching {
+                val body = JSONObject(response.bodyAsUtf8())
+                val song =
+                    body.optJSONArray("songs")?.optJSONObject(0)
+                        ?: body.optJSONObject("data")?.optJSONArray("songs")?.optJSONObject(0)
+                        ?: body.optJSONObject(sourceItemId)
+                        ?: return null
+                val mapped = JioSaavnResponseMapper.mapSong(song.toMap())
+                mapped.takeIf { it.id == sourceItemId }?.mediaUrl
+            }
+            .getOrNull()
     }
 
     private fun selectQuality(preferredBps: Int?, maximumBps: Int?): JioSaavnQuality {

@@ -65,6 +65,8 @@ through Auxio’s existing playback stack.
 - [x] Model permanent Liked, Downloads, and Local collections.
 - [x] Prevent rename/delete for permanent collections.
 - [ ] Preserve user playlist creation, edit, pin, sort, and deletion.
+  - [x] Create Room-backed Shippy playlists from Library while retaining device
+        playlist import as a separate action.
 - [ ] Support Local tracks inside user playlists and queue.
 - [x] Add selected Local source folder management and rescan behavior.
   - Retained Auxio's persisted SAF source/excluded-location selection,
@@ -121,11 +123,15 @@ code/test level, ready for later device verification.
 - [ ] Last.fm authentication boundary and scrobbling.
   - [x] Signed API client, encrypted credential repository, durable FIFO
         outbox, listen policy, and playback lifecycle observer.
-  - [ ] Settings web-auth/credential entry, sign-out, and visible reauth state.
+  - [x] Signed token/browser/session web-auth protocol with runtime-supplied
+        application credentials and no embedded reusable secret.
+  - [x] Settings credential entry, browser authorization, manual reconnect, and
+        sign-out with pending application credentials kept memory-only.
+  - [ ] Surface an invalid-session delivery result as a visible reauth state.
 - [ ] Equalizer and audio options.
 - [ ] Gapless/crossfade/normalization settings according to actual Media3 support.
-- [ ] Sleep timer utility.
-- [ ] Original-link and Shippy-deep-link sharing.
+- [x] Sleep timer utility.
+- [x] Original-link and Shippy-deep-link sharing.
 - [x] MediaSession commands remain consistent with Shippy queue/player.
 - [ ] Notification, lock screen, headset, Bluetooth, and interruptions.
 - [ ] Home-screen widgets using the same state/commands.
@@ -204,6 +210,10 @@ Crew with relay fallback hooks.
   - [x] Bounded encrypted-channel wire frames, exact transfer identity,
         SHA-256 manifest/chunks, receiver reservation, and explicit-resume
         controller foundation.
+  - [x] Route MEDIA frames from the session engine through an authenticated
+        peer lifecycle boundary without adding another transport collector.
+  - [x] Add the authenticated per-peer router for bounded request, manifest,
+        chunk, acknowledgement, retry, reject, cancel, and completion callbacks.
   - [ ] Connect the controller to authenticated peer lifecycle and end-to-end
         request/acknowledgement callbacks.
 - [ ] Implement adaptive supplier selection independent of coordinator.

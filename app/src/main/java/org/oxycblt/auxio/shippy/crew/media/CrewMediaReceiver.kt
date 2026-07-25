@@ -57,10 +57,13 @@ class CrewMediaReceiver(
         if (payload.size != descriptor.sizeBytes || CrewMediaDigest.sha256(payload) != descriptor.integrity) {
             return CrewMediaReceiveResult.Rejected("chunk integrity mismatch")
         }
-        if (assembly.chunks.containsKey(chunk.index)) return CrewMediaReceiveResult.Accepted
-        if (bufferedBytes + payload.size > policy.maxBufferedBytes) return CrewMediaReceiveResult.Retry("receiver window full")
-        assembly.chunks[chunk.index] = payload
-        bufferedBytes += payload.size
+        if (!assembly.chunks.containsKey(chunk.index)) {
+            if (bufferedBytes + payload.size > policy.maxBufferedBytes) {
+                return CrewMediaReceiveResult.Retry("receiver window full")
+            }
+            assembly.chunks[chunk.index] = payload
+            bufferedBytes += payload.size
+        }
         if (assembly.chunks.size != assembly.manifest.chunks.size) return CrewMediaReceiveResult.Accepted
         val objectBytes = ByteArray(assembly.manifest.objectSizeBytes.toInt())
         var offset = 0
@@ -69,18 +72,22 @@ class CrewMediaReceiver(
             payload.copyInto(objectBytes, offset)
             offset += payload.size
         }
-        assemblies.remove(chunk.transfer)
-        reservedBytes -= assembly.manifest.objectSizeBytes
-        bufferedBytes -= objectBytes.size
-        return if (CrewMediaDigest.sha256(objectBytes) != assembly.manifest.objectIntegrity) {
-            CrewMediaReceiveResult.Rejected("object integrity mismatch")
-        } else {
-            runCatching { cache.put(assembly.manifest, objectBytes) }
-                .fold(
-                    onSuccess = { CrewMediaReceiveResult.Complete(assembly.manifest) },
-                    onFailure = { CrewMediaReceiveResult.Retry("temporary cache unavailable") },
-                )
+        if (CrewMediaDigest.sha256(objectBytes) != assembly.manifest.objectIntegrity) {
+            cancel(chunk.transfer)
+            return CrewMediaReceiveResult.Rejected("object integrity mismatch")
         }
+        return runCatching { cache.put(assembly.manifest, objectBytes) }
+            .fold(
+                onSuccess = {
+                    cancel(chunk.transfer)
+                    CrewMediaReceiveResult.Complete(assembly.manifest)
+                },
+                onFailure = {
+                    // Keep the complete bounded assembly so an explicit retry can re-attempt the
+                    // cache write without requiring the peer to restart with another manifest.
+                    CrewMediaReceiveResult.Retry("temporary cache unavailable")
+                },
+            )
     }
 
     fun cancel(transfer: CrewMediaTransferRef): Boolean {

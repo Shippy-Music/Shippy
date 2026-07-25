@@ -53,6 +53,26 @@ class CrewMediaTest {
     }
 
     @Test
+    fun `receiver retains a complete bounded assembly when cache publication must retry`() {
+        val bytes = byteArrayOf(1, 2)
+        val manifest = manifest(bytes)
+        val cache = CrewTemporaryMediaCache(tempDirectory(), maxBytes = 1)
+        cache.beginSession(manifest.transfer.sessionId)
+        val receiver = CrewMediaReceiver(manifest.transfer.sessionId, cache)
+        val finalChunk = chunk(manifest, 0, bytes)
+
+        assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(manifest))
+        assertEquals(
+            CrewMediaReceiveResult.Retry("temporary cache unavailable"),
+            receiver.accept(finalChunk),
+        )
+        assertEquals(
+            CrewMediaReceiveResult.Retry("temporary cache unavailable"),
+            receiver.accept(finalChunk),
+        )
+    }
+
+    @Test
     fun `invalid chunk is rejected and receiver window asks sender to retry`() {
         val manifest = manifest(byteArrayOf(1, 2), byteArrayOf(3, 4, 5))
         val cache = CrewTemporaryMediaCache(tempDirectory())

@@ -251,8 +251,38 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   audio only. Cipher-only formats remain explicitly unsupported.
 - Last.fm now has a signed HTTPS client, Android-Keystore encrypted credential
   boundary, Room v7 durable FIFO scrobble outbox, listen-threshold policy,
-  oldest-first batch delivery, and playback-service observer. The Settings
-  authentication/reauthentication surface is not implemented yet.
+  oldest-first batch delivery including restart flush, and playback-service
+  observer. The Settings authentication/reauthentication surface is not
+  implemented yet.
+- Liked, Downloads, and user-playlist track rows now expose direct download,
+  resume, and retry actions from the same durable state used by the full player.
+  Local rows remain outside provider-download behavior.
+- The player now offers provider-safe original sharing and a bounded,
+  versioned `shippy://track/v1` recording link. Shippy links contain metadata
+  and provider provenance only, are handled before file intents, and never
+  carry media locators, paths, headers, or credentials.
+- The full player now exposes a secondary sleep-timer utility with Off, finish
+  current track, and 15/30/45/60-minute monotonic policies. It pauses through
+  the canonical playback authority rather than creating a second player state.
+- The Crew session engine remains the sole transport collector and now routes
+  MEDIA frames through an authenticated member/transport lifecycle seam.
+  Rejected or failing media handlers detach only the offending peer explicitly.
+- The authenticated Crew media router now binds request/manifest/chunk/
+  acknowledgement/complete/retry/reject/cancel handling to the exact attached
+  member, permits any authorized member to supply media, retains bounded cache
+  assemblies across publication retry, and preserves control connectivity when
+  Push & Pull is locally disabled or a supplier lacks the item. Active-session
+  construction and player/preparation integration remain incomplete.
+- Library's New playlist action now creates a collision-safe, unpinned Shippy
+  Room playlist after native name validation. Auxio's existing Import action
+  remains a separate device-playlist import.
+- Last.fm web-auth protocol support now requests a signed token, creates the
+  fixed browser authorization URL, and exchanges an authorized token for
+  keystore-ready session credentials. No API key or secret is embedded.
+- Last.fm Settings now supports runtime credential entry, one-shot browser
+  authorization, explicit completion after return, reconnect, and confirmed
+  disconnect. Pending key/secret/token state is memory-only; process death
+  during authorization honestly requires starting again.
 - Auxio's existing persisted SAF source/excluded-folder selection, recursive
   local indexing, and forced rescan path satisfy selected Local folder
   management; this foundation is retained instead of duplicated.
@@ -261,14 +291,12 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 - Passing unmanaged existing download-folder audio into the canonical/local
   indexing path without filename-based adoption.
-- Wiring direct download actions into track and collection rows; durable state is
-  already shown on resolved rows.
 - Adding an expandable lyrics surface for compact player configurations and the
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Adding the Last.fm Settings authentication/reauthentication surface and live
-  provider health verification.
+- Surfacing Last.fm invalid-session delivery as a visible reauthorization state
+  and adding live provider health verification.
 - Hosted signaling, remaining transport lifecycle, and active UI behind the new Crew destination.
 - Transport migration after a reconnect.
 - Connecting Push & Pull availability, requests, supplier preparation, prefetch,
@@ -311,8 +339,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Add direct collection-row download actions and unmanaged-folder indexing.
-2. Complete Last.fm Settings authentication/reauthentication and sleep timer.
+1. Complete unmanaged download-folder indexing and Shippy playlist creation.
+2. Surface Last.fm invalid-session delivery as a visible reauthentication state.
 3. Connect Push & Pull requests/suppliers/prefetch/cache to authenticated peers,
    the resolver, and the player.
 4. Wire the secure rejoin connector to real signaling; hosted signaling remains separate.

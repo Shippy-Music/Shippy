@@ -37,6 +37,9 @@ class LastFmScrobbleTracker @Inject constructor(
         attached = true
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         manager.addListener(this)
+        scope?.launch {
+            deliveryMutex.withLock { flush() }
+        }
     }
 
     fun release(manager: PlaybackStateManager) {

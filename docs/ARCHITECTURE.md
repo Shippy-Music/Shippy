@@ -387,10 +387,16 @@ inspects Last.fm's response body even when HTTP succeeds. Network/service errors
 retain the outbox; invalid entries may be dropped; invalid sessions require
 reauthentication.
 
-The API key, API secret, session key, and username enter through a credential
-repository and are stored only in an Android-Keystore AES-GCM `AtomicFile`
-envelope. No reusable Last.fm credential is embedded in the APK. The Settings
-authentication/reauthentication surface is still a separate product slice.
+The user supplies the API key and secret at runtime. The pending application
+credentials and request token remain only in the Settings ViewModel while the
+browser authorization is in progress; process death intentionally restarts that
+flow. Only a successfully exchanged API key, API secret, session key, and
+username enter the credential repository, which stores them in an
+Android-Keystore AES-GCM `AtomicFile` envelope. No reusable Last.fm credential is
+embedded in the APK. Settings supports connect, explicit completion after
+returning from the browser, reconnect, and disconnect. Delivery-level invalid
+session state still needs to be surfaced back to Settings as a reauthorization
+prompt.
 
 ## 11. Crew Architecture
 

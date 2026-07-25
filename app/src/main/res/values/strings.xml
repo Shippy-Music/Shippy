@@ -84,6 +84,7 @@
     <string name="lbl_playlist">Playlist</string>
     <string name="lbl_playlists">Playlists</string>
     <string name="lbl_new_playlist">New playlist</string>
+    <string name="lbl_create">Create</string>
     <string name="lbl_empty_playlist">Empty playlist</string>
     <string name="lbl_imported_playlist">Imported playlist</string>
     <string name="lbl_import">Import</string>
@@ -139,6 +140,13 @@
 
     <string name="lbl_playback">Now playing</string>
     <string name="lbl_equalizer">Equalizer</string>
+    <string name="lbl_sleep_timer">Sleep timer</string>
+    <string name="lbl_sleep_timer_off">Off</string>
+    <string name="lbl_sleep_timer_finish_current">Finish current track</string>
+    <string name="lbl_sleep_timer_15_minutes">15 minutes</string>
+    <string name="lbl_sleep_timer_30_minutes">30 minutes</string>
+    <string name="lbl_sleep_timer_45_minutes">45 minutes</string>
+    <string name="lbl_sleep_timer_60_minutes">60 minutes</string>
     <string name="lbl_play">Play</string>
     <string name="lbl_shuffle">Shuffle</string>
 
@@ -153,6 +161,10 @@
     <string name="lbl_song_detail">View properties</string>
     <string name="lbl_parent_detail">View</string>
     <string name="lbl_share">Share</string>
+    <string name="lbl_share_original_link">Share original link</string>
+    <string name="lbl_share_with_shippy">Share with Shippy</string>
+    <string name="err_shippy_track_link">This Shippy track link is invalid</string>
+    <string name="msg_shippy_track_unavailable">This track is not available to play</string>
 
     <string name="lbl_props">Song properties</string>
     <string name="lbl_path">Path</string>
@@ -270,6 +282,28 @@
     <eat-comment />
 
     <string name="set_root_title">Settings</string>
+
+    <string name="set_lastfm">Last.fm</string>
+    <string name="set_key_lastfm">lastfm</string>
+    <string name="set_lastfm_disconnected">Not connected</string>
+    <string name="set_lastfm_connected">Connected as %1$s</string>
+    <string name="set_lastfm_pending">Browser authorization pending</string>
+    <string name="set_lastfm_working">Workingâ€¦</string>
+    <string name="set_lastfm_api_key">API key</string>
+    <string name="set_lastfm_api_secret">API secret</string>
+    <string name="set_lastfm_connect">Connect Last.fm</string>
+    <string name="set_lastfm_authorize">Authorize in your browser, then return here and tap Last.fm again.</string>
+    <string name="set_lastfm_disconnect">Disconnect</string>
+    <string name="set_lastfm_reconnect">Reconnect</string>
+    <string name="set_lastfm_disconnect_confirm">Disconnect this Last.fm account from Shippy?</string>
+    <string name="set_lastfm_invalid_input">Enter a valid API key and API secret.</string>
+    <string name="set_lastfm_network">Could not reach Last.fm. Try again.</string>
+    <string name="set_lastfm_service">Last.fm is temporarily unavailable. Try again.</string>
+    <string name="set_lastfm_invalid_credentials">Last.fm rejected this API key or secret.</string>
+    <string name="set_lastfm_authorization_expired">Browser authorization was denied or expired. Connect again.</string>
+    <string name="set_lastfm_malformed_response">Last.fm returned an unreadable response. Try again.</string>
+    <string name="set_lastfm_unknown_error">Last.fm could not complete authorization. Try again.</string>
+    <string name="set_lastfm_storage_error">Shippy could not safely save Last.fm credentials. Try again.</string>
 
     <string name="set_ui">Look and feel</string>
     <string name="set_ui_desc">Change the theme and colors of the app</string>
@@ -390,6 +424,7 @@
     <!-- Error Namespace | Error Labels -->
     <string name="err_index_failed">Music loading failed</string>
     <string name="err_import_failed">Unable to import a playlist from this file</string>
+    <string name="err_playlist_name_required">Enter a playlist name</string>
     <string name="err_export_failed">Unable to export the playlist to this file</string>
     <string name="err_share_too_large">This is too large to share</string>
     <string name="err_share_failed">Unable to share this</string>

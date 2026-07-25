@@ -20,14 +20,24 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
+import org.oxycblt.auxio.shippy.domain.CandidateAvailability
+import org.oxycblt.auxio.shippy.domain.CandidateId
+import org.oxycblt.auxio.shippy.domain.CandidateKind
+import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.domain.TrackId
+import org.oxycblt.auxio.shippy.domain.TrackRealm
+import org.oxycblt.auxio.shippy.download.DownloadJobId
 import org.oxycblt.auxio.shippy.download.DownloadState
+import org.oxycblt.auxio.shippy.download.DownloadWorkCoordinator
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
+import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
 import org.oxycblt.auxio.shippy.persistence.library.CanonicalTrackMetadataRepository
 import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
+import org.oxycblt.auxio.shippy.provider.ProviderCapability
+import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 
 /**
  * Read-only detail projection for relationship-backed collections.
@@ -43,6 +53,8 @@ constructor(
     private val repository: LibraryRelationshipRepository,
     private val metadata: CanonicalTrackMetadataRepository,
     private val downloads: DownloadJobRepository,
+    private val downloadCoordinator: DownloadWorkCoordinator,
+    private val providerRegistry: ProviderRegistry,
     private val playback: ShippyPlaybackController,
 ) : ViewModel() {
     fun observe(collectionId: LibraryCollectionId): Flow<ShippyCollectionDetailState> =
@@ -62,7 +74,10 @@ constructor(
                         downloads.observeAll(),
                     ) { playlist, trackIds, tracks, storedDownloads ->
                         playlist?.let {
-                            val rows = trackIds.resolveRows(tracks.toTrackStates(storedDownloads))
+                            val rows =
+                                trackIds.resolveRows(
+                                    tracks.toTrackDownloads(storedDownloads, downloadableProviderIds()),
+                                )
                             ShippyCollectionDetailState.Playlist(it, rows.rows, rows.unresolvedCount)
                         }
                             ?: ShippyCollectionDetailState.Missing
@@ -75,7 +90,8 @@ constructor(
         trackIds: Flow<List<TrackId>>,
     ): Flow<ShippyCollectionDetailState> =
         combine(trackIds, metadata.observeAll(), downloads.observeAll()) { ids, tracks, storedDownloads ->
-            val rows = ids.resolveRows(tracks.toTrackStates(storedDownloads))
+            val rows =
+                ids.resolveRows(tracks.toTrackDownloads(storedDownloads, downloadableProviderIds()))
             ShippyCollectionDetailState.System(title, rows.rows, rows.unresolvedCount)
         }
 
@@ -85,6 +101,26 @@ constructor(
     ) {
         viewModelScope.launch { playback.play(row.track, contextId = collectionId.value) }
     }
+
+    fun performDownloadAction(row: ShippyCollectionTrackRow) {
+        viewModelScope.launch {
+            when (val action = row.download) {
+                is CollectionRowDownloadPresentation.Ready ->
+                    downloadCoordinator.request(row.track, action.candidateId)
+                is CollectionRowDownloadPresentation.Paused -> downloadCoordinator.resume(action.jobId)
+                is CollectionRowDownloadPresentation.Retry -> downloadCoordinator.retry(action.jobId)
+                is CollectionRowDownloadPresentation.Available ->
+                    downloadCoordinator.remove(action.jobId)
+                CollectionRowDownloadPresentation.Hidden,
+                is CollectionRowDownloadPresentation.Working -> Unit
+            }
+        }
+    }
+
+    private fun downloadableProviderIds(): Set<ProviderId> =
+        providerRegistry
+            .supporting(ProviderCapability.DOWNLOAD)
+            .mapTo(mutableSetOf()) { it.descriptor.id }
 
     fun rename(playlistId: LibraryCollectionId, name: String) {
         if (playlistId.isSystem || name.isBlank()) return
@@ -128,11 +164,28 @@ internal sealed interface ShippyCollectionDetailState {
     }
 }
 
-/** A durable track row from the canonical catalog, optionally enriched with download state. */
+/** A durable track row from the canonical catalog with its direct download action state. */
 internal data class ShippyCollectionTrackRow(
     val track: Track,
-    val downloadState: DownloadState?,
+    val download: CollectionRowDownloadPresentation,
 )
+
+internal sealed interface CollectionRowDownloadPresentation {
+    data object Hidden : CollectionRowDownloadPresentation
+
+    data class Ready(val candidateId: CandidateId) : CollectionRowDownloadPresentation
+
+    data class Working(
+        val jobId: DownloadJobId,
+        val state: DownloadState,
+    ) : CollectionRowDownloadPresentation
+
+    data class Paused(val jobId: DownloadJobId) : CollectionRowDownloadPresentation
+
+    data class Retry(val jobId: DownloadJobId) : CollectionRowDownloadPresentation
+
+    data class Available(val jobId: DownloadJobId) : CollectionRowDownloadPresentation
+}
 
 internal data class ResolvedRows(
     val rows: List<ShippyCollectionTrackRow>,
@@ -140,14 +193,56 @@ internal data class ResolvedRows(
 )
 
 internal fun List<TrackId>.resolveRows(
-    persistedTracks: List<Pair<Track, DownloadState?>>,
+    persistedTracks: List<Pair<Track, CollectionRowDownloadPresentation>>,
 ): ResolvedRows {
     val latest = persistedTracks.associateBy({ it.first.id }, { it })
-    val rows = mapNotNull { id -> latest[id]?.let { (track, state) -> ShippyCollectionTrackRow(track, state) } }
+    val rows =
+        mapNotNull { id ->
+            latest[id]?.let { (track, download) -> ShippyCollectionTrackRow(track, download) }
+        }
     return ResolvedRows(rows, size - rows.size)
 }
 
-private fun List<Track>.toTrackStates(
-    downloads: List<org.oxycblt.auxio.shippy.persistence.download.PersistedDownload>,
-): List<Pair<Track, DownloadState?>> =
-    map { it to null } + downloads.sortedBy { it.updatedAtEpochMs }.map { it.track to it.job.state }
+internal fun collectionRowDownloadPresentation(
+    track: Track,
+    download: PersistedDownload?,
+    downloadableProviderIds: Set<ProviderId>,
+): CollectionRowDownloadPresentation {
+    if (track.realm == TrackRealm.LOCAL) return CollectionRowDownloadPresentation.Hidden
+    val candidate =
+        track.candidates.firstOrNull {
+            it.kind == CandidateKind.PROVIDER &&
+                it.providerId in downloadableProviderIds &&
+                it.availability != CandidateAvailability.UNAVAILABLE
+        } ?: return CollectionRowDownloadPresentation.Hidden
+    val job = download?.job ?: return CollectionRowDownloadPresentation.Ready(candidate.id)
+    return when (job.state) {
+        DownloadState.AVAILABLE -> CollectionRowDownloadPresentation.Available(job.id)
+        DownloadState.PAUSED -> CollectionRowDownloadPresentation.Paused(job.id)
+        DownloadState.FAILED_RETRYABLE -> CollectionRowDownloadPresentation.Retry(job.id)
+        DownloadState.REQUESTED,
+        DownloadState.RESOLVING,
+        DownloadState.QUEUED,
+        DownloadState.TRANSFERRING,
+        DownloadState.VERIFYING,
+        DownloadState.FINALIZING -> CollectionRowDownloadPresentation.Working(job.id, job.state)
+        DownloadState.FAILED_FINAL,
+        DownloadState.CANCELLED,
+        DownloadState.REMOVED -> CollectionRowDownloadPresentation.Ready(candidate.id)
+    }
+}
+
+private fun List<Track>.toTrackDownloads(
+    downloads: List<PersistedDownload>,
+    downloadableProviderIds: Set<ProviderId>,
+): List<Pair<Track, CollectionRowDownloadPresentation>> =
+    map { track ->
+        track to collectionRowDownloadPresentation(
+            track,
+            downloads.latestFor(track.id),
+            downloadableProviderIds,
+        )
+    }
+
+private fun List<PersistedDownload>.latestFor(trackId: TrackId): PersistedDownload? =
+    asSequence().filter { it.track.id == trackId }.maxByOrNull(PersistedDownload::updatedAtEpochMs)

@@ -13,12 +13,15 @@ package org.oxycblt.auxio.shippy.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.shippy.domain.LibraryCollection
+import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
 
@@ -31,7 +34,8 @@ import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepositor
 @HiltViewModel
 class LibraryCollectionsViewModel
 @Inject
-constructor(repository: LibraryRelationshipRepository) : ViewModel() {
+constructor(private val repository: LibraryRelationshipRepository) : ViewModel() {
+
     val state: StateFlow<LibraryCollectionsState> =
         combine(
                 repository.observeLikedTrackIds(),
@@ -49,6 +53,33 @@ constructor(repository: LibraryRelationshipRepository) : ViewModel() {
                 SharingStarted.WhileSubscribed(5_000),
                 LibraryCollectionsState(),
             )
+
+    /**
+     * Creates a persisted Shippy playlist when [rawName] has meaningful content.
+     *
+     * The UUID-backed ID deliberately belongs to Shippy's Room library rather than Auxio's
+     * device-playlist store. Returning false lets the UI keep the name dialog open without
+     * creating an invalid playlist.
+     */
+    fun createPlaylist(rawName: CharSequence): Boolean {
+        val playlist = newShippyPlaylistOrNull(rawName) ?: return false
+        viewModelScope.launch { repository.createPlaylist(playlist) }
+        return true
+    }
+}
+
+internal fun newShippyPlaylistOrNull(
+    rawName: CharSequence,
+    idGenerator: () -> UUID = UUID::randomUUID,
+): LibraryCollection.Playlist? {
+    val name = rawName.toString().trim()
+    if (name.isEmpty()) return null
+
+    return LibraryCollection.Playlist(
+        id = LibraryCollectionId("playlist:${idGenerator()}"),
+        displayName = name,
+        isPinned = false,
+    )
 }
 
 internal data class LibraryCollectionsState(

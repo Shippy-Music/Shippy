@@ -37,9 +37,13 @@ import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
+import org.oxycblt.auxio.shippy.crew.media.CrewAuthenticatedMediaLifecycle
+import org.oxycblt.auxio.shippy.crew.media.CrewAuthenticatedMediaPeer
+import org.oxycblt.auxio.shippy.crew.media.CrewMediaFrameResult
 import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportDrop
+import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportState
 import org.oxycblt.auxio.shippy.domain.QueueItem
@@ -56,6 +60,120 @@ class CrewSessionEngineTest {
     private val sessionId = CrewSessionId("crew", protocol)
     private val coordinatorId = CrewMemberId("coordinator", protocol)
     private val memberId = CrewMemberId("member", protocol)
+
+    @Test
+    fun `media routes with its authenticated peer identity`() = runBlocking {
+        val lifecycle = RecordingMediaLifecycle()
+        val engine = engineWithMediaLifecycle(lifecycle)
+        val transport = FakePeerTransport(memberId)
+
+        engine.attachPeer(transport)
+        val frame = CrewTransportFrame(CrewTransportChannel.MEDIA, byteArrayOf(1, 2, 3))
+        transport.receive(frame)
+        val received = withTimeout(2_000) { lifecycle.receivedFrames.receive() }
+
+        assertEquals(listOf(transport), lifecycle.attached.map { it.transport })
+        assertEquals(frame, received.second)
+        assertEquals(memberId, received.first.memberId)
+        assertEquals(transport, received.first.transport)
+        engine.close()
+        assertEquals(listOf(transport), lifecycle.detached.map { it.transport })
+    }
+
+    @Test
+    fun `replacing a peer detaches its media lifecycle exactly once`() = runBlocking {
+        val lifecycle = RecordingMediaLifecycle()
+        val engine = engineWithMediaLifecycle(lifecycle)
+        val first = FakePeerTransport(memberId)
+        val replacement = FakePeerTransport(memberId)
+
+        engine.attachPeer(first)
+        engine.attachPeer(replacement)
+        engine.close()
+
+        assertEquals(
+            listOf(
+                "attach" to first,
+                "detach" to first,
+                "attach" to replacement,
+                "detach" to replacement,
+            ),
+            lifecycle.events,
+        )
+    }
+
+    @Test
+    fun `rejected media detaches only its peer as a protocol violation`() = runBlocking {
+        val lifecycle = RecordingMediaLifecycle(result = CrewMediaFrameResult.Rejected("invalid chunk"))
+        val engine = engineWithMediaLifecycle(lifecycle)
+        val transport = FakePeerTransport(memberId)
+        engine.attachPeer(transport)
+
+        val detachedNotice =
+            async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeout(2_000) {
+                    engine.notices
+                        .filterIsInstance<CrewSessionNotice.PeerDetached>()
+                        .filter { it.memberId == memberId }
+                        .first()
+                }
+            }
+        transport.receive(CrewTransportFrame(CrewTransportChannel.MEDIA, byteArrayOf(9)))
+
+        assertEquals(CrewPeerDetachReason.PROTOCOL_VIOLATION, detachedNotice.await().reason)
+        assertEquals(listOf(transport), lifecycle.detached.map { it.transport })
+        assertEquals(CrewTransportState.CLOSED, transport.state.value)
+        engine.close()
+        assertEquals(listOf(transport), lifecycle.detached.map { it.transport })
+    }
+
+    @Test
+    fun `media lifecycle failure detaches only its peer as an engine failure`() = runBlocking {
+        val lifecycle = RecordingMediaLifecycle(failOnFrame = true)
+        val engine = engineWithMediaLifecycle(lifecycle)
+        val transport = FakePeerTransport(memberId)
+        engine.attachPeer(transport)
+
+        val detachedNotice =
+            async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeout(2_000) {
+                    engine.notices
+                        .filterIsInstance<CrewSessionNotice.PeerDetached>()
+                        .filter { it.memberId == memberId }
+                        .first()
+                }
+            }
+        transport.receive(CrewTransportFrame(CrewTransportChannel.MEDIA, byteArrayOf(9)))
+
+        assertEquals(CrewPeerDetachReason.ENGINE_FAILURE, detachedNotice.await().reason)
+        assertEquals(listOf(transport), lifecycle.detached.map { it.transport })
+        engine.close()
+    }
+
+    @Test
+    fun `control still converges when a media lifecycle is installed`() = runBlocking {
+        val fixture = connectedEngines(state(), state(), coordinatorMediaLifecycle = RecordingMediaLifecycle())
+        val request =
+            CrewActionRequest(
+                id = DurableEventId("media-seam-control"),
+                issuingMemberId = memberId,
+                clientMonotonicTimestampMs = 10,
+                action = CrewAction.QueueReplaced(listOf(queueItem("media-seam"))),
+            )
+
+        assertEquals(CrewSubmitResult.Submitted(request), fixture.member.submit(request, 10))
+        val coordinatorState =
+            withTimeout(2_000) {
+                fixture.coordinator.state.filter { it.lastSequence == EventSequence(1) }.first()
+            }
+        val memberState =
+            withTimeout(2_000) {
+                fixture.member.state.filter { it.lastSequence == EventSequence(1) }.first()
+            }
+
+        assertEquals(coordinatorState, memberState)
+        fixture.close()
+    }
 
     @Test
     fun `member request is sequenced broadcast reconciled and persisted`() = runBlocking {
@@ -228,6 +346,7 @@ class CrewSessionEngineTest {
         coordinatorState: CrewState,
         memberState: CrewState,
         memberToCoordinatorBackpressure: Int = 0,
+        coordinatorMediaLifecycle: CrewAuthenticatedMediaLifecycle? = null,
     ): EngineFixture {
         val coordinatorStore = FakeCheckpointRepository()
         val memberStore = FakeCheckpointRepository()
@@ -237,6 +356,7 @@ class CrewSessionEngineTest {
                 coordinatorId,
                 coordinatorStore,
                 nowEpochMs = { 100 },
+                mediaLifecycle = coordinatorMediaLifecycle,
             )
         val member =
             CrewSessionEngine(
@@ -280,6 +400,15 @@ class CrewSessionEngineTest {
                     CrewMember(memberId, "Member"),
                 ),
             queue = queue,
+        )
+
+    private fun engineWithMediaLifecycle(lifecycle: CrewAuthenticatedMediaLifecycle) =
+        CrewSessionEngine(
+            state(),
+            coordinatorId,
+            FakeCheckpointRepository(),
+            nowEpochMs = { 100 },
+            mediaLifecycle = lifecycle,
         )
 
     private fun queueItem(suffix: String) =
@@ -362,12 +491,47 @@ class CrewSessionEngineTest {
 
         fun remainingBackpressure(): Int = remainingBackpressure.get()
 
+        fun receive(frame: CrewTransportFrame) {
+            check(incomingFrames.trySend(frame).isSuccess)
+        }
+
         override fun bufferedBytes(
             channel: org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
         ): Long = 0
 
         override fun close() {
             mutableState.value = CrewTransportState.CLOSED
+        }
+    }
+
+    private class RecordingMediaLifecycle(
+        private val result: CrewMediaFrameResult = CrewMediaFrameResult.Accepted,
+        private val failOnFrame: Boolean = false,
+    ) : CrewAuthenticatedMediaLifecycle {
+        val attached = mutableListOf<CrewAuthenticatedMediaPeer>()
+        val frames = mutableListOf<Pair<CrewAuthenticatedMediaPeer, CrewTransportFrame>>()
+        val receivedFrames = Channel<Pair<CrewAuthenticatedMediaPeer, CrewTransportFrame>>(1)
+        val detached = mutableListOf<CrewAuthenticatedMediaPeer>()
+        val events = mutableListOf<Pair<String, CrewPeerTransport>>()
+
+        override fun onPeerAttached(peer: CrewAuthenticatedMediaPeer) {
+            attached += peer
+            events += "attach" to peer.transport
+        }
+
+        override fun onMediaFrame(
+            peer: CrewAuthenticatedMediaPeer,
+            frame: CrewTransportFrame,
+        ): CrewMediaFrameResult {
+            if (failOnFrame) error("fixture media failure")
+            frames += peer to frame
+            check(receivedFrames.trySend(peer to frame).isSuccess)
+            return result
+        }
+
+        override fun onPeerDetached(peer: CrewAuthenticatedMediaPeer) {
+            detached += peer
+            events += "detach" to peer.transport
         }
     }
 }

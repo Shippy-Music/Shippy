@@ -9,9 +9,15 @@
         android:icon="@drawable/ic_details_24"
         android:title="@string/lbl_song_detail" />
     <item
-        android:id="@+id/action_provider_track_share"
+        android:id="@+id/action_share_original_link"
         android:icon="@drawable/ic_share_24"
-        android:title="@string/lbl_share" />
+        android:title="@string/lbl_share_original_link"
+        android:visible="false" />
+    <item
+        android:id="@+id/action_share_with_shippy"
+        android:icon="@drawable/ic_share_24"
+        android:title="@string/lbl_share_with_shippy"
+        android:visible="false" />
     <item
         android:id="@+id/action_remove_download"
         android:icon="@drawable/ic_delete_24"

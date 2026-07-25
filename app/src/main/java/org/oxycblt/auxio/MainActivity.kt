@@ -26,13 +26,19 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.view.WindowCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.lifecycleScope
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 import org.oxycblt.auxio.databinding.ActivityMainBinding
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.state.DeferredPlayback
+import org.oxycblt.auxio.shippy.playback.PlaybackStartResult
+import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
+import org.oxycblt.auxio.shippy.share.ShippyTrackLinkCodec
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.isNight
+import org.oxycblt.auxio.util.showToast
 import org.oxycblt.auxio.util.systemBarInsetsCompat
 import timber.log.Timber as L
 
@@ -54,6 +60,7 @@ import timber.log.Timber as L
 class MainActivity : AppCompatActivity() {
     private val playbackModel: PlaybackViewModel by viewModels()
     @Inject lateinit var uiSettings: UISettings
+    @Inject lateinit var shippyPlaybackController: ShippyPlaybackController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -135,6 +142,21 @@ class MainActivity : AppCompatActivity() {
         }
         intent.putExtra(KEY_INTENT_USED, true)
 
+        if (intent.action == Intent.ACTION_VIEW && isShippyTrackLink(intent)) {
+            val track = ShippyTrackLinkCodec.decode(intent.data.toString())
+            if (track == null) {
+                showToast(R.string.err_shippy_track_link)
+            } else {
+                lifecycleScope.launch {
+                    when (shippyPlaybackController.play(track)) {
+                        is PlaybackStartResult.Started -> Unit
+                        is PlaybackStartResult.Failed -> showToast(R.string.msg_shippy_track_unavailable)
+                    }
+                }
+            }
+            return true
+        }
+
         val action =
             when (intent.action) {
                 Intent.ACTION_VIEW -> DeferredPlayback.Open(intent.data ?: return false)
@@ -148,6 +170,9 @@ class MainActivity : AppCompatActivity() {
         playbackModel.playDeferred(action)
         return true
     }
+
+    private fun isShippyTrackLink(intent: Intent): Boolean =
+        intent.data?.scheme == "shippy" && intent.data?.host == "track"
 
     private companion object {
         const val KEY_INTENT_USED = BuildConfig.APPLICATION_ID + ".key.FILE_INTENT_USED"

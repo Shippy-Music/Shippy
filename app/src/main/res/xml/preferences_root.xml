@@ -26,6 +26,11 @@
         app:summary="@string/set_audio_desc"
         app:title="@string/set_audio" />
 
+    <Preference
+        app:key="@string/set_key_lastfm"
+        app:summary="@string/set_lastfm_disconnected"
+        app:title="@string/set_lastfm" />
+
     <PreferenceCategory app:title="@string/set_library">
 
         <org.oxycblt.auxio.settings.ui.WrappedDialogPreference

@@ -24,6 +24,7 @@ import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
@@ -34,6 +35,7 @@ import androidx.navigation.findNavController
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.R as MR
 import com.google.android.material.bottomsheet.BackportBottomSheetBehavior
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
@@ -45,6 +47,7 @@ import java.lang.reflect.Method
 import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.min
+import org.oxycblt.auxio.databinding.DialogPlaylistNameBinding
 import org.oxycblt.auxio.databinding.FragmentMainBinding
 import org.oxycblt.auxio.detail.DetailViewModel
 import org.oxycblt.auxio.detail.Show
@@ -59,6 +62,7 @@ import org.oxycblt.auxio.playback.PlaybackBottomSheetBehavior
 import org.oxycblt.auxio.playback.PlaybackDisplayItem
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.queue.QueueBottomSheetBehavior
+import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
 import org.oxycblt.auxio.ui.BottomSheetContentBehavior
 import org.oxycblt.auxio.ui.DialogAwareNavigationListener
 import org.oxycblt.auxio.ui.UISettings
@@ -91,6 +95,7 @@ class MainFragment :
     private val homeModel: HomeViewModel by activityViewModels()
     private val listModel: ListViewModel by activityViewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
+    private val libraryCollectionsModel: LibraryCollectionsViewModel by activityViewModels()
     private var sheetBackCallback: SheetBackPressedCallback? = null
     private var detailBackCallback: DetailBackPressedCallback? = null
     private var selectionBackCallback: SelectionBackPressedCallback? = null
@@ -407,8 +412,8 @@ class MainFragment :
     override fun onActionSelected(actionItem: SpeedDialActionItem): Boolean {
         when (actionItem.id) {
             R.id.action_new_playlist -> {
-                L.d("Creating playlist")
-                musicModel.createPlaylist()
+                L.d("Creating Shippy playlist")
+                showCreateShippyPlaylistDialog()
             }
             R.id.action_import_playlist -> {
                 L.d("Importing playlist")
@@ -420,6 +425,31 @@ class MainFragment :
         // Adapted from Material Files: https://github.com/zhanghai/MaterialFiles
         requireBinding().homeNewPlaylistFab.close()
         return true
+    }
+
+    private fun showCreateShippyPlaylistDialog() {
+        if (!isAdded) return
+
+        val dialogBinding = DialogPlaylistNameBinding.inflate(layoutInflater)
+        val dialog =
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.lbl_new_playlist)
+                .setView(dialogBinding.root)
+                .setNegativeButton(R.string.lbl_cancel, null)
+                .setPositiveButton(R.string.lbl_create, null)
+                .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (libraryCollectionsModel.createPlaylist(dialogBinding.playlistName.text.orEmpty())) {
+                    dialog.dismiss()
+                } else {
+                    dialogBinding.playlistContainer.error = getString(R.string.err_playlist_name_required)
+                    dialogBinding.playlistName.requestFocus()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun onExploreNavigate() {

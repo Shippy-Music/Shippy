@@ -18,14 +18,22 @@
  
 package org.oxycblt.auxio.settings
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.google.android.material.transition.MaterialFadeThrough
 import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
@@ -50,6 +58,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private val musicModel: MusicViewModel by activityViewModels()
+    private val lastFmModel: LastFmSettingsViewModel by viewModels()
     @Inject lateinit var downloadStorage: SafDownloadStorage
     @Inject lateinit var downloadDestinationReconciler: DownloadDestinationReconciler
     private val downloadDestinationLauncher =
@@ -77,6 +86,23 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     override fun onResume() {
         super.onResume()
         lifecycleScope.launch { refreshDownloadDestination() }
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { lastFmModel.state.collect(::renderLastFm) }
+                launch {
+                    lastFmModel.events.collect { event ->
+                        when (event) {
+                            LastFmSettingsEvent.ShowCredentialsDialog -> showLastFmCredentialsDialog()
+                            is LastFmSettingsEvent.OpenBrowser -> openLastFmAuthorization(event.authorizationUrl)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
@@ -114,6 +140,12 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
             getString(R.string.set_key_download_destination_picker) -> {
                 downloadDestinationLauncher.launch(null)
             }
+            getString(R.string.set_key_lastfm) -> {
+                when (lastFmModel.state.value) {
+                    is LastFmSettingsState.Connected -> showLastFmConnectedActions()
+                    else -> lastFmModel.onPreferenceClicked()
+                }
+            }
             getString(R.string.set_key_reindex) -> musicModel.refresh()
             getString(R.string.set_key_rescan) -> musicModel.rescan()
             else -> return super.onPreferenceTreeClick(preference)
@@ -145,4 +177,94 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         downloadDestinationReconciler.reconcile()
         updateDownloadDestinationSummary()
     }
+
+    private fun renderLastFm(state: LastFmSettingsState) {
+        val preference = findPreference<Preference>(getString(R.string.set_key_lastfm)) ?: return
+        preference.isEnabled = state != LastFmSettingsState.Working
+        preference.summary =
+            when (state) {
+                LastFmSettingsState.Working -> getString(R.string.set_lastfm_working)
+                LastFmSettingsState.Disconnected -> getString(R.string.set_lastfm_disconnected)
+                LastFmSettingsState.PendingAuthorization -> getString(R.string.set_lastfm_pending)
+                is LastFmSettingsState.Connected ->
+                    getString(R.string.set_lastfm_connected, state.username)
+                is LastFmSettingsState.Error -> getString(state.error.summaryRes)
+            }
+    }
+
+    private fun showLastFmCredentialsDialog() {
+        val content = layoutInflater.inflate(R.layout.dialog_lastfm_credentials, null)
+        val keyContainer = content.findViewById<TextInputLayout>(R.id.lastfm_api_key_container)
+        val secretContainer = content.findViewById<TextInputLayout>(R.id.lastfm_api_secret_container)
+        val key = content.findViewById<TextInputEditText>(R.id.lastfm_api_key)
+        val secret = content.findViewById<TextInputEditText>(R.id.lastfm_api_secret)
+        val dialog =
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.set_lastfm_connect)
+                .setMessage(R.string.set_lastfm_authorize)
+                .setView(content)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.set_lastfm_connect, null)
+                .create()
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val apiKey = key.text?.toString().orEmpty()
+                val apiSecret = secret.text?.toString().orEmpty()
+                keyContainer.error = null
+                secretContainer.error = null
+                if (!LastFmSettingsInput.isValid(apiKey) || !LastFmSettingsInput.isValid(apiSecret)) {
+                    val message = getString(R.string.set_lastfm_invalid_input)
+                    if (!LastFmSettingsInput.isValid(apiKey)) keyContainer.error = message
+                    if (!LastFmSettingsInput.isValid(apiSecret)) secretContainer.error = message
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                lastFmModel.beginAuthorization(apiKey, apiSecret)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showLastFmConnectedActions() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.set_lastfm)
+            .setItems(arrayOf(getString(R.string.set_lastfm_reconnect), getString(R.string.set_lastfm_disconnect))) { _, index ->
+                if (index == 0) {
+                    lastFmModel.reconnect()
+                } else {
+                    showLastFmDisconnectConfirmation()
+                }
+            }
+            .show()
+    }
+
+    private fun showLastFmDisconnectConfirmation() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.set_lastfm_disconnect)
+            .setMessage(R.string.set_lastfm_disconnect_confirm)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.set_lastfm_disconnect) { _, _ -> lastFmModel.disconnect() }
+            .show()
+    }
+
+    private fun openLastFmAuthorization(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: Exception) {
+            requireContext().showToast(R.string.err_no_app)
+        }
+    }
 }
+
+private val LastFmSettingsError.summaryRes: Int
+    get() =
+        when (this) {
+            LastFmSettingsError.INVALID_INPUT -> R.string.set_lastfm_invalid_input
+            LastFmSettingsError.NETWORK -> R.string.set_lastfm_network
+            LastFmSettingsError.SERVICE -> R.string.set_lastfm_service
+            LastFmSettingsError.INVALID_CREDENTIALS -> R.string.set_lastfm_invalid_credentials
+            LastFmSettingsError.AUTHORIZATION_EXPIRED -> R.string.set_lastfm_authorization_expired
+            LastFmSettingsError.MALFORMED_RESPONSE -> R.string.set_lastfm_malformed_response
+            LastFmSettingsError.UNKNOWN -> R.string.set_lastfm_unknown_error
+            LastFmSettingsError.STORAGE -> R.string.set_lastfm_storage_error
+        }

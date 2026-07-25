@@ -5,5 +5,9 @@
         android:id="@+id/action_open_equalizer"
         android:icon="@drawable/ic_config_24"
         android:title="@string/lbl_equalizer"
-        app:showAsAction="always" />
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_sleep_timer"
+        android:title="@string/lbl_sleep_timer"
+        app:showAsAction="never" />
 </menu>

@@ -60,6 +60,57 @@ class JioSaavnProviderResolveTest {
         )
     }
 
+    @Test
+    fun `resolve looks up exact song details when a shared candidate has no locator`() = runBlocking {
+        var requestedUrl: String? = null
+        val provider =
+            JioSaavnProvider(
+                object : ProviderHttpTransport {
+                    override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse {
+                        requestedUrl = request.url
+                        return ProviderHttpResponse(
+                            statusCode = 200,
+                            headers = emptyMap(),
+                            body =
+                                """{"songs":[{"id":"track","title":"Fixture","subtitle":"Artist","encrypted_media_url":"GcRAsZwDauvrg33FNzm387nSeNKjABoQsa1xxv++mkrP3qvFt5bTKvUcZXRcCSW8"}]}"""
+                                    .toByteArray(),
+                        )
+                    }
+                }
+            )
+
+        val result = provider.resolve(candidate(maximumBitrate = 160_000).copy(locator = null), StreamConstraints())
+
+        assertTrue(result is ProviderResult.Success)
+        assertTrue(requestedUrl!!.contains("__call=song.getDetails"))
+        assertTrue(requestedUrl!!.contains("pids=track"))
+    }
+
+    @Test
+    fun `resolve accepts the donor keyed exact song response`() = runBlocking {
+        val provider =
+            JioSaavnProvider(
+                object : ProviderHttpTransport {
+                    override suspend fun execute(request: ProviderHttpRequest) =
+                        ProviderHttpResponse(
+                            statusCode = 200,
+                            headers = emptyMap(),
+                            body =
+                                """{"track":{"id":"track","title":"Fixture","subtitle":"Artist","encrypted_media_url":"GcRAsZwDauvrg33FNzm387nSeNKjABoQsa1xxv++mkrP3qvFt5bTKvUcZXRcCSW8"}}"""
+                                    .toByteArray(),
+                        )
+                }
+            )
+
+        val result =
+            provider.resolve(
+                candidate(maximumBitrate = 160_000).copy(locator = null),
+                StreamConstraints(),
+            )
+
+        assertTrue(result is ProviderResult.Success)
+    }
+
     private fun candidate(
         maximumBitrate: Int,
         providerId: ProviderId = ProviderId("jiosaavn"),
