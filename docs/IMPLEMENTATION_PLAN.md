@@ -136,6 +136,8 @@ code/test level, ready for later device verification.
 
 - [x] Implement protocol-versioned Crew domain module.
 - [x] Implement canonical state, ordered/idempotent events, snapshots, and gaps.
+- [x] Implement authenticated equal-member request sequencing with bounded
+      duplicate replay and requester/publisher separation.
 - [ ] Implement equal member control and optimistic reconciliation.
 - [ ] Implement coordinator terms, election, handoff, and stale-message rejection.
 - [x] Implement queue replacement from any member’s song/playlist selection.

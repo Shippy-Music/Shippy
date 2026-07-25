@@ -399,6 +399,14 @@ safety and waits rather than allowing two coordinators.
 
 This layer has deterministic JVM tests.
 
+`CrewCoordinatorSequencer` is the single request-to-event serialization point
+for the active coordinator. It accepts an action only from the authenticated
+member named by the request, keeps that issuer distinct from the coordinator
+publisher, assigns the next term/sequence, applies the reducer before
+publication, and reuses the request ID as the durable event ID for optimistic
+reconciliation. Rejected actions do not consume sequence numbers, and bounded
+recent results make retries idempotent even across a graceful handoff.
+
 ### Transport adapters
 
 The 2026-07-25 focused spike selected:

@@ -91,6 +91,13 @@ Coordinator transfer:
 
 The UI does not label the coordinator “host” or give it exclusive controls.
 
+Every member action first carries a stable request ID and authenticated issuer.
+The coordinator sequencer preserves that issuer, publishes under its own
+authenticated identity, and assigns the one canonical term/sequence. The same
+request ID becomes the durable event ID so an optimistic client can reconcile
+the exact accepted action. Duplicate retries return the original event;
+rejected actions do not create gaps in the event sequence.
+
 ## 5. Canonical Session State
 
 ```text
