@@ -13,6 +13,8 @@ package org.oxycblt.auxio.shippy.persistence.library
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
+import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointDao
+import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointEntity
 import org.oxycblt.auxio.shippy.persistence.download.DownloadCandidateEntity
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobEntity
@@ -28,8 +30,9 @@ import org.oxycblt.auxio.shippy.lyrics.LyricsCacheEntity
             DownloadJobEntity::class,
             DownloadCandidateEntity::class,
             LyricsCacheEntity::class,
+            CrewCheckpointEntity::class,
         ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
@@ -38,6 +41,8 @@ internal abstract class ShippyDatabase : RoomDatabase() {
     abstract fun downloadJobDao(): DownloadJobDao
 
     abstract fun lyricsCacheDao(): LyricsCacheDao
+
+    abstract fun crewCheckpointDao(): CrewCheckpointDao
 
     companion object {
         val MIGRATION_1_2 =
@@ -220,6 +225,26 @@ internal abstract class ShippyDatabase : RoomDatabase() {
                 database.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_lyrics_cache_cachedAtEpochMs` " +
                         "ON `lyrics_cache` (`cachedAtEpochMs`)"
+                )
+            }
+
+        val MIGRATION_4_5 =
+            Migration(4, 5) { database ->
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `crew_active_checkpoint` (
+                        `slot` TEXT NOT NULL,
+                        `sessionId` TEXT NOT NULL,
+                        `protocolVersion` INTEGER NOT NULL,
+                        `coordinatorTerm` INTEGER NOT NULL,
+                        `eventSequence` INTEGER NOT NULL,
+                        `snapshotPayload` BLOB NOT NULL,
+                        `payloadSha256` BLOB NOT NULL,
+                        `updatedAtEpochMs` INTEGER NOT NULL,
+                        PRIMARY KEY(`slot`)
+                    )
+                    """
+                        .trimIndent()
                 )
             }
     }

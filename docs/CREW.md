@@ -552,6 +552,22 @@ dropped. Clock/reaction overflow is intentionally lossy. Media overflow emits a
 bounded drop signal for manifest/chunk acknowledgement and retry instead of
 terminating the Crew connection.
 
+Durable control messages now have one explicit versioned binary representation:
+member action requests, coordinator events, snapshot requests, snapshot
+installs with optional election votes, and request rejection receipts. The
+codec represents complete canonical queue/track/candidate metadata with strict
+per-field, collection, and total-message bounds. Logical messages larger than
+one 64 KiB control-channel payload are split into digest-bound frames and
+reassembled under fixed in-flight byte/count/expiry limits. This is control
+message framing only; authenticated peer identity and event authority remain
+session-engine checks.
+
+The active process-restart checkpoint uses the same snapshot representation in
+one integrity-checked Room record. Its separately indexed session, protocol,
+term, and sequence must agree with the decoded snapshot. Media is not persisted
+there, and invitation/rejoin secrets still require the later Android secure
+credential boundary.
+
 This decision and the join/NSD adapters satisfy the architecture gate at
 source/API level only. Authenticated local signaling sockets are implemented and
 have loopback tests authored, but are not compiled or device-proven. NAT, TURN,

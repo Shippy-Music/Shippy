@@ -144,7 +144,9 @@ code/test level, ready for later device verification.
 - [x] Implement availability summaries per member and queue item.
 - [x] Implement monotonic session clock probes and scheduled playback decisions.
 - [x] Implement readiness, buffering, late join, and drift decision logic.
-- [ ] Implement membership lifecycle and persistent active-session checkpoint.
+- [ ] Implement membership lifecycle.
+- [x] Implement bounded persistent active-session checkpoint format and Room
+      store; secure rejoin credentials remain part of session orchestration.
 - [x] Implement ephemeral reactions.
 
 **Validation:**
@@ -165,6 +167,8 @@ code/test level, ready for later device verification.
 - [ ] Implement remote signaling and direct P2P candidate negotiation.
 - [ ] Implement reconnection and network-change handling.
 - [x] Separate durable control, transient reaction, clock, and media channels.
+- [x] Implement bounded durable-control serialization and multi-frame
+      reassembly for requests, events, rejections, and snapshots.
 - [ ] Expose only clear join/connection states in UI.
 
 **Validation:**

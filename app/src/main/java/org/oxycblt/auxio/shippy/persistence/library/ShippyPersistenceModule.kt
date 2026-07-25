@@ -18,6 +18,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointDao
+import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
+import org.oxycblt.auxio.shippy.persistence.crew.RoomCrewCheckpointRepository
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.RoomDownloadJobRepository
@@ -38,6 +41,7 @@ object ShippyPersistenceModule {
                 ShippyDatabase.MIGRATION_1_2,
                 ShippyDatabase.MIGRATION_2_3,
                 ShippyDatabase.MIGRATION_3_4,
+                ShippyDatabase.MIGRATION_4_5,
             )
             .build()
 
@@ -58,6 +62,16 @@ object ShippyPersistenceModule {
     @Provides
     internal fun lyricsCacheDao(database: ShippyDatabase): LyricsCacheDao =
         database.lyricsCacheDao()
+
+    @Provides
+    internal fun crewCheckpointDao(database: ShippyDatabase): CrewCheckpointDao =
+        database.crewCheckpointDao()
+
+    @Provides
+    @Singleton
+    internal fun crewCheckpointRepository(
+        repository: RoomCrewCheckpointRepository
+    ): CrewCheckpointRepository = repository
 
     @Provides
     @Singleton

@@ -273,6 +273,13 @@ Persistence rules:
 - Crew media bytes are outside Room in bounded temporary files; Room stores only
   session-scoped manifests.
 
+The active Crew checkpoint is one replaceable Room row containing a versioned
+snapshot payload, indexed session/term/sequence identity, update time, and a
+SHA-256 integrity value. Loading cross-checks the indexed identity against the
+decoded snapshot and removes a corrupt row only if no newer checkpoint replaced
+it. Session secrets and rejoin credentials are deliberately not stored in this
+row; their later persistence belongs in Android secure storage.
+
 ## 8. Provider Platform
 
 ```kotlin
@@ -412,6 +419,16 @@ intent is confirmed only by the exact durable ID, issuer, and action; ID reuse
 with different content becomes a visible protocol conflict. Coordinator
 rejection, timeout, and session replacement return explicit rollback reasons
 instead of leaving speculative UI state behind.
+
+`CrewControlCodec` is the stable binary boundary between that pure state model
+and all transports. It encodes requests, accepted events, snapshot requests,
+authenticated snapshot installs/election votes, and explicit request
+rejections. Every string, collection, queue, candidate list, and logical message
+is bounded. `CrewControlFramer` splits a logical message into SHA-256-bound
+reliable control frames below the 64 KiB data-channel limit; the reassembler
+bounds concurrent assemblies, memory, chunk count, and lifetime before decoding.
+This permits real playlist replacement and snapshots without pretending every
+valid session fits in one WebRTC frame.
 
 ### Transport adapters
 
