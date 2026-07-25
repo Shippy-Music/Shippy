@@ -565,8 +565,12 @@ session-engine checks.
 The active process-restart checkpoint uses the same snapshot representation in
 one integrity-checked Room record. Its separately indexed session, protocol,
 term, and sequence must agree with the decoded snapshot. Media is not persisted
-there, and invitation/rejoin secrets still require the later Android secure
-credential boundary.
+there. Invitation/rejoin secrets live only in a single Android-Keystore-encrypted active
+lease outside Room and generic preferences. Restore accepts the lease only when it is
+unexpired and matches the persisted session/member checkpoint; orphaned, mismatched,
+expired, locally revoked, or authentically refused leases are discarded. A process/network
+restore only reconnects by attaching an authenticated transport to the ordinary session engine,
+which retains the existing checkpoint, ordered-event, reconnect-grace, and election rules.
 
 The active session engine now connects these messages to authenticated peer
 transports. A member request is queued only to the current coordinator; the

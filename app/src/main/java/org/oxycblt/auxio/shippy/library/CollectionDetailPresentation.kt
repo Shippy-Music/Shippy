@@ -17,7 +17,7 @@ import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 internal fun LibraryCollectionId.usesAuxioLocalSurface(): Boolean =
     value == "system:${SystemCollectionKind.LOCAL.id}"
 
-/** A screen must not turn unresolved canonical IDs into fake song rows. */
+/** A screen may show only persisted canonical metadata; unresolved IDs remain explicitly honest. */
 internal fun ShippyCollectionDetailState.messageKind(): CollectionDetailMessage =
     when {
         this is ShippyCollectionDetailState.Missing -> CollectionDetailMessage.DELETED

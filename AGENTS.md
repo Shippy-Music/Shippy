@@ -45,9 +45,23 @@ acceptance belong to the owner handoff unless the owner explicitly changes this.
 
 ## Parallel Work
 
-At most two persistent subagents may exist at once. Use them only for truly
-independent work. When needed, use GPT-5.6 Sol at medium reasoning. Give each
-agent disjoint files or read-only tasks.
+At most four active agents may exist at once, including the root agent. Use
+subagents only for tightly scoped code-writing work whose product intent,
+architecture boundary, dependencies, integration path, and acceptance checks
+have already been decided by the root agent.
+
+- The root agent plans and specifies the slice before delegation.
+- GPT-5.6 Terra at medium reasoning is the default implementation worker.
+- Give workers disjoint files or explicitly coordinated boundaries.
+- Workers do not make new product or architecture decisions and do not expand
+  scope.
+- While workers implement, the root agent continues independent planning,
+  inspection, or review so delivery does not stall.
+- The root agent reviews every returned patch, fixes integration issues,
+  reconciles canonical documentation, runs the available verification, and owns
+  commits.
+- Do not delegate vague exploration, whole-product ownership, or work whose
+  future integration is unclear merely to increase concurrency.
 
 ## Progress Ledger
 

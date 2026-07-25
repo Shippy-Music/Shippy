@@ -31,8 +31,10 @@ import org.oxycblt.auxio.shippy.lyrics.LyricsCacheEntity
             DownloadCandidateEntity::class,
             LyricsCacheEntity::class,
             CrewCheckpointEntity::class,
+            CanonicalTrackEntity::class,
+            CanonicalTrackCandidateEntity::class,
         ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
@@ -43,6 +45,7 @@ internal abstract class ShippyDatabase : RoomDatabase() {
     abstract fun lyricsCacheDao(): LyricsCacheDao
 
     abstract fun crewCheckpointDao(): CrewCheckpointDao
+    abstract fun canonicalTrackMetadataDao(): CanonicalTrackMetadataDao
 
     companion object {
         val MIGRATION_1_2 =
@@ -246,6 +249,13 @@ internal abstract class ShippyDatabase : RoomDatabase() {
                     """
                         .trimIndent()
                 )
+            }
+
+        val MIGRATION_5_6 =
+            Migration(5, 6) { database ->
+                database.execSQL("""CREATE TABLE IF NOT EXISTS `canonical_track` (`trackId` TEXT NOT NULL, `realm` TEXT NOT NULL, `title` TEXT NOT NULL, `artists` TEXT NOT NULL, `album` TEXT, `durationMs` INTEGER, `versionLabel` TEXT, `explicit` INTEGER, `live` INTEGER NOT NULL, `remix` INTEGER NOT NULL, `artwork` TEXT, PRIMARY KEY(`trackId`))""")
+                database.execSQL("""CREATE TABLE IF NOT EXISTS `canonical_track_candidate` (`trackId` TEXT NOT NULL, `candidateId` TEXT NOT NULL, `position` INTEGER NOT NULL, `kind` TEXT NOT NULL, `sourceId` TEXT NOT NULL, `sourceItemId` TEXT NOT NULL, `availability` TEXT NOT NULL, `locator` TEXT, `providerId` TEXT, `mimeType` TEXT, `container` TEXT, `bitrateBps` INTEGER, `contentLength` INTEGER, PRIMARY KEY(`trackId`, `candidateId`), FOREIGN KEY(`trackId`) REFERENCES `canonical_track`(`trackId`) ON UPDATE NO ACTION ON DELETE CASCADE)""")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_canonical_track_candidate_trackId` ON `canonical_track_candidate` (`trackId`)")
             }
     }
 }

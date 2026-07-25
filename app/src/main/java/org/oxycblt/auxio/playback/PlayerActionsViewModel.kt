@@ -95,7 +95,7 @@ constructor(
         val actionState = state.value
         val track = actionState.track ?: return
         if (actionState.liked) return
-        viewModelScope.launch { relationships.setLiked(track.id, true) }
+        viewModelScope.launch { relationships.setLiked(track, true) }
     }
 
     fun updateSavedDestinations(
@@ -104,8 +104,8 @@ constructor(
     ) {
         val track = state.value.track ?: return
         viewModelScope.launch {
-            relationships.setLiked(track.id, liked)
-            relationships.replacePlaylistMemberships(track.id, playlistIds)
+            relationships.setLiked(track, liked)
+            relationships.replacePlaylistMemberships(track, playlistIds)
         }
     }
 

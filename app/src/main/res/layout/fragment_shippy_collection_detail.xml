@@ -61,6 +61,13 @@
                 android:textAppearance="?attr/textAppearanceBodyLarge"
                 android:textColor="?android:attr/textColorSecondary" />
 
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/shippy_collection_tracks"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_medium"
+                android:nestedScrollingEnabled="false" />
+
         </LinearLayout>
 
     </androidx.core.widget.NestedScrollView>

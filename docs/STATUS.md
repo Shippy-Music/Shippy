@@ -229,23 +229,35 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   after a strict majority. A snapshot that arrives before all of its certificate
   votes is held once and retried as those independently authenticated votes
   arrive.
+- Active Crew restart credentials now use a single Android-Keystore AES-GCM lease
+  outside Room/preferences. A bounded codec/policy pairs it with the checkpoint,
+  bounds corrupt local envelopes before allocation, expires or revokes it
+  deterministically, and reconnects only through the authenticated session-engine
+  seam without relaxing liveness/election rules.
+- Relationship-backed Liked, Downloads, and user-playlist details now resolve
+  ordered playable rows from a durable canonical Track catalog. Saving a provider
+  track persists its metadata independently of download state; unknown legacy IDs
+  remain explicitly unresolved and Local keeps the exact Auxio route.
+- Push & Pull now has an active-Crew-only policy, path/secret-free bounded media
+  manifest/chunk codec, per-chunk and whole-object integrity, media-channel adapter,
+  receiver backpressure, and API-24-compatible temporary session cache cleanup.
+  Supplier requests, prefetch integration, redistribution, and Media3 playback are
+  still incomplete.
 
 ## In Progress
 
-- Resolving canonical track metadata into playable permanent-collection and mixed
-  Shippy-playlist rows; current detail routes deliberately stop at truthful
-  relationship counts.
 - Passing unmanaged existing download-folder audio into the canonical/local
   indexing path without filename-based adoption.
-- Wiring direct download state/actions into track and collection rows.
+- Wiring direct download actions into track and collection rows; durable state is
+  already shown on resolved rows.
 - Adding an expandable lyrics surface for compact player configurations and the
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Secure rejoin credentials, hosted signaling, remaining transport lifecycle,
-  and active UI behind the new Crew destination.
-- Secure active-session rejoin credentials and transport migration after a
-  reconnect.
+- Hosted signaling, remaining transport lifecycle, and active UI behind the new Crew destination.
+- Transport migration after a reconnect.
+- Connecting Push & Pull availability, requests, supplier preparation, prefetch,
+  cache candidates, and the one player authority around the new bounded media seam.
 
 ## Not Started
 
@@ -284,10 +296,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Resolve canonical metadata into permanent collection and mixed-playlist rows.
-2. Add unmanaged-folder indexing and direct collection-row download state.
-3. Add the next viable provider/YouTube adapter and Musixmatch broker boundary.
-4. Add secure Crew rejoin credentials and hosted signaling exchange.
+1. Add direct collection-row download actions and unmanaged-folder indexing.
+2. Add the next viable provider/YouTube adapter and Last.fm scrobble boundary.
+3. Connect Push & Pull requests/suppliers/prefetch/cache to the resolver and player.
+4. Wire the secure rejoin connector to real signaling; hosted signaling remains separate.
 
 ## Verification Ledger
 
@@ -298,8 +310,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics/Crew-checkpoint persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
-| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint persistence/session convergence/signaling/direct-connection/transport policies |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media foundation, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
+| New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track migration/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache persistence/session convergence/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
 | Static structure | Parsed | Graphify 351-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

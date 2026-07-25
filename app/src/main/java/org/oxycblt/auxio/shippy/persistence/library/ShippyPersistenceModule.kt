@@ -21,6 +21,8 @@ import javax.inject.Singleton
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointDao
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
 import org.oxycblt.auxio.shippy.persistence.crew.RoomCrewCheckpointRepository
+import org.oxycblt.auxio.shippy.persistence.crew.AndroidKeystoreCrewRejoinLeaseStore
+import org.oxycblt.auxio.shippy.persistence.crew.CrewRejoinLeaseStore
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.RoomDownloadJobRepository
@@ -42,6 +44,7 @@ object ShippyPersistenceModule {
                 ShippyDatabase.MIGRATION_2_3,
                 ShippyDatabase.MIGRATION_3_4,
                 ShippyDatabase.MIGRATION_4_5,
+                ShippyDatabase.MIGRATION_5_6,
             )
             .build()
 
@@ -60,6 +63,16 @@ object ShippyPersistenceModule {
         database.downloadJobDao()
 
     @Provides
+    internal fun canonicalTrackMetadataDao(database: ShippyDatabase): CanonicalTrackMetadataDao =
+        database.canonicalTrackMetadataDao()
+
+    @Provides
+    @Singleton
+    internal fun canonicalTrackMetadataRepository(
+        repository: RoomCanonicalTrackMetadataRepository
+    ): CanonicalTrackMetadataRepository = repository
+
+    @Provides
     internal fun lyricsCacheDao(database: ShippyDatabase): LyricsCacheDao =
         database.lyricsCacheDao()
 
@@ -72,6 +85,12 @@ object ShippyPersistenceModule {
     internal fun crewCheckpointRepository(
         repository: RoomCrewCheckpointRepository
     ): CrewCheckpointRepository = repository
+
+    @Provides
+    @Singleton
+    internal fun crewRejoinLeaseStore(
+        store: AndroidKeystoreCrewRejoinLeaseStore
+    ): CrewRejoinLeaseStore = store
 
     @Provides
     @Singleton

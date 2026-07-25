@@ -12,6 +12,14 @@ import org.junit.Test
 import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
+import org.oxycblt.auxio.shippy.domain.CandidateAvailability
+import org.oxycblt.auxio.shippy.domain.CandidateId
+import org.oxycblt.auxio.shippy.domain.CandidateKind
+import org.oxycblt.auxio.shippy.domain.Track
+import org.oxycblt.auxio.shippy.domain.TrackCandidate
+import org.oxycblt.auxio.shippy.domain.TrackId
+import org.oxycblt.auxio.shippy.domain.TrackRealm
+import org.oxycblt.auxio.shippy.download.DownloadState
 
 class CollectionDetailPresentationTest {
     @Test
@@ -25,11 +33,11 @@ class CollectionDetailPresentationTest {
     fun `unresolved relationship IDs never become fake song rows`() {
         assertEquals(
             CollectionDetailMessage.METADATA_PENDING,
-            ShippyCollectionDetailState.System("Liked", unresolvedTrackCount = 3).messageKind(),
+            ShippyCollectionDetailState.System("Liked", emptyList(), unresolvedTrackCount = 3).messageKind(),
         )
         assertEquals(
             CollectionDetailMessage.EMPTY,
-            ShippyCollectionDetailState.System("Downloads", unresolvedTrackCount = 0).messageKind(),
+            ShippyCollectionDetailState.System("Downloads", emptyList(), unresolvedTrackCount = 0).messageKind(),
         )
         assertEquals(CollectionDetailMessage.DELETED, ShippyCollectionDetailState.Missing.messageKind())
     }
@@ -43,10 +51,48 @@ class CollectionDetailPresentationTest {
                 isPinned = true,
             )
 
-        val state = ShippyCollectionDetailState.Playlist(playlist, unresolvedTrackCount = 2)
+        val state = ShippyCollectionDetailState.Playlist(playlist, emptyList(), unresolvedTrackCount = 2)
 
         assertEquals("Road trip", state.title)
         assertTrue(state.playlist.isPinned)
         assertEquals(CollectionDetailMessage.METADATA_PENDING, state.messageKind())
+    }
+
+    @Test
+    fun `persisted canonical metadata creates playable rows in collection order`() {
+        val first = track("provider:first")
+        val resolved =
+            listOf(TrackId("provider:missing"), first.id)
+                .resolveRows(listOf(first to DownloadState.AVAILABLE))
+
+        assertEquals(listOf(first), resolved.rows.map { it.track })
+        assertEquals(DownloadState.AVAILABLE, resolved.rows.single().downloadState)
+        assertEquals(1, resolved.unresolvedCount)
+    }
+
+    @Test
+    fun `saved provider track remains a playable row without a download`() {
+        val saved = track("provider:saved")
+
+        val resolved = listOf(saved.id).resolveRows(listOf(saved to null))
+
+        assertEquals(saved, resolved.rows.single().track)
+        assertEquals(null, resolved.rows.single().downloadState)
+        assertEquals(0, resolved.unresolvedCount)
+    }
+
+    private fun track(id: String): Track {
+        val trackId = TrackId(id)
+        return Track(
+            id = trackId,
+            realm = TrackRealm.PROVIDER,
+            title = "Saved track",
+            artists = listOf("Artist"),
+            candidates = listOf(
+                TrackCandidate(CandidateId("candidate:$id"), trackId, CandidateKind.PROVIDER,
+                    "provider", "item", CandidateAvailability.RESOLVABLE,
+                    providerId = org.oxycblt.auxio.shippy.domain.ProviderId("provider")),
+            ),
+        )
     }
 }

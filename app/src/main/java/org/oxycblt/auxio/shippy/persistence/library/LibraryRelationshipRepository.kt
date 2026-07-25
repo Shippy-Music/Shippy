@@ -17,6 +17,7 @@ import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.LibraryRelationship
 import org.oxycblt.auxio.shippy.domain.TrackId
+import org.oxycblt.auxio.shippy.domain.Track
 
 interface LibraryRelationshipRepository {
     fun observe(trackId: TrackId): Flow<LibraryRelationship>
@@ -36,6 +37,7 @@ interface LibraryRelationshipRepository {
     fun observePlaylistTrackIds(playlistId: LibraryCollectionId): Flow<List<TrackId>>
 
     suspend fun setLiked(trackId: TrackId, liked: Boolean)
+    suspend fun setLiked(track: Track, liked: Boolean)
 
     suspend fun setDownloaded(trackId: TrackId, downloaded: Boolean)
 
@@ -58,11 +60,18 @@ interface LibraryRelationshipRepository {
         trackId: TrackId,
         playlistIds: Set<LibraryCollectionId>,
     )
+    suspend fun replacePlaylistMemberships(
+        track: Track,
+        playlistIds: Set<LibraryCollectionId>,
+    )
 }
 
 internal class RoomLibraryRelationshipRepository
 @Inject
-constructor(private val dao: LibraryRelationshipDao) : LibraryRelationshipRepository {
+constructor(
+    private val dao: LibraryRelationshipDao,
+    private val metadata: CanonicalTrackMetadataRepository,
+) : LibraryRelationshipRepository {
     override fun observe(trackId: TrackId): Flow<LibraryRelationship> =
         dao.observe(trackId.value).map { stored ->
             stored?.toDomain() ?: LibraryRelationship(trackId)
@@ -96,6 +105,11 @@ constructor(private val dao: LibraryRelationshipDao) : LibraryRelationshipReposi
 
     override suspend fun setLiked(trackId: TrackId, liked: Boolean) {
         dao.setLiked(trackId.value, liked)
+    }
+
+    override suspend fun setLiked(track: Track, liked: Boolean) {
+        metadata.upsert(track)
+        setLiked(track.id, liked)
     }
 
     override suspend fun setDownloaded(trackId: TrackId, downloaded: Boolean) {
@@ -151,6 +165,14 @@ constructor(private val dao: LibraryRelationshipDao) : LibraryRelationshipReposi
             trackId.value,
             playlistIds.map(LibraryCollectionId::value).sorted(),
         )
+    }
+
+    override suspend fun replacePlaylistMemberships(
+        track: Track,
+        playlistIds: Set<LibraryCollectionId>,
+    ) {
+        metadata.upsert(track)
+        replacePlaylistMemberships(track.id, playlistIds)
     }
 }
 

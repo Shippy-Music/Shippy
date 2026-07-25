@@ -278,7 +278,12 @@ snapshot payload, indexed session/term/sequence identity, update time, and a
 SHA-256 integrity value. Loading cross-checks the indexed identity against the
 decoded snapshot and removes a corrupt row only if no newer checkpoint replaced
 it. Session secrets and rejoin credentials are deliberately not stored in this
-row; their later persistence belongs in Android secure storage.
+row; their persistence uses one Keystore-backed encrypted lease file outside Room and
+generic preferences. The lease contains only the active session/member and short-lived
+invite/rejoin material, is cleared on expiry, authenticated revocation, and accepted local
+leave/end, and is paired with the checkpoint before any restore attempt. Restores reconnect
+through the normal authenticated transport/session-engine boundary; they cannot bypass
+checkpoint validation, ordered events, or strict-majority election rules.
 
 ## 8. Provider Platform
 

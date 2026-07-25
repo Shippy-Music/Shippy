@@ -23,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -51,6 +52,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     private lateinit var count: TextView
     private lateinit var progress: ProgressBar
     private lateinit var message: TextView
+    private val tracksAdapter = ShippyCollectionTrackAdapter { model.play(collectionId, it) }
     private var currentState: ShippyCollectionDetailState? = null
     private var playlistMenuInflated = false
 
@@ -62,6 +64,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         count = view.findViewById(R.id.shippy_collection_count)
         progress = view.findViewById(R.id.shippy_collection_progress)
         message = view.findViewById(R.id.shippy_collection_message)
+        view.findViewById<RecyclerView>(R.id.shippy_collection_tracks).adapter = tracksAdapter
 
         toolbar.setNavigationOnClickListener { findNavController().navigateUp() }
         toolbar.setOnMenuItemClickListener { item ->
@@ -96,11 +99,12 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         progress.isGone = true
         toolbar.title = state.title
         title.text = state.title
+        val totalTrackCount = state.rows.size + state.unresolvedTrackCount
         count.text =
             resources.getQuantityString(
                 R.plurals.fmt_song_count,
-                state.unresolvedTrackCount,
-                state.unresolvedTrackCount,
+                totalTrackCount,
+                totalTrackCount,
             )
         message.setText(
             when (state.messageKind()) {
@@ -109,6 +113,8 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
                 CollectionDetailMessage.METADATA_PENDING -> R.string.lng_collection_metadata_pending
             }
         )
+        tracksAdapter.submitList(state.rows)
+        message.isGone = state.rows.isNotEmpty() && state.unresolvedTrackCount == 0
         if (state is ShippyCollectionDetailState.Playlist) {
             ensurePlaylistMenu(state)
         }
