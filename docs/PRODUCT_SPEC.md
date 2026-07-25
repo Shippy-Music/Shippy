@@ -384,7 +384,10 @@ Required product integrations:
 
 - Streaming providers proven viable from Bloomee behavior, beginning with
   YouTube Music/YouTube and JioSaavn adapters
-- Lyrics with synchronized lyrics where available and cached offline behavior
+- Lyrics through an ordered provider chain, with synchronized lyrics where
+  available and cached offline behavior. Musixmatch may be preferred only through
+  an official securely supplied credential or broker; no reusable key is embedded
+  in the open-source APK. LRCLIB is the no-key fallback.
 - Last.fm authentication and scrobbling, followed by relevant discovery/stats
 - Equalizer and audio settings
 - Playlist import/export where implementations are reliable

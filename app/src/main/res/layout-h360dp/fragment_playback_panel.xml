@@ -73,6 +73,38 @@
             android:fallbackLineSpacing="false"
             tools:text="Album Name" />
 
+        <LinearLayout
+            android:id="@+id/playback_primary_actions"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                android:id="@+id/playback_save"
+                style="@style/Widget.Auxio.Button.Icon.Small"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/desc_save_to_liked"
+                app:icon="@drawable/ic_add_24" />
+
+            <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                android:id="@+id/playback_download"
+                style="@style/Widget.Auxio.Button.Icon.Small"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/desc_download"
+                app:icon="@drawable/ic_down_24" />
+
+            <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                android:id="@+id/playback_queue"
+                style="@style/Widget.Auxio.Button.Icon.Small"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/desc_open_queue"
+                app:icon="@drawable/ic_playlist_24" />
+
+        </LinearLayout>
+
     </LinearLayout>
 
     <org.oxycblt.auxio.ui.RippleFixMaterialButton

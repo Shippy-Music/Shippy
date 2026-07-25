@@ -56,6 +56,7 @@ constructor(
     private val providerRegistry: ProviderRegistry,
     private val providerSettings: ProviderSettings,
     private val relationships: LibraryRelationshipRepository,
+    private val publicationGate: DownloadPublicationGate,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         val jobId =
@@ -278,39 +279,41 @@ constructor(
             return if (verification.reason.isRetryable()) Result.retry() else Result.failure()
         }
         val artifact = (verification as StorageResult.Success).value
-        var current = jobs.get(stored.job.id) ?: return Result.failure()
-        if (current.job.state == DownloadState.VERIFYING) {
-            if (
-                jobs.apply(current.job.id, DownloadEvent.Verified, now()) !is
-                    DownloadTransition.Applied
-            ) {
-                return abortFinalization(jobs.get(stored.job.id) ?: current)
+        return publicationGate.run {
+            var current = jobs.get(stored.job.id) ?: return@run Result.failure()
+            if (current.job.state == DownloadState.VERIFYING) {
+                if (
+                    jobs.apply(current.job.id, DownloadEvent.Verified, now()) !is
+                        DownloadTransition.Applied
+                ) {
+                    return@run abortFinalization(jobs.get(stored.job.id) ?: current)
+                }
+                current = jobs.get(stored.job.id) ?: return@run Result.failure()
             }
-            current = jobs.get(stored.job.id) ?: return Result.failure()
-        }
-        if (current.job.state == DownloadState.FINALIZING) {
-            if (
-                jobs.apply(current.job.id, DownloadEvent.Finalized(artifact), now()) !is
-                    DownloadTransition.Applied
-            ) {
-                return abortFinalization(jobs.get(stored.job.id) ?: current)
+            if (current.job.state == DownloadState.FINALIZING) {
+                if (
+                    jobs.apply(current.job.id, DownloadEvent.Finalized(artifact), now()) !is
+                        DownloadTransition.Applied
+                ) {
+                    return@run abortFinalization(jobs.get(stored.job.id) ?: current)
+                }
             }
-        }
-        current = jobs.get(stored.job.id) ?: return Result.failure()
-        if (current.job.state != DownloadState.AVAILABLE || current.job.artifact == null) {
-            return abortFinalization(current)
-        }
-        jobs.setPendingDocument(current.job.id, null, now())
-        relationships.setDownloaded(
-            current.track.id,
-            jobs.hasAvailableForTrack(current.track.id),
-        )
-        return Result.success(
-            workDataOf(
-                KEY_ARTIFACT_URI to current.job.artifact.contentUri,
-                KEY_BYTES_TRANSFERRED to current.job.artifact.contentLength,
+            current = jobs.get(stored.job.id) ?: return@run Result.failure()
+            if (current.job.state != DownloadState.AVAILABLE || current.job.artifact == null) {
+                return@run abortFinalization(current)
+            }
+            jobs.setPendingDocument(current.job.id, null, now())
+            relationships.setDownloaded(
+                current.track.id,
+                jobs.hasAvailableForTrack(current.track.id),
             )
-        )
+            Result.success(
+                workDataOf(
+                    KEY_ARTIFACT_URI to current.job.artifact.contentUri,
+                    KEY_BYTES_TRANSFERRED to current.job.artifact.contentLength,
+                )
+            )
+        }
     }
 
     private suspend fun abortFinalization(stored: PersistedDownload): Result {

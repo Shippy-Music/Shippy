@@ -29,12 +29,14 @@ import android.view.MenuItem
 import android.view.View
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.Toolbar
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.math.abs
 import org.oxycblt.auxio.R
@@ -51,6 +53,10 @@ import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
 import org.oxycblt.auxio.playback.ui.swiper.CarouselTransformer
 import org.oxycblt.auxio.playback.ui.swiper.CoverPagerAdapter
 import org.oxycblt.auxio.playback.ui.swiper.UserAwarePagerCallback
+import org.oxycblt.auxio.shippy.lyrics.PlainLyrics
+import org.oxycblt.auxio.shippy.lyrics.SyncedLyrics
+import org.oxycblt.auxio.shippy.domain.Track
+import org.oxycblt.auxio.shippy.download.DownloadJobId
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.dampen
@@ -81,9 +87,12 @@ class PlaybackPanelFragment :
     private val detailModel: DetailViewModel by activityViewModels()
     private val listModel: ListViewModel by activityViewModels()
     private val queueModel: QueueViewModel by viewModels()
+    private val playerActionsModel: PlayerActionsViewModel by viewModels()
     private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
     private var currentPagerPosition = 0
+    private var renderedLyricsState: PlaybackLyricsState = PlaybackLyricsState.None
+    private var renderedLyricsLineIndex = Int.MIN_VALUE
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -167,9 +176,26 @@ class PlaybackPanelFragment :
         }
         binding.playbackSkipNext.setOnClickListener { playbackModel.next() }
         binding.playbackShuffle.setOnClickListener { playbackModel.toggleShuffled() }
-        binding.playbackMore?.setOnClickListener {
-            playbackModel.song.value?.let {
-                listModel.openMenu(R.menu.playback_song, it, PlaySong.ByItself)
+        binding.playbackSave.setOnClickListener {
+            val state = playerActionsModel.state.value
+            if (state.liked || state.playlistIds.isNotEmpty()) {
+                showSavedDestinations(state)
+            } else {
+                playerActionsModel.toggleLiked()
+            }
+        }
+        binding.playbackDownload.setOnClickListener { playerActionsModel.performDownloadAction() }
+        binding.playbackQueue.setOnClickListener { playbackModel.openQueue() }
+        binding.playbackMore?.setOnClickListener { anchor ->
+            val displayItem = playbackModel.displayItem.value ?: return@setOnClickListener
+            if (displayItem.localSong != null) {
+                listModel.openMenu(
+                    R.menu.playback_song,
+                    displayItem.localSong,
+                    PlaySong.ByItself,
+                )
+            } else {
+                showProviderOverflow(anchor, displayItem.queueItem.track)
             }
         }
 
@@ -181,6 +207,8 @@ class PlaybackPanelFragment :
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playbackModel.isShuffled, ::updateShuffled)
         collectImmediately(playbackModel.pagerQueue, ::updatePager)
+        collectImmediately(playerActionsModel.state, ::updateActions)
+        collectImmediately(playbackModel.lyrics, playbackModel.positionDs, ::updateLyrics)
     }
 
     // FIXME: Old code!! Maybe not necessary anymore?
@@ -227,6 +255,8 @@ class PlaybackPanelFragment :
         binding.playbackToolbar.setOnMenuItemClickListener(null)
         userAwarePagerCallback?.release()
         binding.playbackPager?.adapter = null
+        renderedLyricsState = PlaybackLyricsState.None
+        renderedLyricsLineIndex = Int.MIN_VALUE
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
@@ -258,6 +288,7 @@ class PlaybackPanelFragment :
     }
 
     private fun updateItem(item: PlaybackDisplayItem?) {
+        playerActionsModel.setDisplayItem(item)
         if (item == null) {
             // Nothing to do.
             return
@@ -279,7 +310,7 @@ class PlaybackPanelFragment :
             binding.playbackToolbar.subtitle =
                 track.album?.takeIf(String::isNotBlank) ?: getString(R.string.lbl_search)
         }
-        binding.playbackMore?.isVisible = localSong != null
+        binding.playbackMore?.isVisible = true
         binding.playbackSeekBar?.durationDs = (track.durationMs ?: 0L).msToDs()
     }
 
@@ -311,6 +342,261 @@ class PlaybackPanelFragment :
 
     private fun updateShuffled(isShuffled: Boolean) {
         requireBinding().playbackShuffle.isChecked = isShuffled
+    }
+
+    private fun updateActions(state: PlayerActionsState) {
+        val binding = requireBinding()
+        binding.playbackSave.apply {
+            val isSaved = state.liked || state.playlistIds.isNotEmpty()
+            isVisible = state.track != null
+            isEnabled = state.track != null
+            setIconResource(if (isSaved) R.drawable.ic_check_24 else R.drawable.ic_add_24)
+            contentDescription =
+                getString(
+                    if (isSaved) {
+                        R.string.desc_edit_saved_destinations
+                    } else {
+                        R.string.desc_save_to_liked
+                    }
+                )
+        }
+        binding.playbackDownload.apply {
+            val presentation = state.download
+            isVisible = presentation !is PlayerDownloadPresentation.Hidden
+            isEnabled =
+                presentation !is PlayerDownloadPresentation.Working &&
+                    presentation !is PlayerDownloadPresentation.Available
+            when (presentation) {
+                PlayerDownloadPresentation.Hidden -> Unit
+                is PlayerDownloadPresentation.Ready -> {
+                    setIconResource(R.drawable.ic_down_24)
+                    contentDescription = getString(R.string.desc_download)
+                }
+                is PlayerDownloadPresentation.Working -> {
+                    setIconResource(R.drawable.ic_down_24)
+                    contentDescription = getString(R.string.desc_downloading)
+                }
+                is PlayerDownloadPresentation.Paused -> {
+                    setIconResource(R.drawable.ic_play_24)
+                    contentDescription = getString(R.string.desc_resume_download)
+                }
+                is PlayerDownloadPresentation.Retry -> {
+                    setIconResource(R.drawable.ic_feature_request_24)
+                    contentDescription = getString(R.string.desc_retry_download)
+                }
+                is PlayerDownloadPresentation.Available -> {
+                    setIconResource(R.drawable.ic_check_24)
+                    contentDescription = getString(R.string.desc_downloaded)
+                }
+            }
+        }
+    }
+
+    private fun updateLyrics(state: PlaybackLyricsState, positionDs: Long) {
+        val binding = requireBinding()
+        val container = binding.playbackLyricsContainer ?: return
+        val title = binding.playbackLyricsTitle ?: return
+        val current = binding.playbackLyricsCurrent ?: return
+        val body = binding.playbackLyricsBody ?: return
+        val retry = binding.playbackLyricsRetry ?: return
+        container.isVisible = state !is PlaybackLyricsState.None
+        val stateChanged = state != renderedLyricsState
+        if (stateChanged) {
+            renderedLyricsState = state
+            renderedLyricsLineIndex = Int.MIN_VALUE
+            retry.isVisible = false
+            retry.setOnClickListener(null)
+        }
+        when (state) {
+            PlaybackLyricsState.None -> Unit
+            is PlaybackLyricsState.Loading -> {
+                if (stateChanged) {
+                    title.setText(R.string.lbl_lyrics)
+                    current.text = ""
+                    body.setText(R.string.lng_lyrics_loading)
+                    body.contentDescription = body.text
+                }
+            }
+            is PlaybackLyricsState.Ready -> {
+                when (val lyrics = state.lyrics) {
+                    is SyncedLyrics -> {
+                        val positionMs = positionDs * 100
+                        val activeIndex = activeLyricIndex(lyrics, positionMs)
+                        if (stateChanged) {
+                            title.setText(R.string.lbl_lyrics)
+                            body.text = lyrics.plainText
+                            body.contentDescription = lyrics.plainText
+                        }
+                        if (activeIndex != renderedLyricsLineIndex) {
+                            renderedLyricsLineIndex = activeIndex
+                            val activeLine = lyrics.lines.getOrNull(activeIndex)
+                            current.text = activeLine?.text.orEmpty()
+                            current.contentDescription =
+                                activeLine
+                                    ?.text
+                                    ?.let { getString(R.string.desc_current_lyric, it) }
+                                    .orEmpty()
+                        }
+                    }
+                    is PlainLyrics -> {
+                        if (stateChanged) {
+                            title.setText(R.string.lbl_lyrics)
+                            current.text = ""
+                            current.contentDescription = null
+                            body.text =
+                                lyrics.plainText.takeIf(String::isNotBlank)
+                                    ?: getString(R.string.lng_lyrics_instrumental)
+                            body.contentDescription = body.text
+                        }
+                    }
+                }
+            }
+            is PlaybackLyricsState.Unavailable -> {
+                if (stateChanged) {
+                    title.setText(R.string.lbl_lyrics)
+                    current.text = ""
+                    body.setText(R.string.lng_lyrics_unavailable)
+                    body.contentDescription = body.text
+                }
+            }
+            is PlaybackLyricsState.Error -> {
+                if (stateChanged) {
+                    title.setText(R.string.lbl_lyrics)
+                    current.text = ""
+                    body.setText(R.string.lng_lyrics_error)
+                    body.contentDescription = body.text
+                    if (state.retryable) {
+                        retry.isVisible = true
+                        retry.setOnClickListener { playbackModel.retryLyrics() }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showProviderOverflow(anchor: View, track: Track) {
+        val availableJobId =
+            (playerActionsModel.state.value.download as? PlayerDownloadPresentation.Available)
+                ?.jobId
+        PopupMenu(requireContext(), anchor).apply {
+            inflate(R.menu.playback_provider)
+            menu.findItem(R.id.action_remove_download).isVisible = availableJobId != null
+            setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    R.id.action_open_queue -> {
+                        playbackModel.openQueue()
+                        true
+                    }
+                    R.id.action_provider_track_info -> {
+                        showProviderTrackInfo(track)
+                        true
+                    }
+                    R.id.action_provider_track_share -> {
+                        shareProviderTrack(track)
+                        true
+                    }
+                    R.id.action_remove_download -> {
+                        availableJobId?.let(::confirmRemoveDownload)
+                        true
+                    }
+                    else -> false
+                }
+            }
+            show()
+        }
+    }
+
+    private fun showSavedDestinations(state: PlayerActionsState) {
+        val labels =
+            buildList {
+                add(getString(R.string.lbl_liked))
+                state.playlists.forEach { add(it.displayName) }
+            }
+        val checked =
+            BooleanArray(labels.size) { index ->
+                if (index == 0) {
+                    state.liked
+                } else {
+                    state.playlists[index - 1].id in state.playlistIds
+                }
+            }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.lbl_saved_destinations)
+            .setMultiChoiceItems(labels.toTypedArray(), checked) { _, which, selected ->
+                checked[which] = selected
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                playerActionsModel.updateSavedDestinations(
+                    liked = checked.first(),
+                    playlistIds =
+                        state.playlists
+                            .filterIndexed { index, _ -> checked[index + 1] }
+                            .mapTo(mutableSetOf()) { it.id },
+                )
+            }
+            .show()
+    }
+
+    private fun confirmRemoveDownload(jobId: DownloadJobId) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.lbl_remove_download)
+            .setMessage(R.string.lng_remove_download_confirmation)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.lbl_remove_download) { _, _ ->
+                playerActionsModel.removeDownload(jobId)
+            }
+            .show()
+    }
+
+    private fun showProviderTrackInfo(track: Track) {
+        val sourceNames =
+            track.candidates
+                .mapNotNull { candidate -> candidate.providerId?.value ?: candidate.sourceId }
+                .distinct()
+                .joinToString(", ")
+        val details =
+            buildList {
+                    add(track.artists.joinToString(", "))
+                    track.album?.takeIf(String::isNotBlank)?.let(::add)
+                    if (sourceNames.isNotBlank()) {
+                        add(getString(R.string.fmt_provider_sources, sourceNames))
+                    }
+                }
+                .joinToString("\n")
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(track.title)
+            .setMessage(details)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun shareProviderTrack(track: Track) {
+        val originalLink =
+            track.candidates
+                .asSequence()
+                .mapNotNull { it.locator }
+                .firstOrNull { it.startsWith("https://") }
+        val text =
+            buildString {
+                append(track.title)
+                track.artists.takeIf { it.isNotEmpty() }?.let {
+                    append(" — ")
+                    append(it.joinToString(", "))
+                }
+                originalLink?.let {
+                    append('\n')
+                    append(it)
+                }
+            }
+        startActivity(
+            Intent.createChooser(
+                Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, text),
+                getString(R.string.lbl_share),
+            )
+        )
     }
 
     private fun updatePager(queue: PagerQueue) {
@@ -415,3 +701,8 @@ class PlaybackPanelFragment :
 
     private companion object {}
 }
+
+internal fun activeLyricIndex(
+    lyrics: SyncedLyrics,
+    positionMs: Long,
+): Int = lyrics.lines.indexOfLast { it.startMs <= positionMs }

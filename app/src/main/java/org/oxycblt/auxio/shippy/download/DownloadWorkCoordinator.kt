@@ -40,6 +40,7 @@ constructor(
     private val jobs: DownloadJobRepository,
     private val storage: SafDownloadStorage,
     private val relationships: LibraryRelationshipRepository,
+    private val publicationGate: DownloadPublicationGate,
 ) {
     private val workManager = WorkManager.getInstance(context)
     private val requestMutex = Mutex()
@@ -60,11 +61,21 @@ constructor(
                 when (existing.job.state) {
                     DownloadState.PAUSED -> {
                         jobs.apply(existing.job.id, DownloadEvent.Resume, nowEpochMs)
-                        enqueue(existing.job.id, existing.track, ExistingWorkPolicy.REPLACE)
+                        enqueue(
+                            existing.job.id,
+                            existing.track,
+                            existing.job.candidateId,
+                            ExistingWorkPolicy.REPLACE,
+                        )
                     }
                     DownloadState.FAILED_RETRYABLE -> {
                         jobs.apply(existing.job.id, DownloadEvent.Retry, nowEpochMs)
-                        enqueue(existing.job.id, existing.track, ExistingWorkPolicy.REPLACE)
+                        enqueue(
+                            existing.job.id,
+                            existing.track,
+                            existing.job.candidateId,
+                            ExistingWorkPolicy.REPLACE,
+                        )
                     }
                     else -> Unit
                 }
@@ -72,7 +83,7 @@ constructor(
             }
             val jobId = DownloadJobId(UUID.randomUUID().toString())
             jobs.create(jobId, track, candidateId, nowEpochMs)
-            enqueue(jobId, track, ExistingWorkPolicy.REPLACE)
+            enqueue(jobId, track, candidateId, ExistingWorkPolicy.REPLACE)
             jobId
         }
 
@@ -95,7 +106,12 @@ constructor(
         val stored = jobs.get(jobId) ?: return
         val transition = jobs.apply(jobId, DownloadEvent.Resume, nowEpochMs)
         if (transition is DownloadTransition.Applied) {
-            enqueue(jobId, stored.track, ExistingWorkPolicy.REPLACE)
+            enqueue(
+                jobId,
+                stored.track,
+                stored.job.candidateId,
+                ExistingWorkPolicy.REPLACE,
+            )
         }
     }
 
@@ -106,7 +122,12 @@ constructor(
         val stored = jobs.get(jobId) ?: return
         val transition = jobs.apply(jobId, DownloadEvent.Retry, nowEpochMs)
         if (transition is DownloadTransition.Applied) {
-            enqueue(jobId, stored.track, ExistingWorkPolicy.REPLACE)
+            enqueue(
+                jobId,
+                stored.track,
+                stored.job.candidateId,
+                ExistingWorkPolicy.REPLACE,
+            )
         }
     }
 
@@ -125,29 +146,27 @@ constructor(
     suspend fun remove(
         jobId: DownloadJobId,
         nowEpochMs: Long = System.currentTimeMillis(),
-    ): Boolean {
-        val stored = jobs.get(jobId) ?: return false
-        val artifact = stored.job.artifact ?: return false
-        if (!storage.delete(artifact.contentUri)) return false
-        val transition = jobs.apply(jobId, DownloadEvent.Remove, nowEpochMs)
-        if (transition !is DownloadTransition.Applied) return false
-        relationships.setDownloaded(
-            stored.track.id,
-            jobs.hasAvailableForTrack(stored.track.id),
-        )
-        return true
-    }
+    ): Boolean =
+        publicationGate.run {
+            val stored = jobs.get(jobId) ?: return@run false
+            val artifact = stored.job.artifact ?: return@run false
+            if (!storage.delete(artifact.contentUri)) return@run false
+            val transition = jobs.apply(jobId, DownloadEvent.Remove, nowEpochMs)
+            if (transition !is DownloadTransition.Applied) return@run false
+            relationships.setDownloaded(
+                stored.track.id,
+                jobs.hasAvailableForTrack(stored.track.id),
+            )
+            true
+        }
 
     private fun enqueue(
         jobId: DownloadJobId,
         track: Track,
+        candidateId: CandidateId,
         policy: ExistingWorkPolicy,
     ) {
-        val requiresNetwork =
-            track.candidates.none { candidate ->
-                candidate.kind != CandidateKind.PROVIDER &&
-                    candidate.locator?.substringBefore(':') in setOf("content", "file")
-            }
+        val requiresNetwork = downloadRequiresNetwork(track, candidateId)
         val request =
             OneTimeWorkRequestBuilder<ShippyDownloadWorker>()
                 .setInputData(workDataOf(ShippyDownloadWorker.KEY_JOB_ID to jobId.value))
@@ -171,4 +190,13 @@ constructor(
     private companion object {
         const val DOWNLOAD_WORK_TAG = "shippy-download"
     }
+}
+
+internal fun downloadRequiresNetwork(
+    track: Track,
+    candidateId: CandidateId,
+): Boolean {
+    val candidate = track.candidates.firstOrNull { it.id == candidateId } ?: return true
+    return candidate.kind == CandidateKind.PROVIDER ||
+        candidate.locator?.substringBefore(':') !in setOf("content", "file")
 }

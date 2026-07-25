@@ -22,8 +22,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.core.view.isInvisible
-import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
+import androidx.fragment.app.viewModels
+import androidx.recyclerview.widget.ConcatAdapter
+import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
 import org.oxycblt.auxio.detail.DetailViewModel
@@ -39,6 +41,9 @@ import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
+import org.oxycblt.auxio.shippy.library.LibraryCollectionsState
+import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
+import org.oxycblt.auxio.shippy.library.systemRows
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
@@ -50,6 +55,7 @@ import org.oxycblt.musikr.Song
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
+@AndroidEntryPoint
 class PlaylistListFragment :
     ListFragment<Playlist, FragmentHomeListBinding>(),
     FastScrollRecyclerView.PopupProvider,
@@ -59,7 +65,29 @@ class PlaylistListFragment :
     override val listModel: ListViewModel by activityViewModels()
     override val musicModel: MusicViewModel by activityViewModels()
     override val playbackModel: PlaybackViewModel by activityViewModels()
+    private val collectionsModel: LibraryCollectionsViewModel by viewModels()
+    private val collectionsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_collections)
+    private val systemCollectionAdapter = LibrarySystemCollectionAdapter()
+    private val onboardingAdapter =
+        LibraryOnboardingAdapter { homeModel.startChooseMusicLocations() }
+    private val shippyPlaylistsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_shippy_playlists)
+    private val shippyPlaylistAdapter = ShippyPlaylistProjectionAdapter()
+    private val devicePlaylistsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_on_this_device)
     private val playlistAdapter = PlaylistAdapter(this)
+    private val libraryAdapter =
+        ConcatAdapter(
+            collectionsHeaderAdapter,
+            systemCollectionAdapter,
+            onboardingAdapter,
+            shippyPlaylistsHeaderAdapter,
+            shippyPlaylistAdapter,
+            devicePlaylistsHeaderAdapter,
+            playlistAdapter,
+        )
+    private var localSongCount = 0
+    private var devicePlaylistCount = 0
+    private var isLocalIndexing = false
+    private var collectionState = LibraryCollectionsState()
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentHomeListBinding.inflate(inflater)
@@ -69,7 +97,7 @@ class PlaylistListFragment :
 
         binding.homeRecycler.apply {
             id = R.id.home_playlist_recycler
-            adapter = playlistAdapter
+            adapter = libraryAdapter
             popupProvider = this@PlaylistListFragment
             listener = this@PlaylistListFragment
         }
@@ -79,14 +107,11 @@ class PlaylistListFragment :
             contentDescription = getString(R.string.lbl_playlists)
         }
         binding.homeNoMusicMsg.text = getString(R.string.lng_empty_playlists)
+        binding.homeNoMusicAction.setOnClickListener { homeModel.startChooseMusicLocations() }
 
         collectImmediately(homeModel.playlistList, ::updatePlaylists)
-        collectImmediately(
-            homeModel.empty,
-            homeModel.playlistList,
-            musicModel.indexingState,
-            ::updateNoMusicIndicator,
-        )
+        collectImmediately(collectionsModel.state, ::updateCollections)
+        collectImmediately(homeModel.songList, musicModel.indexingState, ::updateLocalCollection)
         collectImmediately(listModel.selected, ::updateSelection)
         collectImmediately(
             playbackModel.song,
@@ -106,7 +131,8 @@ class PlaylistListFragment :
     }
 
     override fun getPopupData(pos: Int): FastScrollRecyclerView.PopupProvider.PopupData? {
-        val playlist = homeModel.playlistList.value.getOrNull(pos) ?: return null
+        val playlistPosition = pos - (libraryAdapter.itemCount - playlistAdapter.itemCount)
+        val playlist = homeModel.playlistList.value.getOrNull(playlistPosition) ?: return null
         // Change how we display the popup depending on the current sort mode.
         return when (homeModel.playlistSort.mode) {
             // By Name -> Use Name
@@ -141,27 +167,40 @@ class PlaylistListFragment :
     }
 
     private fun updatePlaylists(playlists: List<Playlist>) {
+        devicePlaylistCount = playlists.size
         playlistAdapter.update(playlists, homeModel.playlistInstructions.consume())
+        devicePlaylistsHeaderAdapter.setShown(playlists.isNotEmpty())
+        renderSystemCollections()
     }
 
-    private fun updateNoMusicIndicator(
-        empty: Boolean,
-        playlists: List<Playlist>,
-        indexingState: IndexingState?,
-    ) {
+    private fun updateCollections(state: LibraryCollectionsState) {
+        collectionState = state
+        collectionsHeaderAdapter.setShown(true)
+        shippyPlaylistsHeaderAdapter.setShown(state.userPlaylists.isNotEmpty())
+        shippyPlaylistAdapter.submitList(state.userPlaylists)
+        renderSystemCollections()
+    }
+
+    private fun updateLocalCollection(songs: List<Song>, indexingState: IndexingState?) {
+        localSongCount = songs.size
+        isLocalIndexing = indexingState is IndexingState.Indexing
+        renderSystemCollections()
+    }
+
+    private fun renderSystemCollections() {
+        systemCollectionAdapter.submitList(
+            collectionState.systemRows(localSongCount, isLocalIndexing)
+        )
+        onboardingAdapter.setShown(
+            collectionState.shouldShowOnboarding(
+                localSongCount = localSongCount,
+                devicePlaylistCount = devicePlaylistCount,
+                isLocalIndexing = isLocalIndexing,
+            )
+        )
         val binding = requireBinding()
-        binding.homeRecycler.isInvisible = empty
-        binding.homeNoMusic.isInvisible = !empty && playlists.isNotEmpty()
-        if (!empty && playlists.isEmpty()) {
-            binding.homeNoMusicAction.isVisible = true
-            binding.homeNoMusicAction.text = getString(R.string.lbl_new_playlist)
-            binding.homeNoMusicAction.setOnClickListener { musicModel.createPlaylist() }
-        } else {
-            binding.homeNoMusicAction.isVisible =
-                indexingState == null || (empty && indexingState is IndexingState.Completed)
-            binding.homeNoMusicAction.text = getString(R.string.set_locations)
-            binding.homeNoMusicAction.setOnClickListener { homeModel.startChooseMusicLocations() }
-        }
+        binding.homeRecycler.isInvisible = false
+        binding.homeNoMusic.isInvisible = true
     }
 
     private fun updateSelection(selection: List<Music>) {

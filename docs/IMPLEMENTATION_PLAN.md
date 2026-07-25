@@ -42,8 +42,8 @@ subsequent task names an actual module.
 - [x] Preserve destination state across navigation.
 - [x] Attach persistent mini-player above navigation.
 - [x] Preserve Auxio's expand/collapse Now Playing and predictive/back hierarchy.
-- [ ] Rebuild player action hierarchy without duplicate save/download actions.
-- [ ] Place lyrics below the main player content.
+- [x] Rebuild player action hierarchy without duplicate save/download actions.
+- [x] Place lyrics below the main player content.
 - [ ] Move technical/provider actions to Song Information.
 - [ ] Establish accessible reusable track rows, collection rows, controls,
       dialogs, sheets, and empty/error/loading states.
@@ -68,7 +68,7 @@ through Auxio’s existing playback stack.
 - [ ] Add selected Local source folder management and rescan behavior.
 - [x] Add selected Download destination with persisted Android access.
 - [ ] Index pre-existing supported media in the Download destination.
-- [ ] Add download relationship/state without isolating tracks from normal views.
+- [x] Add download relationship/state without isolating tracks from normal views.
 - [x] Make queue the canonical playback order for UI, MediaSession, and later
       Crew.
 - [x] Implement reorder/remove/play-next/add/replace-context behavior.
@@ -92,7 +92,7 @@ through Auxio’s existing playback stack.
 - [x] Port or reimplement the first viable provider adapter from Bloomee evidence.
 - [ ] Add additional viable provider adapters.
 - [x] Implement provider playback URL resolution with expiry/cache behavior.
-- [ ] Implement Shippy permanent download jobs, progress, retry, cancel, remove,
+- [x] Implement Shippy permanent download jobs, progress, retry, cancel, remove,
       and destination reconciliation.
 - [x] Implement resolution order:
       Crew cache -> download -> preferred -> fallback -> Crew peer.

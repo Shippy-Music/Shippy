@@ -37,6 +37,12 @@ import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
+import org.oxycblt.auxio.shippy.domain.TrackId
+import org.oxycblt.auxio.shippy.lyrics.LyricsLookupResult
+import org.oxycblt.auxio.shippy.lyrics.LyricsRecord
+import org.oxycblt.auxio.shippy.lyrics.LyricsRepository
+import org.oxycblt.auxio.shippy.lyrics.LyricsRequest
+import org.oxycblt.auxio.shippy.lyrics.ParsedLyrics
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Album
@@ -63,8 +69,10 @@ constructor(
     private val commandFactory: PlaybackCommand.Factory,
     private val listSettings: ListSettings,
     private val playbackDisplayMapper: PlaybackDisplayMapper,
+    private val lyricsRepository: LyricsRepository,
 ) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener {
     private var lastPositionJob: Job? = null
+    private var lyricsJob: Job? = null
 
     private val _song = MutableStateFlow<Song?>(null)
     /** The currently playing song. */
@@ -75,6 +83,11 @@ constructor(
     /** Canonical current item for local, provider, download, and Crew playback UI. */
     val displayItem: StateFlow<PlaybackDisplayItem?>
         get() = _displayItem
+
+    private val _lyrics = MutableStateFlow<PlaybackLyricsState>(PlaybackLyricsState.None)
+    /** Lyrics tied to the canonical current item, never to a stale local-only song. */
+    val lyrics: StateFlow<PlaybackLyricsState>
+        get() = _lyrics
 
     private val _parent = MutableStateFlow<MusicParent?>(null)
     /** The [MusicParent] currently being played. Null if playback is occurring from all songs. */
@@ -149,8 +162,9 @@ constructor(
         L.d("Index moved, updating current song")
         _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()
         _song.value = playbackManager.currentSong
-        _displayItem.value =
+        updateDisplayItem(
             playbackManager.resolvedQueue.getOrNull(index)?.let(playbackDisplayMapper::map)
+        )
 
         _pagerCommand.put(PagerCommand(update = null, scroll = index))
         _pagerQueue.value = _pagerQueue.value.copy(index = index)
@@ -169,7 +183,7 @@ constructor(
         change: QueueChange,
     ) {
         val displayQueue = queue.map(playbackDisplayMapper::map)
-        _displayItem.value = displayQueue.getOrNull(index)
+        updateDisplayItem(displayQueue.getOrNull(index))
         _pagerCommand.put(
             PagerCommand(
                 update = change.instructions,
@@ -190,7 +204,7 @@ constructor(
         isShuffled: Boolean,
     ) {
         val displayQueue = queue.map(playbackDisplayMapper::map)
-        _displayItem.value = displayQueue.getOrNull(index)
+        updateDisplayItem(displayQueue.getOrNull(index))
         _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
         _pagerQueue.value = PagerQueue(queue = displayQueue, index = index)
     }
@@ -214,7 +228,7 @@ constructor(
         isShuffled: Boolean,
     ) {
         val displayQueue = queue.map(playbackDisplayMapper::map)
-        _displayItem.value = displayQueue.getOrNull(index)
+        updateDisplayItem(displayQueue.getOrNull(index))
         _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
         _pagerQueue.value = PagerQueue(queue = displayQueue, index = index)
     }
@@ -234,6 +248,64 @@ constructor(
                     // Wait a deci-second for the next position tick.
                     delay(100)
                 }
+            }
+    }
+
+    fun retryLyrics() {
+        _displayItem.value?.let { updateLyrics(it, force = true) }
+    }
+
+    private fun updateDisplayItem(item: PlaybackDisplayItem?) {
+        val previousTrackId = _displayItem.value?.queueItem?.track?.id
+        _displayItem.value = item
+        if (item == null) {
+            lyricsJob?.cancel()
+            _lyrics.value = PlaybackLyricsState.None
+        } else if (item.queueItem.track.id != previousTrackId) {
+            updateLyrics(item, force = false)
+        }
+    }
+
+    private fun updateLyrics(
+        item: PlaybackDisplayItem,
+        force: Boolean,
+    ) {
+        val track = item.queueItem.track
+        if (!force && (_lyrics.value as? PlaybackLyricsState.Ready)?.trackId == track.id) {
+            return
+        }
+        lyricsJob?.cancel()
+        _lyrics.value = PlaybackLyricsState.Loading(track.id)
+        lyricsJob =
+            viewModelScope.launch {
+                val result =
+                    lyricsRepository.lookup(
+                        LyricsRequest(
+                            trackId = track.id,
+                            title = track.title,
+                            artists = track.artists,
+                            album = track.album,
+                            durationMs = track.durationMs,
+                        )
+                    )
+                if (_displayItem.value?.queueItem?.track?.id != track.id) return@launch
+                _lyrics.value =
+                    when (result) {
+                        is LyricsLookupResult.Found ->
+                            PlaybackLyricsState.Ready(
+                                trackId = track.id,
+                                record = result.record,
+                                lyrics = result.lyrics,
+                            )
+                        LyricsLookupResult.NotFound ->
+                            PlaybackLyricsState.Unavailable(track.id)
+                        is LyricsLookupResult.Failure ->
+                            PlaybackLyricsState.Error(
+                                trackId = track.id,
+                                retryable = result.retryable,
+                                message = result.message,
+                            )
+                    }
             }
     }
 
@@ -729,4 +801,24 @@ sealed interface PlaybackDecision {
 
     /** Navigate to a dialog to determine which [Genre] a [Song] should be played from. */
     class PlayFromGenre(override val song: Song) : PlaybackDecision
+}
+
+sealed interface PlaybackLyricsState {
+    data object None : PlaybackLyricsState
+
+    data class Loading(val trackId: TrackId) : PlaybackLyricsState
+
+    data class Ready(
+        val trackId: TrackId,
+        val record: LyricsRecord,
+        val lyrics: ParsedLyrics,
+    ) : PlaybackLyricsState
+
+    data class Unavailable(val trackId: TrackId) : PlaybackLyricsState
+
+    data class Error(
+        val trackId: TrackId,
+        val retryable: Boolean,
+        val message: String?,
+    ) : PlaybackLyricsState
 }

@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
+import org.oxycblt.auxio.shippy.download.DownloadDestinationReconciler
 import org.oxycblt.auxio.shippy.download.DownloadDestinationState
 import org.oxycblt.auxio.shippy.download.SafDownloadStorage
 import org.oxycblt.auxio.shippy.download.StorageResult
@@ -50,12 +51,13 @@ import timber.log.Timber as L
 class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private val musicModel: MusicViewModel by activityViewModels()
     @Inject lateinit var downloadStorage: SafDownloadStorage
+    @Inject lateinit var downloadDestinationReconciler: DownloadDestinationReconciler
     private val downloadDestinationLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
             if (uri != null) {
                 lifecycleScope.launch {
                     when (downloadStorage.selectDestination(uri, null)) {
-                        is StorageResult.Success -> updateDownloadDestinationSummary()
+                        is StorageResult.Success -> refreshDownloadDestination()
                         is StorageResult.Failure ->
                             requireContext().showToast(R.string.msg_download_destination_failed)
                     }
@@ -74,7 +76,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
 
     override fun onResume() {
         super.onResume()
-        lifecycleScope.launch { updateDownloadDestinationSummary() }
+        lifecycleScope.launch { refreshDownloadDestination() }
     }
 
     override fun onOpenDialogPreference(preference: WrappedDialogPreference) {
@@ -137,5 +139,10 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 is DownloadDestinationState.Unavailable ->
                     getString(R.string.msg_download_destination_failed)
             }
+    }
+
+    private suspend fun refreshDownloadDestination() {
+        downloadDestinationReconciler.reconcile()
+        updateDownloadDestinationSummary()
     }
 }

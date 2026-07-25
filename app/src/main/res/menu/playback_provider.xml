@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_open_queue"
+        android:icon="@drawable/ic_playlist_24"
+        android:title="@string/lbl_queue" />
+    <item
+        android:id="@+id/action_provider_track_info"
+        android:icon="@drawable/ic_details_24"
+        android:title="@string/lbl_song_detail" />
+    <item
+        android:id="@+id/action_provider_track_share"
+        android:icon="@drawable/ic_share_24"
+        android:title="@string/lbl_share" />
+    <item
+        android:id="@+id/action_remove_download"
+        android:icon="@drawable/ic_delete_24"
+        android:title="@string/lbl_remove_download"
+        android:visible="false" />
+</menu>

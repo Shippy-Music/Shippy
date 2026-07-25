@@ -99,7 +99,6 @@
     <!-- Search for music -->
     <string name="lbl_search">Search</string>
     <string name="lbl_searching_providers">Searching providers…</string>
-    <string name="lbl_on_this_device">On this device</string>
     <string name="fmt_provider_temporarily_unavailable">%1$s is temporarily unavailable</string>
     <string name="fmt_provider_unavailable">%1$s is unavailable</string>
     <string name="msg_provider_playback_unavailable">This track is unavailable right now</string>
@@ -193,6 +192,13 @@
     <string name="lbl_wiki">Wiki</string>
     <string name="lbl_licenses">Licenses</string>
     <string name="lbl_library_counts">Library statistics</string>
+    <string name="lbl_lyrics">Lyrics</string>
+    <string name="lbl_collections">Collections</string>
+    <string name="lbl_liked">Liked</string>
+    <string name="lbl_downloads">Downloads</string>
+    <string name="lbl_local">Local</string>
+    <string name="lbl_shippy_playlists">Playlists</string>
+    <string name="lbl_on_this_device">On this device</string>
 
     <string name="lbl_selection">Selection</string>
 
@@ -238,6 +244,15 @@
     <string name="lng_empty_artists">Your artists will show up here.</string>
     <string name="lng_empty_genres">Your genres will show up here.</string>
     <string name="lng_empty_playlists">Your playlists will show up here.</string>
+    <string name="lbl_choose_music_folders">Choose music folders</string>
+    <string name="lng_choose_music_folders">Select folders to index music already on this device.</string>
+    <string name="lng_lyrics_loading">Looking for lyrics…</string>
+    <string name="lng_lyrics_unavailable">Lyrics are not available for this track.</string>
+    <string name="lng_lyrics_error">Lyrics could not be loaded.</string>
+    <string name="lng_lyrics_instrumental">Instrumental</string>
+    <string name="lng_local_indexing">Indexing local music…</string>
+    <string name="lng_shippy_playlist">Playlist</string>
+    <string name="lng_pinned_shippy_playlist">Pinned playlist</string>
     <string name="lng_file_picker">Load music from the folders that you select. Slower, but more reliable. Requires the vanilla file manager app to be installed.</string>
     <string name="lng_system_database">Load music that the Android OS automatically detects. Faster, but less reliable. No support for filesystem-dependent features like cover.jpg.</string>
     <string name="lng_grant_storage_anyway">Granting external storage permissions can fix issues on some devices.</string>
@@ -502,10 +517,41 @@
     <string name="fmt_lib_total_duration">Total duration: %s</string>
     <string name="fmt_lib_total_size">Total size: %s</string>
     <string name="fmt_shippy_library_summary">%1$d songs · %2$d albums · %3$d artists</string>
+    <string name="desc_library_collection">%1$s. %2$s.</string>
+    <string name="desc_save_to_liked">Save to Liked</string>
+    <string name="desc_saved_to_liked">Saved to Liked</string>
+    <string name="desc_edit_saved_destinations">Edit saved destinations</string>
+    <string name="desc_download">Download</string>
+    <string name="desc_downloading">Downloading</string>
+    <string name="desc_resume_download">Resume download</string>
+    <string name="desc_retry_download">Retry download</string>
+    <string name="desc_remove_download">Remove download</string>
+    <string name="desc_downloaded">Downloaded</string>
+    <string name="fmt_provider_sources">Sources: %1$s</string>
+    <string name="lbl_saved_destinations">Save to Library</string>
+    <string name="lbl_remove_download">Remove download</string>
+    <string name="lng_remove_download_confirmation">Remove this downloaded copy? The track stays in your playlists and can still stream.</string>
+    <string name="desc_open_queue">Open queue</string>
+    <string name="desc_current_lyric">Current lyric: %s</string>
 
     <plurals name="fmt_song_count">
         <item quantity="one">%d song</item>
         <item quantity="other">%d songs</item>
+    </plurals>
+
+    <plurals name="fmt_liked_track_count">
+        <item quantity="one">%d saved track</item>
+        <item quantity="other">%d saved tracks</item>
+    </plurals>
+
+    <plurals name="fmt_download_record_count">
+        <item quantity="one">%d downloaded track</item>
+        <item quantity="other">%d downloaded tracks</item>
+    </plurals>
+
+    <plurals name="fmt_local_song_count">
+        <item quantity="one">%d local song</item>
+        <item quantity="other">%d local songs</item>
     </plurals>
 
     <plurals name="fmt_album_count">

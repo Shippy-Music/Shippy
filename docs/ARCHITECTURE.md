@@ -97,6 +97,10 @@ shippy/download
   storage
 
 shippy/lyrics
+  ordered source chain
+  lrclib
+  parser
+  encrypted cache
 shippy/lastfm
 shippy/share
 

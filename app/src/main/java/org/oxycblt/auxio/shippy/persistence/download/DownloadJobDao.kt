@@ -101,6 +101,10 @@ internal abstract class DownloadJobDao {
     abstract fun observeAll(): Flow<List<StoredDownloadJob>>
 
     @Transaction
+    @Query("SELECT * FROM download_job ORDER BY createdAtEpochMs DESC, jobId")
+    abstract suspend fun getAll(): List<StoredDownloadJob>
+
+    @Transaction
     @Query("SELECT * FROM download_job WHERE state = 'AVAILABLE' ORDER BY createdAtEpochMs DESC")
     abstract fun observeAvailable(): Flow<List<StoredDownloadJob>>
 

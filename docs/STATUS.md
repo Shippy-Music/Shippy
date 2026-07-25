@@ -1,7 +1,7 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-25  
-**Current stage:** Stages 2–3 — library/download persistence and provider vertical slices  
+**Current stage:** Stages 2–4 — Library completion and player integrations
 **Overall state:** In progress
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
@@ -81,15 +81,45 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   implemented at code level.
 - Duplicate in-process download requests reuse the existing job, and Downloads
   membership is published only from verified available artifacts.
+- Download reconciliation now runs at process startup and from the destination
+  Settings lifecycle. It validates exact artifact URI and length, repairs missing
+  artifacts/relationships, and exposes unknown existing audio without adopting it
+  by filename.
+- The Auxio Library playlist surface now leads with truthful permanent Liked,
+  Downloads, and Local projections, followed by persisted playlist names and the
+  existing fully interactive on-device Auxio playlists.
+- A native ordered lyrics-source boundary, live LRCLIB adapter, conservative
+  recording matcher, synced-LRC parser path, and playback-bound cancellable lookup
+  state are implemented. Musixmatch remains an optional future primary source
+  requiring an official securely supplied API credential.
+- Auxio's real full-player surface now exposes direct Save, capability-aware
+  Download, and Queue actions without duplicate overflow commands. Completed
+  downloads render as a non-destructive checked state.
+- A second Save tap edits Liked and user-playlist destinations. Download removal
+  lives behind the provider overflow and an explicit confirmation instead of a
+  permanent trash control.
+- Provider playback now retains a compact secondary menu for Queue, honest source
+  information, and Android sharing rather than hiding the overflow entirely.
+- Synced/plain lyrics render below the main portrait player. Active-line selection
+  follows playback without rebuilding the full lyric body every tick, stays blank
+  before the first timestamp, and avoids automatic TalkBack live-region spam.
+- Download publication, removal, and destination reconciliation now share one
+  process gate so stale reconciliation cannot overwrite a newly verified
+  Downloads relationship.
+- WorkManager network constraints are derived from the exact requested download
+  candidate, not from unrelated candidates attached to the same canonical track.
+- An entirely empty Library retains the permanent collection rows and adds an
+  explicit folder-selection onboarding row.
 
 ## In Progress
 
-- Wiring persisted user playlists and permanent collection projections into the
-  existing Auxio Library UI.
-- Reconciling scanned files and persisted artifacts in the selected download
-  destination, including startup and revoked/missing-file repair.
-- Wiring direct download state/actions into track rows and the player without
-  duplicating overflow actions.
+- Adding real detail/playback/edit flows for permanent collections and mixed
+  Shippy playlists; current Shippy rows are truthful projections only.
+- Passing unmanaged existing download-folder audio into the canonical/local
+  indexing path without filename-based adoption.
+- Wiring direct download state/actions into track and collection rows.
+- Adding durable offline lyrics cache and an expandable lyrics surface for compact
+  player configurations.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
 - Crew transport/session engine behind the new Crew destination.
@@ -111,6 +141,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   compile/device-unverified until the owner build.
 - WorkManager/Hilt worker generation, SAF storage, and foreground download
   execution are code/static-checked but compile/device-unverified.
+- LRCLIB response shape was live-checked on 2026-07-25; Kotlin parsing, Hilt
+  multibinding, and playback lookup remain compile/device-unverified.
 - Canonical Media3 custom-cache-key/header routing is implemented and
   syntax-checked but remains runtime-unverified.
 - Remote provider artwork currently reaches in-app Coil surfaces and metadata
@@ -121,10 +153,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Add download destination reconciliation and missing-artifact repair.
-2. Bind permanent collections/user playlists to the existing Auxio Library UI.
-3. Add direct save/download/player action surfaces without duplicates.
-4. Add the next viable provider/YouTube adapter, then continue Crew.
+1. Add permanent collection and mixed-playlist detail/edit flows.
+2. Add durable offline lyrics cache and unmanaged-folder indexing.
+3. Add the next viable provider/YouTube adapter.
+4. Continue Crew domain, transport, and active-session UI.
 
 ## Verification Ledger
 
@@ -135,8 +167,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers, Room library/download persistence, SAF destination, WorkManager transfer pipeline, live provider/Search-to-play, local adapter, Crew reducer |
-| New tests | Authored, not run | Resolver, collections, provider registry, download reducer/transfer/persistence, Crew |
-| External provider shape | Live-inspected | JioSaavn search response on 2026-07-25 |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/onboarding, LRCLIB/playback lyrics lookup and synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer |
+| New tests | Authored, not run | Resolver, collections/projections/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/active-line timing, player action presentation, Crew |
+| External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
 | Static structure | Parsed | Graphify 276-file AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

@@ -49,6 +49,8 @@ interface DownloadJobRepository {
 
     fun observeAvailable(): Flow<List<PersistedDownload>>
 
+    suspend fun getAll(): List<PersistedDownload>
+
     suspend fun get(jobId: DownloadJobId): PersistedDownload?
 
     suspend fun getLatestForTrack(trackId: TrackId): PersistedDownload?
@@ -91,6 +93,8 @@ constructor(
 
     override fun observeAvailable(): Flow<List<PersistedDownload>> =
         dao.observeAvailable().map { jobs -> jobs.map(StoredDownloadJob::toDomain) }
+
+    override suspend fun getAll(): List<PersistedDownload> = dao.getAll().map(StoredDownloadJob::toDomain)
 
     override suspend fun get(jobId: DownloadJobId): PersistedDownload? =
         dao.get(jobId.value)?.toDomain()

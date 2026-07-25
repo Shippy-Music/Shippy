@@ -11,6 +11,7 @@
 package org.oxycblt.auxio.playback
 
 import javax.inject.Inject
+import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.LocalCandidateResolution
 import org.oxycblt.auxio.shippy.domain.LocalCandidateResolver
 import org.oxycblt.auxio.shippy.domain.QueueItem
@@ -19,6 +20,7 @@ import org.oxycblt.musikr.Song
 
 data class PlaybackDisplayItem(
     val queueItem: QueueItem,
+    val resolvedCandidateId: CandidateId,
     val localSong: Song?,
 )
 
@@ -40,6 +42,10 @@ constructor(
                 LocalCandidateResolution.NotLocal,
                 null -> null
             }
-        return PlaybackDisplayItem(resolvedItem.item, localSong)
+        return PlaybackDisplayItem(
+            queueItem = resolvedItem.item,
+            resolvedCandidateId = resolvedItem.playback.candidateId,
+            localSong = localSong,
+        )
     }
 }
