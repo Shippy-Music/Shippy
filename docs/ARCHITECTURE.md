@@ -461,6 +461,15 @@ sequence checks, payload bounds, timeouts, and a fixed peer limit. This channel
 only authenticates invitation possession; the WebRTC join authenticator still
 binds those claims to both DTLS fingerprints before ordinary Crew traffic opens.
 
+`CrewDirectPeerConnection` now owns the per-peer transition across those two
+boundaries. One deterministic offerer creates the data channels, SDP is sent
+before generation-matched trickle ICE, the responder returns the answer, and
+renegotiation uses monotonically increasing generations. Once all WebRTC
+channels are open, the driver runs the four-message DTLS-fingerprint-bound join
+proof and exposes `CrewPeerTransport` only after both sides authenticate. A
+small factory/negotiation interface keeps this orchestration deterministically
+simulatable without creating native WebRTC objects in unit tests.
+
 Shippy currently targets SDK 36. Therefore Android 17's
 `ACCESS_LOCAL_NETWORK` runtime permission is not declared yet; official Android
 guidance says it becomes required when targeting SDK 37. The existing adapter

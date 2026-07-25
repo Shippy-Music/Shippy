@@ -178,6 +178,14 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - LAN signaling treats the presented member as a claim until the existing
   WebRTC join proof binds both members to the negotiated DTLS fingerprints.
   Bidirectional loopback and wrong-secret tests are authored but not run.
+- A direct peer-connection driver now serializes offer/answer and ICE restart
+  generations, guarantees SDP precedes its gathered ICE, drives all four
+  fingerprint-bound join-authentication messages, and exposes the normal Crew
+  transport only after mutual authentication.
+- WebRTC construction now has a narrow negotiation factory seam. A deterministic
+  two-peer simulation covers offer/answer, early gathered ICE ordering,
+  coalesced restart negotiation, mutual join proof, opposite-member binding,
+  and authenticated transport publication.
 
 ## In Progress
 
@@ -191,8 +199,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Crew persistence, hosted signaling, join-handshake orchestration,
-  transport/session engine, and active UI behind the new Crew destination.
+- Crew persistence, hosted signaling, transport/session engine, and active UI
+  behind the new Crew destination.
 
 ## Not Started
 
@@ -205,10 +213,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   exact verification before selecting the day-to-day development branch.
 - Bloomee provider logic is Dart/Flutter and must be ported/reimplemented, not
   assumed reusable as native Kotlin.
-- Crew transport, join authentication, NSD, and encrypted LAN signaling are
-  source/API-inspected only. The loopback tests are authored but not run; NAT
-  traversal, TURN, reconnection, and multi-phone behavior remain
-  compile/device-unverified.
+- Crew transport, join authentication, NSD, encrypted LAN signaling, and direct
+  connection orchestration are source/API-inspected only. Loopback/simulation
+  tests are authored but not run; NAT traversal, TURN, reconnection, and
+  multi-phone behavior remain compile/device-unverified.
 - Safe ungraceful election needs a strict majority. A direct two-member Crew
   pauses after coordinator loss until reconnection; the future relay/witness
   path must restore availability without weakening split-brain safety.
@@ -243,8 +251,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites, authenticated LAN signaling, and WebRTC boundary |
-| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/signaling/transport policies |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
+| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 334-file app AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 336-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

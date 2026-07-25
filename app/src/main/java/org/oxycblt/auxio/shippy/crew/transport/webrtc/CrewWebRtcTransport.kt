@@ -215,11 +215,40 @@ interface CrewRtcSignalSink {
     fun onRenegotiationNeeded()
 }
 
+interface CrewRtcNegotiationPeer : Closeable {
+    val negotiationState: StateFlow<CrewTransportState>
+    val authenticationIncoming: Flow<CrewAuthenticationFrame>
+
+    suspend fun createOffer(generation: Long): CrewSessionDescription
+
+    suspend fun createAnswer(generation: Long): CrewSessionDescription
+
+    suspend fun setRemoteDescription(description: CrewSessionDescription)
+
+    fun addRemoteIceCandidate(candidate: CrewIceCandidate): Boolean
+
+    fun restartIce(generation: Long)
+
+    fun trySendAuthentication(frame: CrewAuthenticationFrame): CrewSendResult
+
+    fun completeAuthentication(binding: CrewAuthenticatedPeerBinding): CrewPeerTransport
+}
+
+fun interface CrewRtcPeerFactory {
+    fun createPeer(
+        expectedSessionId: CrewSessionId,
+        claimedRemoteMemberId: CrewMemberId,
+        iceServers: List<CrewIceServer>,
+        createsDataChannels: Boolean,
+        signalSink: CrewRtcSignalSink,
+    ): CrewRtcNegotiationPeer
+}
+
 /**
  * Owns the data-only WebRTC factory. It does not request microphone/camera tracks and does not own
  * signaling, invitation authentication, session authority, or media playback.
  */
-class CrewWebRtcRuntime(context: Context) : Closeable {
+class CrewWebRtcRuntime(context: Context) : Closeable, CrewRtcPeerFactory {
     private val closed = AtomicBoolean(false)
     private val factory: PeerConnectionFactory
 
@@ -233,7 +262,7 @@ class CrewWebRtcRuntime(context: Context) : Closeable {
         factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
     }
 
-    fun createPeer(
+    override fun createPeer(
         expectedSessionId: CrewSessionId,
         claimedRemoteMemberId: CrewMemberId,
         iceServers: List<CrewIceServer>,
@@ -284,7 +313,7 @@ class CrewWebRtcPeer internal constructor(
     private val claimedRemoteMemberId: CrewMemberId,
     private val connection: PeerConnection,
     private val signalSink: CrewRtcSignalSink,
-) : Closeable {
+) : CrewRtcNegotiationPeer {
     private val closed = AtomicBoolean(false)
     private val channelLock = Any()
     private val negotiationLock = Any()
@@ -308,8 +337,8 @@ class CrewWebRtcPeer internal constructor(
     private var remoteDescriptionSet = false
     private val pendingRemoteIceCandidates = ArrayDeque<CrewIceCandidate>()
 
-    val negotiationState: StateFlow<CrewTransportState> = mutableState.asStateFlow()
-    val authenticationIncoming: Flow<CrewAuthenticationFrame> =
+    override val negotiationState: StateFlow<CrewTransportState> = mutableState.asStateFlow()
+    override val authenticationIncoming: Flow<CrewAuthenticationFrame> =
         authenticationFrames.receiveAsFlow()
 
     internal fun initialize(createsDataChannels: Boolean) {
@@ -321,7 +350,7 @@ class CrewWebRtcPeer internal constructor(
         }
     }
 
-    suspend fun createOffer(generation: Long): CrewSessionDescription =
+    override suspend fun createOffer(generation: Long): CrewSessionDescription =
         signalingMutex.withLock {
             if (currentGeneration() < generation) beginNegotiation(generation)
             require(currentGeneration() == generation) {
@@ -332,7 +361,7 @@ class CrewWebRtcPeer internal constructor(
             native.toCrew(generation)
         }
 
-    suspend fun createAnswer(generation: Long): CrewSessionDescription =
+    override suspend fun createAnswer(generation: Long): CrewSessionDescription =
         signalingMutex.withLock {
             require(currentGeneration() == generation && isRemoteDescriptionSet()) {
                 "Remote offer must be installed before creating a Crew answer"
@@ -342,7 +371,7 @@ class CrewWebRtcPeer internal constructor(
             native.toCrew(generation)
         }
 
-    suspend fun setRemoteDescription(description: CrewSessionDescription) {
+    override suspend fun setRemoteDescription(description: CrewSessionDescription) {
         signalingMutex.withLock {
             val generation = currentGeneration()
             when {
@@ -367,7 +396,7 @@ class CrewWebRtcPeer internal constructor(
         }
     }
 
-    fun addRemoteIceCandidate(candidate: CrewIceCandidate): Boolean {
+    override fun addRemoteIceCandidate(candidate: CrewIceCandidate): Boolean {
         if (closed.get()) return false
         val installNow =
             synchronized(negotiationLock) {
@@ -384,14 +413,14 @@ class CrewWebRtcPeer internal constructor(
         return !installNow || connection.addIceCandidate(candidate.toNative())
     }
 
-    fun restartIce(generation: Long) {
+    override fun restartIce(generation: Long) {
         if (!closed.get()) {
             beginNegotiation(generation)
             connection.restartIce()
         }
     }
 
-    fun trySendAuthentication(frame: CrewAuthenticationFrame): CrewSendResult =
+    override fun trySendAuthentication(frame: CrewAuthenticationFrame): CrewSendResult =
         trySendFrame(
             CrewTransportFrame(CrewTransportChannel.CONTROL, frame.copyPayload()),
             requireAuthentication = false,
@@ -400,7 +429,9 @@ class CrewWebRtcPeer internal constructor(
     /**
      * Opens the ordinary Crew frame surface only after a verified join transcript is supplied.
      */
-    fun completeAuthentication(binding: CrewAuthenticatedPeerBinding): CrewPeerTransport {
+    override fun completeAuthentication(
+        binding: CrewAuthenticatedPeerBinding,
+    ): CrewPeerTransport {
         check(!closed.get()) { "Crew peer is closed" }
         require(binding.sessionId == expectedSessionId) {
             "Authenticated session does not match the negotiated Crew"

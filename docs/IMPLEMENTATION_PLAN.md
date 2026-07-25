@@ -158,6 +158,8 @@ code/test level, ready for later device verification.
 - [x] Implement LAN advertisement/discovery compatible with Android constraints.
 - [x] Select and code-spike encrypted direct transport.
 - [x] Implement authenticated encrypted LAN signaling for SDP/trickle ICE.
+- [x] Orchestrate direct offer/answer, ICE generations, and fingerprint-bound
+      peer authentication behind the signaling boundary.
 - [ ] Implement remote signaling and direct P2P candidate negotiation.
 - [ ] Implement reconnection and network-change handling.
 - [x] Separate durable control, transient reaction, clock, and media channels.

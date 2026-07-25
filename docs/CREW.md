@@ -527,6 +527,14 @@ size limits, and finite connection/handshake timeouts. A LAN signaling member ID
 remains only a secret-holder claim until the later WebRTC join proof binds both
 members to the negotiated DTLS fingerprints.
 
+The direct-connection driver assigns one offerer, serializes offer/answer and
+ICE-restart generations, and deliberately holds locally gathered ICE until its
+matching SDP has been sent. After the data channels report ready, it drives the
+four join-authentication messages and publishes an ordinary Crew transport only
+after the exact offer/answer fingerprints and opposite member identity verify.
+Signaling and pre-authentication frames therefore cannot bypass the transport
+gate.
+
 Inbound control overflow is a protocol failure because durable state cannot be
 dropped. Clock/reaction overflow is intentionally lossy. Media overflow emits a
 bounded drop signal for manifest/chunk acknowledgement and retry instead of
