@@ -15,6 +15,7 @@ import android.os.Bundle
 import android.text.InputType
 import android.view.LayoutInflater
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
@@ -22,6 +23,8 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -43,12 +46,17 @@ import org.oxycblt.auxio.ui.ViewBindingFragment
 @AndroidEntryPoint
 class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
     private val model: CrewViewModel by viewModels()
+    private var qrDialog: androidx.appcompat.app.AlertDialog? = null
+    private val scanQr = registerForActivityResult(ScanContract()) { result ->
+        result.contents?.trim()?.takeIf(String::isNotBlank)?.let(model::join)
+    }
 
     override fun onCreateBinding(inflater: LayoutInflater) = FragmentCrewBinding.inflate(inflater)
 
     override fun onBindingCreated(binding: FragmentCrewBinding, savedInstanceState: Bundle?) {
         binding.crewStart.setOnClickListener { model.startHost() }
         binding.crewJoin.setOnClickListener { showJoinDialog() }
+        binding.crewScanQr.setOnClickListener { scanQr.launch(scanOptions()) }
         binding.crewDismissFailure.setOnClickListener { model.dismissFailure() }
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -56,6 +64,12 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
                 model.state.collect(::render)
             }
         }
+    }
+
+    override fun onDestroyView() {
+        qrDialog?.dismiss()
+        qrDialog = null
+        super.onDestroyView()
     }
 
     private fun showJoinDialog() {
@@ -86,6 +100,9 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         if (state !is ActiveCrewRuntimeState.Active && state !is ActiveCrewRuntimeState.Ending) {
             // Do not retain a short-lived invitation in a hidden view listener after teardown.
             binding.crewShare.setOnClickListener(null)
+            binding.crewShowQr.setOnClickListener(null)
+            qrDialog?.dismiss()
+            qrDialog = null
         }
 
         when (state) {
@@ -122,16 +139,62 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         renderMembers(presentation)
 
         val host = presentation.role == ActiveCrewMode.HOST
+        val inviteLink = presentation.inviteLink?.takeIf(String::isNotBlank)
+        val inviteAvailable = host && !ending && inviteLink != null
+        binding.crewShowQr.isVisible = host
+        binding.crewShowQr.isEnabled = inviteAvailable
         binding.crewShare.isVisible = host
-        binding.crewShare.isEnabled = !ending
-        binding.crewShare.setOnClickListener {
-            presentation.inviteLink?.let(::shareInvite)
+        binding.crewShare.isEnabled = inviteAvailable
+        if (host && !ending && inviteLink != null) {
+            binding.crewShowQr.setOnClickListener { showQrDialog(inviteLink) }
+            binding.crewShare.setOnClickListener { shareInvite(inviteLink) }
+        } else {
+            binding.crewShowQr.setOnClickListener(null)
+            binding.crewShare.setOnClickListener(null)
+            if (ending) qrDialog?.dismiss()
         }
         binding.crewEnd.isEnabled = !ending
         binding.crewEnd.setText(if (host) R.string.lbl_end_crew else R.string.lbl_leave_crew)
         binding.crewEnd.setOnClickListener { showEndDialog(host) }
         binding.crewEndingStatus.isVisible = ending
         binding.crewEndingProgress.isVisible = ending
+    }
+
+    private fun scanOptions() = ScanOptions().apply {
+        setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+        setBeepEnabled(false)
+        setOrientationLocked(false)
+        setPrompt(getString(R.string.lng_scan_crew_qr_code))
+    }
+
+    private fun showQrDialog(inviteLink: String) {
+        val size = (resources.displayMetrics.density * 280).toInt()
+        val bitmap = CrewInviteQr.createBitmap(inviteLink, size) ?: return
+        val image = ImageView(requireContext()).apply {
+            setImageBitmap(bitmap)
+            setBackgroundColor(android.graphics.Color.WHITE)
+            adjustViewBounds = true
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                marginStart = resources.getDimensionPixelSize(R.dimen.spacing_medium)
+                marginEnd = resources.getDimensionPixelSize(R.dimen.spacing_medium)
+            }
+        }
+        qrDialog?.dismiss()
+        qrDialog = MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.ttl_crew_qr_code)
+            .setMessage(R.string.lng_crew_qr_code)
+            .setView(image)
+            .setNegativeButton(R.string.lbl_cancel, null)
+            .setPositiveButton(R.string.lbl_share_invite) { _, _ -> shareInvite(inviteLink) }
+            .create()
+            .also { dialog ->
+                dialog.setOnDismissListener {
+                    image.setImageBitmap(null)
+                    bitmap.recycle()
+                    if (qrDialog === dialog) qrDialog = null
+                }
+                dialog.show()
+            }
     }
 
     private fun renderMembers(presentation: ActiveCrewPresentation) {

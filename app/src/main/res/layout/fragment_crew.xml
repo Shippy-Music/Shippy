@@ -74,6 +74,14 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/lbl_join_with_link" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/crew_scan_qr"
+                    style="@style/Widget.Auxio.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:text="@string/lbl_scan_qr_code" />
             </LinearLayout>
 
             <LinearLayout
@@ -153,11 +161,20 @@
                     android:visibility="gone" />
 
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/crew_share"
+                    android:id="@+id/crew_show_qr"
                     style="@style/Widget.Auxio.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="@dimen/spacing_large"
+                    android:text="@string/lbl_show_qr_code"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/crew_share"
+                    style="@style/Widget.Auxio.Button.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/lbl_share_invite" />
 
                 <com.google.android.material.button.MaterialButton

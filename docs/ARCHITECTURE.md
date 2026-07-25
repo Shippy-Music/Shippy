@@ -629,9 +629,11 @@ that ended or changed during suspension.
 The Crew fragment observes this owner through a thin Hilt ViewModel and never
 constructs or retains network/session resources. Its current production surface
 supports LAN host, pasted-link join, live canonical membership, host invite
-sharing, and exact explicit end/leave. Invite values are handed directly to the
-Android share chooser and are not displayed or logged. QR rendering/scanning is
-still a separate unfinished input surface.
+sharing, QR rendering/scanning, and exact explicit end/leave. Invite values are
+handed directly to the QR renderer, scanner result, or Android share chooser and
+are not displayed or logged. The camera scanner is optional-device compatible,
+accepts QR payloads only, and retains pasted-link joining as the no-camera
+fallback.
 
 Shippy currently targets SDK 36. Therefore Android 17's
 `ACCESS_LOCAL_NETWORK` runtime permission is not declared yet; official Android

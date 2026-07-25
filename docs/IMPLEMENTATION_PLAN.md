@@ -206,7 +206,9 @@ code/test level, ready for later device verification.
 - [x] Add a bounded pre-engine join bootstrap that waits through the admission
       event and accepts only the authenticated coordinator's normal snapshot
       containing the exact local member.
-- [ ] Expose only clear join/connection states in UI.
+- [x] Expose LAN start/join, QR render/scan, pasted-link fallback, and clear
+      connection states in UI.
+- [ ] Expose equivalent remote/relay connection states when those paths exist.
 
 **Validation:**
 

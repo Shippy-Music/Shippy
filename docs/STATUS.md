@@ -376,6 +376,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Auxio's existing persisted SAF source/excluded-folder selection, recursive
   local indexing, and forced rescan path satisfy selected Local folder
   management; this foundation is retained instead of duplicated.
+- Crew hosts can now show a bounded high-contrast invitation QR or share the
+  same short-lived link. Joiners can scan QR-only camera input or use the
+  existing pasted-link fallback; hidden/dismissed UI releases the bearer link
+  listener and generated bitmap.
 
 ## In Progress
 
@@ -386,10 +390,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
 - Adding live provider health verification.
-- Hosted signaling, QR rendering/scanning, and remaining transport lifecycle.
+- Hosted signaling and remaining transport lifecycle.
 - Transport migration after a reconnect.
 - Connecting Crew request scheduling and rolling prefetch to the active media
-  runtime, then adding QR and reactions to the visible Crew flow.
+  runtime, then adding reactions to the visible player/Crew flow.
 
 ## Not Started
 
@@ -432,10 +436,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Complete unmanaged download-folder indexing.
-2. Connect the active Crew runtime to Push & Pull requests, suppliers, prefetch,
-   cache overlays, the resolver, and the player.
-3. Wire the secure rejoin connector to real signaling; hosted signaling remains separate.
+1. Add live Crew reactions to the active runtime and player surface.
+2. Connect the active Crew runtime to Push & Pull requests, suppliers, rolling
+   prefetch, cache overlays, the resolver, and the player.
+3. Complete unmanaged download-folder indexing, then wire secure rejoin and
+   hosted signaling.
 
 ## Verification Ledger
 
@@ -449,5 +454,5 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider and Search-to-play paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
 | New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Curated app Graphify AST refreshed after the LAN-host runtime slice; XML parsing and `git diff --check` used where applicable |
+| Static structure | Parsed | Curated app Graphify AST refreshed after the Crew/player bridge; XML parsing and `git diff --check` used where applicable |
 | APK/device | Not verified | Owner handoff stage |
