@@ -12,6 +12,7 @@ package org.oxycblt.auxio.shippy.crew.runtime
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -19,6 +20,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerConnection
 import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerRole
+import org.oxycblt.auxio.shippy.crew.core.CrewAction
+import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
@@ -39,7 +42,9 @@ import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingClient
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntime
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
+import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
+import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewWebRtcRuntime
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
@@ -97,6 +102,16 @@ class CrewLanJoinedSession internal constructor(
     val state: StateFlow<CrewState> = engine.state
 
     override fun toString() = "CrewLanJoinedSession(identity=redacted, invite=redacted)"
+
+    suspend fun submit(action: CrewAction): CrewSubmitResult =
+        engine.submit(
+            CrewActionRequest(
+                id = DurableEventId(UUID.randomUUID().toString()),
+                issuingMemberId = localMemberId,
+                clientMonotonicTimestampMs = (System.nanoTime() / 1_000_000L).coerceAtLeast(0L),
+                action = action,
+            ),
+        )
 
     override fun close() {
         if (!markReleased()) return

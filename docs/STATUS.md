@@ -349,6 +349,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   playback coordinator also applies the exact active temporary overlay before
   verified downloads and providers without changing queue-item identity.
   Request scheduling, rolling prefetch, and Crew-to-player commands remain.
+- Live host/join sessions now expose one narrow local-action submission seam.
+  `ActiveCrewRuntime` generation-checks that seam before and after submission,
+  preserves exact local issuer identity, and never exposes an engine or
+  transport to UI/player integration code.
 - Library's New playlist action now creates a collision-safe, unpinned Shippy
   Room playlist after native name validation. Auxio's existing Import action
   remains a separate device-playlist import.

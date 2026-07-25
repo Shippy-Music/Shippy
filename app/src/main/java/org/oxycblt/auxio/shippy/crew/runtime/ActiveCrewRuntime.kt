@@ -12,6 +12,7 @@ package org.oxycblt.auxio.shippy.crew.runtime
 
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,9 +21,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
+import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 
 enum class ActiveCrewMode {
     HOST,
@@ -35,6 +38,16 @@ sealed interface ActiveCrewRequestResult {
     data object Busy : ActiveCrewRequestResult
 
     data object NothingToEnd : ActiveCrewRequestResult
+}
+
+sealed interface ActiveCrewSubmitResult {
+    data class Accepted(val result: CrewSubmitResult) : ActiveCrewSubmitResult
+
+    data object NotActive : ActiveCrewSubmitResult
+
+    data object SessionChanged : ActiveCrewSubmitResult
+
+    data object Failed : ActiveCrewSubmitResult
 }
 
 sealed interface ActiveCrewRuntimeFailure {
@@ -129,6 +142,35 @@ constructor(
         }
         launch(ending.generation) { endOwnedSession(ending) }
         return ActiveCrewRequestResult.Accepted
+    }
+
+    suspend fun submit(action: CrewAction): ActiveCrewSubmitResult {
+        val submission = synchronized(lock) {
+            if (mutableState.value !is ActiveCrewRuntimeState.Active) return ActiveCrewSubmitResult.NotActive
+            val session = ownedSession ?: return ActiveCrewSubmitResult.NotActive
+            SubmitRequest(generation, session)
+        }
+        val result =
+            try {
+                submission.session.submit(action)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                return synchronized(lock) {
+                    if (generation != submission.generation || ownedSession !== submission.session) {
+                        ActiveCrewSubmitResult.SessionChanged
+                    } else {
+                        ActiveCrewSubmitResult.Failed
+                    }
+                }
+            }
+        return synchronized(lock) {
+            if (generation != submission.generation || ownedSession !== submission.session) {
+                ActiveCrewSubmitResult.SessionChanged
+            } else {
+                ActiveCrewSubmitResult.Accepted(result)
+            }
+        }
     }
 
     fun dismissFailure() {
@@ -239,6 +281,8 @@ constructor(
 
     private data class EndRequest(val generation: Long, val session: OwnedSession)
 
+    private data class SubmitRequest(val generation: Long, val session: OwnedSession)
+
     private sealed interface OwnedSession {
         val role: ActiveCrewMode
         val sessionId: CrewSessionId
@@ -247,6 +291,8 @@ constructor(
         val inviteLink: String?
 
         suspend fun endExplicitly()
+
+        suspend fun submit(action: CrewAction): CrewSubmitResult
 
         fun presentation(crewState: CrewState) =
             ActiveCrewPresentation(role, sessionId, localMemberId, crewState, inviteLink)
@@ -259,6 +305,8 @@ constructor(
             override val inviteLink = session.inviteLink
 
             override suspend fun endExplicitly() = session.end()
+
+            override suspend fun submit(action: CrewAction) = session.submit(action)
         }
 
         class Join(private val session: CrewLanJoinedSession) : OwnedSession {
@@ -269,6 +317,8 @@ constructor(
             override val inviteLink: String? = null
 
             override suspend fun endExplicitly() = session.leave()
+
+            override suspend fun submit(action: CrewAction) = session.submit(action)
         }
     }
 }

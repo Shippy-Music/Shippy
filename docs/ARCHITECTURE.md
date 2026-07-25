@@ -621,6 +621,10 @@ link into presentation state. UI never receives an engine, signaling peer,
 transport, invite secret, or runtime session object. Explicit end still uses
 the launcher's exact checkpoint/lease cleanup contract; graceful ordered
 membership departure remains a later control-plane integration.
+The owner also exposes one suspend local-action gateway. It creates no competing
+state: the exact owned session constructs an issuer-bound request and delegates
+to `CrewSessionEngine`, while generation checks reject results from a session
+that ended or changed during suspension.
 
 The Crew fragment observes this owner through a thin Hilt ViewModel and never
 constructs or retains network/session resources. Its current production surface
