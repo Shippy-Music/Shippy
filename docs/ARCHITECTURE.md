@@ -614,6 +614,13 @@ transport, invite secret, or runtime session object. Explicit end still uses
 the launcher's exact checkpoint/lease cleanup contract; graceful ordered
 membership departure remains a later control-plane integration.
 
+The Crew fragment observes this owner through a thin Hilt ViewModel and never
+constructs or retains network/session resources. Its current production surface
+supports LAN host, pasted-link join, live canonical membership, host invite
+sharing, and exact explicit end/leave. Invite values are handed directly to the
+Android share chooser and are not displayed or logged. QR rendering/scanning is
+still a separate unfinished input surface.
+
 Shippy currently targets SDK 36. Therefore Android 17's
 `ACCESS_LOCAL_NETWORK` runtime permission is not declared yet; official Android
 guidance says it becomes required when targeting SDK 37. The existing adapter

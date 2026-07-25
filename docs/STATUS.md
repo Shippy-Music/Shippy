@@ -299,6 +299,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   presentation, rejects overlapping operations, and performs exact explicit
   host end or joined leave. Stale completions cannot replace a newer generation,
   and transport/session objects never enter UI state.
+- The Crew destination now binds that runtime through a thin Hilt ViewModel:
+  listeners can start a real LAN Crew, join with a pasted Shippy invite, see
+  live members, share the host invite, and explicitly end or leave. Starting,
+  ending, and sanitized failure states are visible; the UI no longer simulates
+  unavailable session actions or claims an unimplemented QR scanner.
 - Anonymous YouTube Music is now a second provider adapter: it bootstraps public
   Innertube configuration at runtime, searches WEB_REMIX song results, retries
   playback through Android Music/iOS client contexts, and accepts direct HTTPS
@@ -354,8 +359,7 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
 - Adding live provider health verification.
-- Hosted signaling, remaining transport lifecycle, and active UI binding behind
-  the new Crew destination.
+- Hosted signaling, QR rendering/scanning, and remaining transport lifecycle.
 - Transport migration after a reconnect.
 - Composing the active Crew runtime around Push & Pull availability, supplier
   authorization, request scheduling, prefetch, the temporary candidate overlay,
@@ -399,8 +403,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 ## Next Concrete Actions
 
 1. Complete unmanaged download-folder indexing.
-2. Compose the active Crew host/join runtime and connect Push & Pull requests,
-   suppliers, prefetch, cache overlays, the resolver, and the player.
+2. Connect the active Crew runtime to Push & Pull requests, suppliers, prefetch,
+   cache overlays, the resolver, and the player.
 3. Wire the secure rejoin connector to real signaling; hosted signaling remains separate.
 
 ## Verification Ledger
