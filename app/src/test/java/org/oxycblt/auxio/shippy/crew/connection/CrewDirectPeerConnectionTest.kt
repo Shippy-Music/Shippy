@@ -172,6 +172,7 @@ class CrewDirectPeerConnectionTest {
     ) : CrewSignalPeer {
         private val mutableState = MutableStateFlow(CrewSignalConnectionState.CONNECTED)
 
+        override val remoteDisplayName = "Test peer"
         override val state: StateFlow<CrewSignalConnectionState> = mutableState
         override val incoming: Flow<CrewSignalMessage> = inbound.receiveAsFlow()
 

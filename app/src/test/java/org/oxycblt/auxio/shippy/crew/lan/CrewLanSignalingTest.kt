@@ -38,6 +38,7 @@ class CrewLanSignalingTest {
                     fixture.invite,
                     fixture.sessionId,
                     fixture.hostMemberId,
+                    fixture.hostDisplayName,
                     fixture.now,
                 )
             try {
@@ -47,6 +48,7 @@ class CrewLanSignalingTest {
                         fixture.rendezvous(host.port),
                         fixture.invite,
                         fixture.joinerMemberId,
+                        fixture.joinerDisplayName,
                         fixture.now,
                     )
                 assertTrue(result is CrewLanSignalConnectResult.Connected)
@@ -56,6 +58,8 @@ class CrewLanSignalingTest {
                     assertEquals(fixture.sessionId, clientPeer.sessionId)
                     assertEquals(fixture.hostMemberId, clientPeer.remoteMemberClaim)
                     assertEquals(fixture.joinerMemberId, hostPeer.remoteMemberClaim)
+                    assertEquals(fixture.hostDisplayName, clientPeer.remoteDisplayName)
+                    assertEquals(fixture.joinerDisplayName, hostPeer.remoteDisplayName)
 
                     val fromClient = CrewSignalMessage.EndOfCandidates(4)
                     assertEquals(CrewSignalSendResult.Sent, clientPeer.send(fromClient))
@@ -83,6 +87,7 @@ class CrewLanSignalingTest {
                     fixture.invite,
                     fixture.sessionId,
                     fixture.hostMemberId,
+                    fixture.hostDisplayName,
                     fixture.now,
                 )
             try {
@@ -93,6 +98,7 @@ class CrewLanSignalingTest {
                             secret = CrewInviteSecret("wrong_secret_12345678901234567890"),
                         ),
                         fixture.joinerMemberId,
+                        fixture.joinerDisplayName,
                         fixture.now,
                     )
 
@@ -114,6 +120,31 @@ class CrewLanSignalingTest {
             fixture.invite.copy(expiresAtEpochMs = fixture.now + 16 * 60 * 1000L),
             fixture.sessionId,
             fixture.hostMemberId,
+            fixture.hostDisplayName,
+            fixture.now,
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `host rejects a blank display name`() {
+        val fixture = Fixture()
+        CrewLanSignalingHost(
+            fixture.invite,
+            fixture.sessionId,
+            fixture.hostMemberId,
+            " \t ",
+            fixture.now,
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `client rejects an oversized display name`() = runBlocking {
+        val fixture = Fixture()
+        CrewLanSignalingClient.connect(
+            fixture.rendezvous(1),
+            fixture.invite,
+            fixture.joinerMemberId,
+            "a".repeat(81),
             fixture.now,
         )
     }
@@ -133,6 +164,8 @@ class CrewLanSignalingTest {
         val sessionId = CrewSessionId("canonical_session", protocolVersion)
         val hostMemberId = CrewMemberId("host_member", protocolVersion)
         val joinerMemberId = CrewMemberId("joiner_member", protocolVersion)
+        val hostDisplayName = "Host name"
+        val joinerDisplayName = "Joiner name"
 
         fun rendezvous(port: Int) =
             CrewLanRendezvous(

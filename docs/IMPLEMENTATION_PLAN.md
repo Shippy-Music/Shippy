@@ -186,6 +186,9 @@ code/test level, ready for later device verification.
 - [x] Implement LAN advertisement/discovery compatible with Android constraints.
 - [x] Select and code-spike encrypted direct transport.
 - [x] Implement authenticated encrypted LAN signaling for SDP/trickle ICE.
+  - Handshake v2 also carries a bounded display-name claim bound into the QR
+    secret HMAC transcript; membership still trusts only the later
+    fingerprint-bound member ID.
 - [x] Orchestrate direct offer/answer, ICE generations, and fingerprint-bound
       peer authentication behind the signaling boundary.
 - [ ] Implement remote signaling and direct P2P candidate negotiation.

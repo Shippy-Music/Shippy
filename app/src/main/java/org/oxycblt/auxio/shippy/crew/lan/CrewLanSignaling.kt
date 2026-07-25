@@ -54,7 +54,7 @@ import org.oxycblt.auxio.shippy.crew.signaling.CrewSignalMessageCodec
 import org.oxycblt.auxio.shippy.crew.signaling.MAX_CREW_SIGNAL_MESSAGE_BYTES
 
 private const val SIGNAL_HANDSHAKE_MAGIC = 0x53485059
-private const val SIGNAL_HANDSHAKE_VERSION = 1
+private const val SIGNAL_HANDSHAKE_VERSION = 2
 private const val SIGNAL_NONCE_BYTES = 32
 private const val SIGNAL_PROOF_BYTES = 32
 private const val SIGNAL_KEY_BYTES = 32
@@ -62,6 +62,7 @@ private const val SIGNAL_GCM_NONCE_BYTES = 12
 private const val SIGNAL_GCM_TAG_BITS = 128
 private const val SIGNAL_GCM_TAG_BYTES = SIGNAL_GCM_TAG_BITS / Byte.SIZE_BITS
 private const val SIGNAL_MAX_ID_BYTES = 128
+private const val SIGNAL_MAX_DISPLAY_NAME_BYTES = 80
 private const val SIGNAL_CONNECT_TIMEOUT_MS = 5_000
 private const val SIGNAL_HANDSHAKE_TIMEOUT_MS = 8_000
 private const val SIGNAL_MAX_ENCRYPTED_FRAME_BYTES =
@@ -91,11 +92,13 @@ sealed interface CrewSignalSendResult {
  * A QR-secret-authenticated signaling peer.
  *
  * [remoteMemberClaim] proves possession of the active invitation secret but is still a claim until
- * the SDP-fingerprint-bound Crew join authenticator completes over WebRTC.
+ * the SDP-fingerprint-bound Crew join authenticator completes over WebRTC. [remoteDisplayName] is
+ * likewise only a claim, usable after WebRTC proves the same remote member ID.
  */
 interface CrewSignalPeer : Closeable {
     val sessionId: CrewSessionId
     val remoteMemberClaim: CrewMemberId
+    val remoteDisplayName: String
     val state: StateFlow<CrewSignalConnectionState>
     val incoming: Flow<CrewSignalMessage>
 
@@ -136,6 +139,7 @@ class CrewLanSignalingHost(
     private val invite: CrewInvite,
     private val sessionId: CrewSessionId,
     private val localMemberId: CrewMemberId,
+    private val localDisplayName: String,
     nowEpochMs: Long,
     private val maxPeers: Int = DEFAULT_MAX_SIGNAL_PEERS,
     private val nonceSource: CrewSignalNonceSource = SecureCrewSignalNonceSource,
@@ -146,7 +150,7 @@ class CrewLanSignalingHost(
     private val serverSocket =
         createSignalServerSocket(
             maxPeers.also {
-                validateHostConfig(invite, sessionId, localMemberId, nowEpochMs, it)
+                validateHostConfig(invite, sessionId, localMemberId, localDisplayName, nowEpochMs, it)
             },
         )
     private val acceptedPeers = Channel<CrewSignalPeer>(maxPeers)
@@ -184,6 +188,7 @@ class CrewLanSignalingHost(
                             invite,
                             sessionId,
                             localMemberId,
+                            localDisplayName,
                             nonceSource,
                         )
                     val peer =
@@ -191,6 +196,7 @@ class CrewLanSignalingHost(
                             socket,
                             handshake.sessionId,
                             handshake.remoteMemberId,
+                            handshake.remoteDisplayName,
                             handshake.keys.serverToClientKey,
                             handshake.keys.clientToServerKey,
                             handshake.keys.serverNoncePrefix,
@@ -230,6 +236,7 @@ object CrewLanSignalingClient {
         rendezvous: CrewLanRendezvous,
         invite: CrewInvite,
         localMemberId: CrewMemberId,
+        localDisplayName: String,
         nowEpochMs: Long,
         nonceSource: CrewSignalNonceSource = SecureCrewSignalNonceSource,
     ): CrewLanSignalConnectResult =
@@ -251,6 +258,7 @@ object CrewLanSignalingClient {
                     CrewLanSignalConnectFailure.PROTOCOL_ERROR,
                 )
             }
+            requireValidSignalDisplayName(localDisplayName)
             var authenticationFailed = false
             for (address in rendezvous.addresses) {
                 val socket = Socket()
@@ -263,12 +271,13 @@ object CrewLanSignalingClient {
                         SIGNAL_CONNECT_TIMEOUT_MS,
                     )
                     val handshake =
-                        clientHandshake(socket, invite, localMemberId, nonceSource)
+                        clientHandshake(socket, invite, localMemberId, localDisplayName, nonceSource)
                     val peer =
                         SecureCrewSignalPeer(
                             socket,
                             handshake.sessionId,
                             handshake.remoteMemberId,
+                            handshake.remoteDisplayName,
                             handshake.keys.clientToServerKey,
                             handshake.keys.serverToClientKey,
                             handshake.keys.clientNoncePrefix,
@@ -306,6 +315,7 @@ private class SecureCrewSignalPeer(
     private val socket: Socket,
     override val sessionId: CrewSessionId,
     override val remoteMemberClaim: CrewMemberId,
+    override val remoteDisplayName: String,
     sendKey: ByteArray,
     receiveKey: ByteArray,
     private val sendNoncePrefix: ByteArray,
@@ -445,6 +455,7 @@ private class SecureCrewSignalPeer(
 private data class SignalHandshakeResult(
     val sessionId: CrewSessionId,
     val remoteMemberId: CrewMemberId,
+    val remoteDisplayName: String,
     val keys: SignalSessionKeys,
 )
 
@@ -461,6 +472,7 @@ private fun serverHandshake(
     invite: CrewInvite,
     sessionId: CrewSessionId,
     localMemberId: CrewMemberId,
+    localDisplayName: String,
     nonceSource: CrewSignalNonceSource,
 ): SignalHandshakeResult {
     requireActiveSignalInvite(invite, System.currentTimeMillis())
@@ -477,6 +489,7 @@ private fun serverHandshake(
     val sessionLocator = CrewSessionLocator(input.readSizedSignalString())
     val inviteId = CrewInviteId(input.readSizedSignalString())
     val remoteMemberId = input.readSignalMemberId()
+    val remoteDisplayName = input.readSignalDisplayName()
     val clientNonce = input.readSignalBytes(SIGNAL_NONCE_BYTES)
     require(
         protocolVersion == invite.protocolVersion &&
@@ -494,11 +507,14 @@ private fun serverHandshake(
             sessionId,
             remoteMemberId,
             localMemberId,
+            remoteDisplayName,
+            localDisplayName,
             clientNonce,
             serverNonce,
         )
     output.writeSignalSessionId(sessionId)
     output.writeSignalMemberId(localMemberId)
+    output.writeSignalDisplayName(localDisplayName)
     output.write(serverNonce)
     output.write(transcript.proof("server"))
     output.flush()
@@ -509,13 +525,14 @@ private fun serverHandshake(
     output.write(transcript.proof("finished"))
     output.flush()
     socket.soTimeout = 0
-    return SignalHandshakeResult(sessionId, remoteMemberId, transcript.keys())
+    return SignalHandshakeResult(sessionId, remoteMemberId, remoteDisplayName, transcript.keys())
 }
 
 private fun clientHandshake(
     socket: Socket,
     invite: CrewInvite,
     localMemberId: CrewMemberId,
+    localDisplayName: String,
     nonceSource: CrewSignalNonceSource,
 ): SignalHandshakeResult {
     socket.soTimeout = SIGNAL_HANDSHAKE_TIMEOUT_MS
@@ -528,10 +545,12 @@ private fun clientHandshake(
     output.writeSizedSignalString(invite.sessionLocator.value)
     output.writeSizedSignalString(invite.inviteId.value)
     output.writeSignalMemberId(localMemberId)
+    output.writeSignalDisplayName(localDisplayName)
     output.write(clientNonce)
     output.flush()
     val sessionId = input.readSignalSessionId()
     val remoteMemberId = input.readSignalMemberId()
+    val remoteDisplayName = input.readSignalDisplayName()
     val serverNonce = input.readSignalBytes(SIGNAL_NONCE_BYTES)
     val transcript =
         SignalTranscript(
@@ -539,6 +558,8 @@ private fun clientHandshake(
             sessionId,
             localMemberId,
             remoteMemberId,
+            localDisplayName,
+            remoteDisplayName,
             clientNonce,
             serverNonce,
         )
@@ -559,7 +580,7 @@ private fun clientHandshake(
         throw SignalAuthenticationException()
     }
     socket.soTimeout = 0
-    return SignalHandshakeResult(sessionId, remoteMemberId, transcript.keys())
+    return SignalHandshakeResult(sessionId, remoteMemberId, remoteDisplayName, transcript.keys())
 }
 
 private class SignalTranscript(
@@ -567,13 +588,15 @@ private class SignalTranscript(
     sessionId: CrewSessionId,
     clientMemberId: CrewMemberId,
     serverMemberId: CrewMemberId,
+    clientDisplayName: String,
+    serverDisplayName: String,
     clientNonce: ByteArray,
     serverNonce: ByteArray,
 ) {
     private val bytes =
         java.io.ByteArrayOutputStream().use { buffer ->
             DataOutputStream(buffer).use { output ->
-                output.writeSizedSignalString("shippy-lan-signal-v1")
+                output.writeSizedSignalString("shippy-lan-signal-v2")
                 output.writeInt(invite.protocolVersion.value)
                 output.writeSizedSignalString(invite.sessionLocator.value)
                 output.writeSizedSignalString(invite.inviteId.value)
@@ -582,6 +605,8 @@ private class SignalTranscript(
                 output.writeSignalSessionId(sessionId)
                 output.writeSignalMemberId(clientMemberId)
                 output.writeSignalMemberId(serverMemberId)
+                output.writeSignalDisplayName(clientDisplayName)
+                output.writeSignalDisplayName(serverDisplayName)
                 output.write(clientNonce)
                 output.write(serverNonce)
             }
@@ -695,6 +720,27 @@ private fun DataInputStream.readSizedSignalString(): String {
     }
 }
 
+private fun DataOutputStream.writeSignalDisplayName(value: String) {
+    requireValidSignalDisplayName(value)
+    val bytes = value.toByteArray(Charsets.UTF_8)
+    writeShort(bytes.size)
+    write(bytes)
+}
+
+private fun DataInputStream.readSignalDisplayName(): String {
+    val size = readUnsignedShort()
+    require(size in 1..SIGNAL_MAX_DISPLAY_NAME_BYTES) {
+        "Crew signaling display name has invalid size"
+    }
+    val bytes = readSignalBytes(size)
+    return bytes.toString(Charsets.UTF_8).also {
+        require(it.toByteArray(Charsets.UTF_8).contentEquals(bytes)) {
+            "Crew signaling display name is not valid UTF-8"
+        }
+        requireValidSignalDisplayName(it)
+    }
+}
+
 private fun DataOutputStream.writeSignalMemberId(memberId: CrewMemberId) {
     writeInt(memberId.protocolVersion.value)
     writeSizedSignalString(memberId.value)
@@ -739,6 +785,7 @@ private fun validateHostConfig(
     invite: CrewInvite,
     sessionId: CrewSessionId,
     localMemberId: CrewMemberId,
+    localDisplayName: String,
     nowEpochMs: Long,
     maxPeers: Int,
 ) {
@@ -749,7 +796,15 @@ private fun validateHostConfig(
     require(localMemberId.protocolVersion == invite.protocolVersion) {
         "Crew signaling member protocol must match the invitation"
     }
+    requireValidSignalDisplayName(localDisplayName)
     requireActiveSignalInvite(invite, nowEpochMs)
+}
+
+private fun requireValidSignalDisplayName(value: String) {
+    require(value.isNotBlank()) { "Crew signaling display name must not be blank" }
+    require(value.toByteArray(Charsets.UTF_8).size <= SIGNAL_MAX_DISPLAY_NAME_BYTES) {
+        "Crew signaling display name exceeds $SIGNAL_MAX_DISPLAY_NAME_BYTES UTF-8 bytes"
+    }
 }
 
 private fun createSignalServerSocket(maxPeers: Int) =

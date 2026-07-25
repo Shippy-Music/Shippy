@@ -178,6 +178,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - LAN signaling treats the presented member as a claim until the existing
   WebRTC join proof binds both members to the negotiated DTLS fingerprints.
   Bidirectional loopback and wrong-secret tests are authored but not run.
+- LAN handshake v2 additionally exchanges bounded display-name claims and binds
+  both names into the QR-secret HMAC transcript. Names are used only after
+  WebRTC proves the paired member ID and remain absent from diagnostics.
 - A direct peer-connection driver now serializes offer/answer and ICE restart
   generations, guarantees SDP precedes its gathered ICE, drives all four
   fingerprint-bound join-authentication messages, and exposes the normal Crew

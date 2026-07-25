@@ -563,7 +563,11 @@ The resolved LAN rendezvous now feeds a bounded TCP signaling channel. A
 four-step HMAC-SHA-256 challenge proves both sides possess the scanned
 invitation secret without sending it. The transcript binds the protocol,
 invitation lifetime/locator, canonical session, both claimed member IDs, and
-fresh 256-bit nonces. After mutual proof, SDP and generation-tagged trickle ICE
+fresh 256-bit nonces. Handshake v2 also carries bounded UTF-8 display-name
+claims for both peers and binds both names into that transcript. Names remain
+presentation claims: the runtime may associate a remote name only after WebRTC
+proves the paired member ID, and diagnostics never print the name. After mutual
+proof, SDP and generation-tagged trickle ICE
 messages use directional HKDF-derived AES-256-GCM keys, ordered nonces, exact
 sequence checks, payload bounds, timeouts, and a fixed peer limit. This channel
 only authenticates invitation possession; the WebRTC join authenticator still
