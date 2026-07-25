@@ -89,7 +89,7 @@ through Auxio’s existing playback stack.
 - [x] Implement canonical track, provider candidate, playback candidate, and
       recording-version safeguards.
 - [ ] Implement preferred/fallback provider settings.
-- [ ] Port or reimplement the first viable provider adapter from Bloomee evidence.
+- [x] Port or reimplement the first viable provider adapter from Bloomee evidence.
 - [ ] Add additional viable provider adapters.
 - [ ] Implement provider playback URL resolution with expiry/cache behavior.
 - [ ] Implement Shippy permanent download jobs, progress, retry, cancel, remove,

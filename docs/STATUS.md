@@ -1,7 +1,7 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-25  
-**Current stage:** Stage 1 — Shippy shell over preserved Auxio playback  
+**Current stage:** Stages 2–3 — library persistence and first provider vertical slice  
 **Overall state:** In progress
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
@@ -45,11 +45,25 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Search is a top-level destination; the mature Auxio local library is retained
   under Library.
 - JioSaavn media URL/response utilities and LRC parser ported with focused tests.
+- Shippy-owned Room persistence now stores Liked, Downloaded, and user-playlist
+  relationships while keeping Local derived.
+- Live JioSaavn search and quality-aware stream resolution are implemented
+  behind the Shippy provider contract and registered through Hilt.
+- Provider HTTP transport enforces HTTPS, bounded responses, and timeouts
+  without adding another networking stack.
+- Unified provider search isolates partial provider failures and preserves
+  cancellation.
+- The live JioSaavn search response shape was checked on 2026-07-25; no secret
+  credential was required or stored.
 
 ## In Progress
 
-- Static review of the new Android shell and inset/mini-player integration.
-- Wiring provider-backed search and permanent collection persistence.
+- Migrating Auxio's Song-only playback boundary to canonical Shippy queue items
+  without creating a second player or queue.
+- Wiring provider results into Search only after provider playback has a real
+  canonical path.
+- Extending initial relationship persistence into complete user playlists,
+  permanent collection projections, and download artifacts.
 - Crew transport/session engine behind the new Crew destination.
 
 ## Not Started
@@ -65,15 +79,18 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   assumed reusable as native Kotlin.
 - Crew transport must be proven with a focused spike before committing to a
   networking library.
+- Room/Hilt generation, JioSaavn JSON parsing, and provider playback are
+  compile/device-unverified until the owner build.
 - Final device behavior is deliberately unverified until the owner performs the
   build/test handoff.
 
 ## Next Concrete Actions
 
-1. Commit the statically reviewed Shippy shell.
-2. Implement permanent collection persistence and Library projection.
-3. Implement the first complete provider adapter and unified search repository.
-4. Continue the local/provider playback vertical slice through Auxio Media3.
+1. Generalize the existing Auxio player/queue authority for canonical Shippy
+   queue items while retaining exact local compatibility.
+2. Connect unified provider search to the real Search UI and canonical playback.
+3. Complete user-playlist metadata and permanent collection projections.
+4. Implement download storage/jobs against the selected SAF destination.
 
 ## Verification Ledger
 
@@ -84,7 +101,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Domain, provider, download, local adapter, Crew reducer |
+| App code | Implemented, not compiled | Domain, Room relationships, live provider/search repository, download reducer, local adapter, Crew reducer |
 | New tests | Authored, not run | Resolver, collections, provider registry, download, Crew |
+| External provider shape | Live-inspected | JioSaavn search response on 2026-07-25 |
 | Static structure | Parsed | Graphify AST extraction and XML parsing |
 | APK/device | Not verified | Owner handoff stage |
