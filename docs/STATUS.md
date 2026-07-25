@@ -1,7 +1,7 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-25  
-**Current stage:** Stage 1 foundation seam — canonical playback domain  
+**Current stage:** Stage 1 foundation seam — domain, providers, downloads, and Crew state  
 **Overall state:** In progress
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
@@ -27,11 +27,20 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   - Canonical identifiers, Track, TrackCandidate, QueueItem, and availability.
   - Deterministic playback resolver with Local separation and Crew policy.
   - Eight focused resolver/domain tests authored.
+- Exact `musikr.Song` adapter and compatibility resolver implemented without
+  changing Auxio's runtime playback path.
+- Permanent Liked, Downloads, and Local collection rules modelled.
+- Provider capability/health/priority contracts implemented.
+- Download lifecycle reducer implemented through verified permanent artifact.
+- Deterministic Crew state/event reducer implemented with equal-member queue and
+  playback actions, sequence/term checks, snapshot gaps, and coordinator transfer.
+- Shippy app label and required network permissions introduced.
 
 ## In Progress
 
-- Local `musikr.Song` to Shippy candidate adapter design.
-- Compatibility seam between Shippy resolved playback and existing Auxio player.
+- Static review of the new pure Kotlin foundations and tests.
+- First donor ports for JioSaavn media utilities and LRC lyrics parsing.
+- Shippy four-destination shell design against the preserved Auxio player sheets.
 
 ## Not Started
 
@@ -51,10 +60,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Add the `musikr.Song` local candidate adapter.
-2. Characterize the current local playback media-source seam.
-3. Introduce compatibility mapping without changing runtime behavior.
-4. Continue the first local-playback vertical slice.
+1. Complete static parsing and review of provider/download/Crew foundations.
+2. Commit the reviewed foundation slice.
+3. Implement Home, Search, Library, and Crew shell while preserving mini-player,
+   queue sheet, and Back behavior.
+4. Continue the first local-playback vertical slice through the new shell.
 
 ## Verification Ledger
 
@@ -65,7 +75,7 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical domain and resolver |
-| New tests | Authored, not run | `PlaybackResolverTest.kt` |
-| Static structure | Parsed | Graphify extracted new Kotlin files |
+| App code | Implemented, not compiled | Domain, provider, download, local adapter, Crew reducer |
+| New tests | Authored, not run | Resolver, collections, provider registry, download, Crew |
+| Static structure | Parsing in progress | Graphify extraction |
 | APK/device | Not verified | Owner handoff stage |

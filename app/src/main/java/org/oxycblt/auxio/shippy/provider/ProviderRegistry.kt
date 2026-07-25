@@ -1,0 +1,46 @@
+/*
+ * Copyright (c) 2026 Shippy contributors
+ * ProviderRegistry.kt is part of Shippy.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.shippy.provider
+
+import javax.inject.Inject
+import org.oxycblt.auxio.shippy.domain.ProviderId
+
+data class ProviderSelection(
+    val priority: List<ProviderId>,
+) {
+    init {
+        require(priority.distinct().size == priority.size) {
+            "Provider priority cannot contain duplicates"
+        }
+    }
+}
+
+class ProviderRegistry
+@Inject
+constructor(
+    providers: Set<@JvmSuppressWildcards MusicProvider>,
+) {
+    private val providersById = providers.associateBy { it.descriptor.id }
+
+    init {
+        require(providersById.size == providers.size) { "Provider IDs must be unique" }
+    }
+
+    fun get(id: ProviderId): MusicProvider? = providersById[id]
+
+    fun enabled(selection: ProviderSelection): List<MusicProvider> =
+        selection.priority.mapNotNull(providersById::get).filter {
+            it.health() != ProviderHealth.DISABLED
+        }
+
+    fun descriptors(): List<ProviderDescriptor> =
+        providersById.values.map(MusicProvider::descriptor).sortedBy { it.displayName }
+}
