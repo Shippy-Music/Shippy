@@ -238,6 +238,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   and admits that exact member with the transcript-bound display name.
   Duplicate attempts replace only their own member connection, while malformed
   later attempts cannot overwrite an already-active member state.
+- A join attempt now owns one initiator connection through authenticated
+  transport, bounded snapshot bootstrap, and exact session-engine handoff. It
+  distinguishes connection setup, transport, bootstrap, timeout, and session
+  failures, closes only its owned resources, and cannot activate twice.
 - Election votes are retained once per authenticated voter, reject transport
   identity/candidate/checkpoint conflicts, and install a next-term snapshot only
   after a strict majority. A snapshot that arrives before all of its certificate

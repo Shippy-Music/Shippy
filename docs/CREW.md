@@ -591,6 +591,17 @@ transfers to the deterministic lowest-ID connected successor; its self-leave
 request follows the transfer on the same ordered channel. The leaving device
 clears its exact checkpoint only after receiving the accepted leave event.
 
+The LAN runtime now has explicit host and join ownership seams. The host turns a
+QR-authenticated signaling peer into one fingerprint-bound responder transport,
+rechecks the claimed member ID, attaches it to the active engine, and sequences
+admission. The joiner owns one initiator attempt, consumes only the authenticated
+coordinator's control frames until the canonical admission snapshot arrives,
+then creates its engine from that exact snapshot and hands the same transport to
+the engine without leaving a second collector behind. The current functional
+topology is coordinator-centered; direct all-member mesh connectivity, safe
+coordinator-independent peer media routing, and relay fan-out remain explicit
+runtime work rather than implied completion.
+
 Transport loss now enters a monotonic reconnect grace instead of immediately
 removing membership. Authenticated activity cancels expiry. After grace, the
 current coordinator may sequence removal of an ordinary member. Coordinator
