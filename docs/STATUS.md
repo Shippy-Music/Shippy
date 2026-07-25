@@ -273,6 +273,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Settings now exposes one default-off Push & Pull toggle with a typed live-change
   contract. Its copy and policy limit automatic temporary media exchange to
   authenticated members of the active Crew, never merely discovered devices.
+- Crew now has a stable random per-installation member identity and a persisted,
+  UTF-8-bounded listener display name. Neither is derived from an Android,
+  hardware, or account identifier, and the stable member value is wrapped in
+  the active protocol version rather than regenerated per session.
 - Anonymous YouTube Music is now a second provider adapter: it bootstraps public
   Innertube configuration at runtime, searches WEB_REMIX song results, retries
   playback through Android Music/iOS client contexts, and accepts direct HTTPS

@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2026 Shippy contributors
+ * CrewProfileSettings.kt is part of Shippy.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.shippy.crew.settings
+
+import android.content.Context
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
+import java.util.UUID
+import javax.inject.Inject
+import javax.inject.Singleton
+import org.oxycblt.auxio.R
+import org.oxycblt.auxio.settings.Settings
+import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
+
+private const val DEFAULT_CREW_DISPLAY_NAME = "Shippy listener"
+private const val MAX_CREW_DISPLAY_NAME_UTF8_BYTES = 80
+
+/** Persistent local Crew identity and listener-controlled display name. */
+interface CrewProfileSettings : Settings<CrewProfileSettings.Listener> {
+    /** An opaque stable installation member identifier for the supplied protocol version. */
+    fun memberId(protocolVersion: ProtocolVersion): CrewMemberId
+
+    /** The mutable name presented to other members of a Crew. */
+    var displayName: String
+
+    interface Listener {
+        /** Called when [displayName] changes after this listener is registered. */
+        fun onDisplayNameChanged(displayName: String) {}
+    }
+}
+
+class CrewProfileSettingsImpl
+@Inject
+constructor(
+    @ApplicationContext context: Context,
+) : Settings.Impl<CrewProfileSettings.Listener>(context), CrewProfileSettings {
+    override fun memberId(protocolVersion: ProtocolVersion): CrewMemberId =
+        crewMemberId(installationMemberValue(), protocolVersion)
+
+    override var displayName: String
+        get() = normalizeCrewDisplayName(
+            sharedPreferences.getString(
+                getString(R.string.set_key_crew_display_name),
+                DEFAULT_CREW_DISPLAY_NAME,
+            ) ?: DEFAULT_CREW_DISPLAY_NAME,
+        )
+        set(value) {
+            sharedPreferences
+                .edit()
+                .putString(
+                    getString(R.string.set_key_crew_display_name),
+                    normalizeCrewDisplayName(value),
+                )
+                .apply()
+        }
+
+    override fun onSettingChanged(key: String, listener: CrewProfileSettings.Listener) {
+        if (key == getString(R.string.set_key_crew_display_name)) {
+            listener.onDisplayNameChanged(displayName)
+        }
+    }
+
+    private fun installationMemberValue(): String = synchronized(this) {
+        sharedPreferences.getString(getString(R.string.set_key_crew_member_id), null)
+            ?: UUID.randomUUID().toString().also { memberValue ->
+                sharedPreferences
+                    .edit()
+                    .putString(getString(R.string.set_key_crew_member_id), memberValue)
+                    .apply()
+            }
+    }
+}
+
+internal fun normalizeCrewDisplayName(value: String): String {
+    val normalized = value.trim().replace(Regex("\\s+"), " ")
+    require(normalized.isNotBlank()) { "Crew display name must not be blank" }
+    require(normalized.toByteArray(Charsets.UTF_8).size <= MAX_CREW_DISPLAY_NAME_UTF8_BYTES) {
+        "Crew display name exceeds $MAX_CREW_DISPLAY_NAME_UTF8_BYTES UTF-8 bytes"
+    }
+    return normalized
+}
+
+internal fun crewMemberId(value: String, protocolVersion: ProtocolVersion) =
+    CrewMemberId(value, protocolVersion)
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class CrewProfileSettingsModule {
+    @Binds
+    @Singleton
+    abstract fun settings(implementation: CrewProfileSettingsImpl): CrewProfileSettings
+}
