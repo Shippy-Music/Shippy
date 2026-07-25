@@ -590,8 +590,19 @@ signaling peers into the admission coordinator; neither the launcher nor UI
 collects transport frames. Startup becomes active only after NSD registration
 and the exact Keystore rejoin lease succeed. Runtime `close()` releases live
 resources while preserving recovery state; explicit host-session `end()` also
-clears only that session's checkpoint and lease. Join composition, playback,
-and media remain separate seams rather than hidden inside the host launcher.
+clears only that session's checkpoint and lease.
+
+The production LAN-join composition follows the inverse single-owner chain:
+decode one short-lived invite -> exact NSD rendezvous -> authenticated signaling
+client -> one per-attempt WebRTC runtime -> fingerprint-bound initiator ->
+bounded coordinator snapshot bootstrap -> one persisted `CrewSessionEngine`.
+Discovery ends as soon as signaling owns the route, and the coordinator remains
+the only transport-frame collector. Success is published only after the exact
+Keystore rejoin lease is saved. Runtime `close()` preserves recovery state;
+explicit `leave()` releases the live join and clears only its exact checkpoint
+and lease. It does not yet claim the ordered graceful membership departure
+owned by the future active-session manager. Playback and media remain separate
+seams rather than being hidden in either LAN launcher.
 
 Shippy currently targets SDK 36. Therefore Android 17's
 `ACCESS_LOCAL_NETWORK` runtime permission is not declared yet; official Android

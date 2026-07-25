@@ -287,6 +287,13 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   It does not report success until advertisement is active and the exact
   Keystore rejoin lease is saved; failed partial starts clean only their own
   resources and persistence.
+- The matching production LAN join launcher now decodes the exact invite before
+  allocation, discovers only its advertised rendezvous, authenticates signaling
+  and the fingerprint-bound initiator transport, bootstraps one engine from the
+  coordinator snapshot, and saves the exact Keystore rejoin lease. Runtime
+  `close()` preserves recovery state; explicit `leave()` releases the live join
+  and clears only that session's checkpoint and lease. Ordered graceful leave
+  remains an active-session integration seam.
 - Anonymous YouTube Music is now a second provider adapter: it bootstraps public
   Innertube configuration at runtime, searches WEB_REMIX song results, retries
   playback through Android Music/iOS client contexts, and accepts direct HTTPS
