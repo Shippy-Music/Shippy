@@ -116,6 +116,14 @@ class CrewSessionDescription(
             sdp,
         )
 
+    override fun equals(other: Any?) =
+        other is CrewSessionDescription &&
+            type == other.type &&
+            generation == other.generation &&
+            sdp == other.sdp
+
+    override fun hashCode() = 31 * (31 * type.hashCode() + generation.hashCode()) + sdp.hashCode()
+
     override fun toString() =
         "CrewSessionDescription(type=$type, generation=$generation, sdp=redacted)"
 }
@@ -138,6 +146,20 @@ class CrewIceCandidate(
     }
 
     internal fun toNative() = IceCandidate(sdpMid, sdpMLineIndex, sdp)
+
+    override fun equals(other: Any?) =
+        other is CrewIceCandidate &&
+            generation == other.generation &&
+            sdpMid == other.sdpMid &&
+            sdpMLineIndex == other.sdpMLineIndex &&
+            sdp == other.sdp
+
+    override fun hashCode(): Int {
+        var result = generation.hashCode()
+        result = 31 * result + (sdpMid?.hashCode() ?: 0)
+        result = 31 * result + sdpMLineIndex
+        return 31 * result + sdp.hashCode()
+    }
 
     override fun toString() =
         "CrewIceCandidate(generation=$generation, sdpMid=redacted, sdp=redacted)"

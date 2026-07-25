@@ -451,15 +451,26 @@ exact decoded invitation, serializes legacy resolution requests, bounds results,
 redacts addresses from diagnostics, and acquires the legacy Wi-Fi multicast lock
 only on platform/extension versions that require it.
 
+The resolved LAN rendezvous now feeds a bounded TCP signaling channel. A
+four-step HMAC-SHA-256 challenge proves both sides possess the scanned
+invitation secret without sending it. The transcript binds the protocol,
+invitation lifetime/locator, canonical session, both claimed member IDs, and
+fresh 256-bit nonces. After mutual proof, SDP and generation-tagged trickle ICE
+messages use directional HKDF-derived AES-256-GCM keys, ordered nonces, exact
+sequence checks, payload bounds, timeouts, and a fixed peer limit. This channel
+only authenticates invitation possession; the WebRTC join authenticator still
+binds those claims to both DTLS fingerprints before ordinary Crew traffic opens.
+
 Shippy currently targets SDK 36. Therefore Android 17's
 `ACCESS_LOCAL_NETWORK` runtime permission is not declared yet; official Android
 guidance says it becomes required when targeting SDK 37. The existing adapter
 must add that release-time permission flow when the target SDK is raised.
 
 The selected dependency and Android wrapper are code/static-inspected, not
-device-proven. LAN signaling, hosted signaling, network migration, TURN, and
-multi-phone behavior remain explicit implementation and device-verification
-work. QR is invitation/authentication, never the transport itself.
+device-proven. Hosted signaling, network migration, TURN, and multi-phone
+behavior remain explicit implementation and device-verification work. The LAN
+socket path has focused loopback tests authored but not run on this machine. QR
+is invitation/authentication, never the transport itself.
 
 Primary evidence:
 

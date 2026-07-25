@@ -518,15 +518,25 @@ secret or treating an NSD result as authenticated. The resolved address is only
 a short-lived signaling rendezvous; the join proof and WebRTC DTLS remain the
 security boundary.
 
+At that rendezvous, a bounded TCP channel performs mutual invitation-secret
+proof before accepting SDP or ICE. Its transcript binds protocol, invitation
+identity/lifetime, canonical session, both member claims, and fresh nonces.
+Subsequent versioned signaling frames use independent directional
+HKDF/HMAC-SHA-256-derived AES-256-GCM keys, monotonically ordered nonces, strict
+size limits, and finite connection/handshake timeouts. A LAN signaling member ID
+remains only a secret-holder claim until the later WebRTC join proof binds both
+members to the negotiated DTLS fingerprints.
+
 Inbound control overflow is a protocol failure because durable state cannot be
 dropped. Clock/reaction overflow is intentionally lossy. Media overflow emits a
 bounded drop signal for manifest/chunk acknowledgement and retry instead of
 terminating the Crew connection.
 
 This decision and the join/NSD adapters satisfy the architecture gate at
-source/API level only. They are not a claim of local signaling sockets, NAT,
-TURN, migration, relay, or multi-phone runtime proof. Those remain
-implementation work and owner device acceptance.
+source/API level only. Authenticated local signaling sockets are implemented and
+have loopback tests authored, but are not compiled or device-proven. NAT, TURN,
+migration, hosted relay, and multi-phone runtime proof remain implementation
+work and owner device acceptance.
 
 QR is an invitation/authentication mechanism. Signaling, ICE/STUN/TURN, LAN
 discovery, and relay remain necessary and are not collapsed into “QR contains
