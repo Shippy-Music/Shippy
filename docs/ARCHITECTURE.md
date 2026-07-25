@@ -582,6 +582,17 @@ proof and exposes `CrewPeerTransport` only after both sides authenticate. A
 small factory/negotiation interface keeps this orchestration deterministically
 simulatable without creating native WebRTC objects in unit tests.
 
+The production LAN-host composition now has one explicit ownership chain:
+secure host bootstrap -> persisted `CrewSessionEngine` -> per-session WebRTC
+runtime -> invitation-authenticated signaling host -> fingerprint-bound
+responder admission -> NSD advertisement. One collector forwards accepted
+signaling peers into the admission coordinator; neither the launcher nor UI
+collects transport frames. Startup becomes active only after NSD registration
+and the exact Keystore rejoin lease succeed. Runtime `close()` releases live
+resources while preserving recovery state; explicit host-session `end()` also
+clears only that session's checkpoint and lease. Join composition, playback,
+and media remain separate seams rather than hidden inside the host launcher.
+
 Shippy currently targets SDK 36. Therefore Android 17's
 `ACCESS_LOCAL_NETWORK` runtime permission is not declared yet; official Android
 guidance says it becomes required when targeting SDK 37. The existing adapter

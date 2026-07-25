@@ -281,6 +281,12 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   one-member initial state and a 15-minute Shippy invite/link. Session,
   invitation, and 256-bit secret tokens are independently generated; the
   opaque session token intentionally also keys LAN rendezvous discovery.
+- The first production LAN host launcher now composes that bootstrap into the
+  persisted session engine, one WebRTC runtime, authenticated signaling,
+  responder admission, one signaling-peer collector, and NSD advertisement.
+  It does not report success until advertisement is active and the exact
+  Keystore rejoin lease is saved; failed partial starts clean only their own
+  resources and persistence.
 - Anonymous YouTube Music is now a second provider adapter: it bootstraps public
   Innertube configuration at runtime, searches WEB_REMIX song results, retries
   playback through Android Music/iOS client contexts, and accepts direct HTTPS
@@ -396,5 +402,5 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider and Search-to-play paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
 | New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 396-file app AST extraction (7,718 nodes), XML parsing, `git diff --check` |
+| Static structure | Parsed | Curated app Graphify AST refreshed after the LAN-host runtime slice; XML parsing and `git diff --check` used where applicable |
 | APK/device | Not verified | Owner handoff stage |
