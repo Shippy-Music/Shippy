@@ -384,11 +384,20 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   active-member authentication, coordinator fan-out, deduplication, rate
   limiting, and receiver-local expiry. The active runtime exposes no transport,
   and Now Playing shows a compact picker plus short floating emoji animation.
+- Live Push & Pull now binds to host/join engine state, stamps exact Local
+  contributors, prepares the current item plus next two, routes contributor to
+  coordinator to remaining members, cancels obsolete requests, retries without
+  busy loops, and skips verified temporary objects. A missing current Local item
+  offers one plain-language enable prompt when Push & Pull is off.
+- Verified temporary-media completion now re-runs the exact Crew queue through
+  the existing resolver and single Media3 player without publishing a permanent
+  library record or mutating canonical Crew state.
+- Selecting a SAF download destination now validates it as an Auxio Local source,
+  tracks whether Shippy auto-added it, preserves manual sources/grants, removes
+  only a replaced Shippy-owned source, and requests a local reindex.
 
 ## In Progress
 
-- Passing unmanaged existing download-folder audio into the canonical/local
-  indexing path without filename-based adoption.
 - Adding an expandable lyrics surface for compact player configurations and the
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
@@ -396,8 +405,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Adding live provider health verification.
 - Hosted signaling and remaining transport lifecycle.
 - Transport migration after a reconnect.
-- Connecting Crew request scheduling and rolling prefetch to the active media
-  runtime.
+- Extending the first exact-Local rolling window to adaptive provider-aware
+  preparation and supplier failover.
 
 ## Not Started
 
@@ -428,6 +437,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   and provider playback are compile/device-unverified until the owner build.
 - WorkManager/Hilt worker generation, SAF storage, and foreground download
   execution are code/static-checked but compile/device-unverified.
+- The selected download directory enters Auxio's SAF source query. Users already
+  in MediaStore location mode keep that mode to avoid silently replacing their
+  library; hybrid MediaStore-plus-SAF indexing remains an explicit integration
+  gap.
 - LRCLIB response shape was live-checked on 2026-07-25; Kotlin parsing, Hilt
   multibinding, and playback lookup remain compile/device-unverified.
 - Canonical Media3 custom-cache-key/header routing is implemented and
@@ -440,12 +453,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Connect the active Crew runtime to Push & Pull requests, suppliers, rolling
-   prefetch, cache overlays, the resolver, and the player.
-2. Complete unmanaged download-folder indexing, then wire secure rejoin and
-   hosted signaling.
-3. Finish the remaining player/audio/widget action surfaces before relay
-   hardening.
+1. Finish the remaining player/audio/widget action surfaces.
+2. Wire secure rejoin, remote hosted signaling, and transport migration.
+3. Extend Push & Pull from the exact-Local top-down path to adaptive supplier
+   failover and hybrid download-folder indexing before relay hardening.
 
 ## Verification Ledger
 

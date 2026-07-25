@@ -105,6 +105,7 @@ class CrewLanHostSession internal constructor(
 
     val state: StateFlow<CrewState> = engine.state
     val reactions: SharedFlow<ActiveCrewReaction> = engine.reactions
+    val peerMediaBlocked: StateFlow<Boolean> = mediaRuntime.peerMediaBlocked
     val allowedReactions: List<String> = engine.allowedReactions
 
     override fun toString() = "CrewLanHostSession(identity=redacted, inviteLink=redacted)"
@@ -249,6 +250,9 @@ constructor(
                 .getOrElse { return fail(CrewLanHostLaunchFailure.EngineOrPersistence) }
         val activeEngine = checkNotNull(engine)
         if (runCatching { activeEngine.start() }.isFailure) {
+            return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
+        }
+        if (runCatching { activeMediaRuntime.bind(activeEngine.state) }.isFailure) {
             return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
         }
 

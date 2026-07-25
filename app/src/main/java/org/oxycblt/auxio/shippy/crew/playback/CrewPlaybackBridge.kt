@@ -14,16 +14,21 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.oxycblt.auxio.playback.state.PlaybackCommandFactoryImpl
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
+import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewRepeatMode
 import org.oxycblt.auxio.shippy.crew.core.CrewState
+import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaIndex
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewMode
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
@@ -57,14 +62,18 @@ constructor(
     private val providerRegistry: ProviderRegistry,
     private val providerSettings: ProviderSettings,
     private val crewSettings: CrewSettings,
+    private val temporaryMediaIndex: CrewTemporaryMediaIndex,
 ) : PlaybackStateManager.Listener {
     private var scope: CoroutineScope? = null
     private var stateJob: Job? = null
+    private var completionJob: Job? = null
     private var reconcileJob: Job? = null
     private var attached = false
     private var applyingRemote = false
     private var seededSession: String? = null
     @Volatile private var latestCrew: CrewState? = null
+    @Volatile private var localCrewMemberId: CrewMemberId? = null
+    private val applyMutex = Mutex()
 
     fun attach() {
         if (attached) return
@@ -79,9 +88,37 @@ constructor(
             activeCrewRuntime.state.collectLatest { runtimeState ->
                 val active = runtimeState as? ActiveCrewRuntimeState.Active
                 latestCrew = active?.presentation?.crewState
-                if (active != null) applyCrew(active.presentation.role, active.presentation.crewState)
+                localCrewMemberId = active?.presentation?.localMemberId
+                if (active != null) {
+                    applyMutex.withLock {
+                        applyCrew(active.presentation.role, active.presentation.crewState)
+                    }
+                }
             }
         }
+        completionJob =
+            newScope.launch {
+                temporaryMediaIndex.completions.collect { completion ->
+                    val active =
+                        activeCrewRuntime.state.value as? ActiveCrewRuntimeState.Active
+                            ?: return@collect
+                    val crew = active.presentation.crewState
+                    if (
+                        crew.sessionId != completion.sessionId ||
+                            crew.queue.none { item ->
+                                item.id == completion.queueItemId &&
+                                    item.track.candidates.any {
+                                        it.id == completion.candidateId
+                                    }
+                            }
+                    ) {
+                        return@collect
+                    }
+                    applyMutex.withLock {
+                        applyCrew(active.presentation.role, crew, forceQueueResolution = true)
+                    }
+                }
+            }
     }
 
     fun release() {
@@ -90,11 +127,14 @@ constructor(
         playbackManager.removeListener(this)
         reconcileJob?.cancel()
         stateJob?.cancel()
+        completionJob?.cancel()
         scope?.cancel()
         reconcileJob = null
         stateJob = null
+        completionJob = null
         scope = null
         latestCrew = null
+        localCrewMemberId = null
         applyingRemote = false
         seededSession = null
     }
@@ -115,7 +155,11 @@ constructor(
         }
     }
 
-    private suspend fun applyCrew(role: ActiveCrewMode, crew: CrewState) {
+    private suspend fun applyCrew(
+        role: ActiveCrewMode,
+        crew: CrewState,
+        forceQueueResolution: Boolean = false,
+    ) {
         if (role == ActiveCrewMode.HOST && crew.queue.isEmpty() && playbackManager.queueItems.isNotEmpty()) {
             val key = crew.sessionId.toString()
             if (seededSession != key) {
@@ -135,7 +179,7 @@ constructor(
             val playerIds = playbackManager.queueItems.map(QueueItem::id)
             val crewIds = crew.queue.map(QueueItem::id)
             var replacedQueue = false
-            if (playerIds != crewIds) {
+            if (forceQueueResolution || playerIds != crewIds) {
                 val policy =
                     ResolutionPolicy(
                         providerPriority =
@@ -222,7 +266,7 @@ constructor(
 
     private suspend fun reconcilePlayerToCrew() {
         val crew = latestCrew ?: return
-        val snapshot = playerSnapshot(playbackManager, monotonicNowMs())
+        val snapshot = playerSnapshot(playbackManager, monotonicNowMs(), localCrewMemberId)
         for (action in crewDiff(crew, snapshot)) {
             val accepted = activeCrewRuntime.submit(action) as? ActiveCrewSubmitResult.Accepted
                 ?: return
@@ -256,6 +300,14 @@ internal fun canonicalQueueForCrew(items: List<QueueItem>): List<QueueItem> =
         }))
     }
 
+/** Stamps only local introductions; preserved contributor IDs remain remote provenance. */
+internal fun stampCrewContributor(items: List<QueueItem>, localMemberId: CrewMemberId?): List<QueueItem> =
+    if (localMemberId == null) items else items.map { item ->
+        if (item.contributorId == null && item.track.candidates.any { it.kind == CandidateKind.LOCAL }) {
+            item.copy(contributorId = localMemberId.value)
+        } else item
+    }
+
 internal fun crewPositionAt(playback: org.oxycblt.auxio.shippy.crew.core.CrewPlaybackState, nowMs: Long): Long {
     if (playback.mode != CrewPlaybackMode.PLAYING) return playback.positionAtEpochMs.coerceAtLeast(0)
     val elapsed = (nowMs - playback.sessionEpochMs).coerceAtLeast(0)
@@ -263,9 +315,9 @@ internal fun crewPositionAt(playback: org.oxycblt.auxio.shippy.crew.core.CrewPla
     else playback.positionAtEpochMs + elapsed
 }
 
-private fun playerSnapshot(manager: PlaybackStateManager, nowMs: Long) =
+private fun playerSnapshot(manager: PlaybackStateManager, nowMs: Long, localMemberId: CrewMemberId?) =
     PlayerCrewSnapshot(
-        queue = canonicalQueueForCrew(manager.queueItems),
+        queue = stampCrewContributor(canonicalQueueForCrew(manager.queueItems), localMemberId),
         currentItemId = manager.currentQueueItem?.id,
         playing = manager.progression.isPlaying,
         positionMs = manager.progression.calculateElapsedPositionMs().coerceAtLeast(0),

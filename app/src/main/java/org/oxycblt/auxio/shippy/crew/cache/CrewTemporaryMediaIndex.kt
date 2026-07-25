@@ -13,6 +13,9 @@ import java.io.File
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.media.CrewMediaManifest
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
@@ -28,6 +31,8 @@ import org.oxycblt.auxio.shippy.domain.TrackCandidate
 class CrewTemporaryMediaIndex @Inject constructor() {
     private var activeSessionId: CrewSessionId? = null
     private val completed = mutableMapOf<Key, Entry>()
+    private val mutableCompletions = MutableSharedFlow<CrewTemporaryMediaCompletion>(extraBufferCapacity = 16)
+    val completions: SharedFlow<CrewTemporaryMediaCompletion> = mutableCompletions.asSharedFlow()
 
     @Synchronized
     fun beginSession(sessionId: CrewSessionId) {
@@ -45,6 +50,7 @@ class CrewTemporaryMediaIndex @Inject constructor() {
             return false
         }
         completed[Key(manifest.transfer.queueItemId, manifest.candidateId)] = Entry(manifest, file)
+        mutableCompletions.tryEmit(CrewTemporaryMediaCompletion(manifest.sessionId, manifest.transfer.queueItemId, manifest.candidateId))
         return true
     }
 
@@ -124,6 +130,8 @@ class CrewTemporaryMediaIndex @Inject constructor() {
     private data class Key(val queueItemId: QueueItemId, val candidateId: CandidateId)
     private data class Entry(val manifest: CrewMediaManifest, val file: File)
 }
+
+data class CrewTemporaryMediaCompletion(val sessionId: CrewSessionId, val queueItemId: QueueItemId, val candidateId: CandidateId)
 
 /** Immutable metadata for an exact, verified, active temporary Crew object. */
 data class CrewTemporaryMediaEntry internal constructor(

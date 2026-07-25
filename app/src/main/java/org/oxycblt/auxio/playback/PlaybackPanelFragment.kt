@@ -67,6 +67,7 @@ import org.oxycblt.auxio.shippy.lyrics.SyncedLyrics
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
+import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerMode
 import org.oxycblt.auxio.shippy.domain.Track
@@ -99,6 +100,7 @@ class PlaybackPanelFragment :
     StepperOverlay.Listener {
     @Inject lateinit var sleepTimerController: SleepTimerController
     @Inject lateinit var activeCrewRuntime: ActiveCrewRuntime
+    @Inject lateinit var crewSettings: CrewSettings
     private val coverPagerAdapter = CoverPagerAdapter(this)
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
@@ -111,6 +113,8 @@ class PlaybackPanelFragment :
     private var renderedLyricsState: PlaybackLyricsState = PlaybackLyricsState.None
     private var renderedLyricsLineIndex = Int.MIN_VALUE
     private val reactionViews = mutableSetOf<View>()
+    private var peerMediaDialog: androidx.appcompat.app.AlertDialog? = null
+    private var promptedForCurrentPeerBlock = false
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -233,6 +237,11 @@ class PlaybackPanelFragment :
                 activeCrewRuntime.reactions.collect(::showCrewReaction)
             }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                activeCrewRuntime.peerMediaBlocked.collect(::updatePeerMediaBlocked)
+            }
+        }
     }
 
     // FIXME: Old code!! Maybe not necessary anymore?
@@ -286,6 +295,9 @@ class PlaybackPanelFragment :
             (reaction.parent as? ViewGroup)?.removeView(reaction)
         }
         reactionViews.clear()
+        peerMediaDialog?.dismiss()
+        peerMediaDialog = null
+        promptedForCurrentPeerBlock = false
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
@@ -340,6 +352,31 @@ class PlaybackPanelFragment :
             }
             .setNegativeButton(R.string.lbl_cancel, null)
             .show()
+    }
+
+    private fun updatePeerMediaBlocked(blocked: Boolean) {
+        if (!blocked || crewSettings.pushPullEnabled) {
+            promptedForCurrentPeerBlock = false
+            peerMediaDialog?.dismiss()
+            peerMediaDialog = null
+            return
+        }
+        if (promptedForCurrentPeerBlock || peerMediaDialog != null) return
+        promptedForCurrentPeerBlock = true
+        peerMediaDialog =
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.ttl_crew_media_available)
+                .setMessage(R.string.msg_crew_media_available)
+                .setPositiveButton(R.string.lbl_enable_push_pull) { _, _ ->
+                    crewSettings.setPushPullEnabled(true)
+                }
+                .setNegativeButton(R.string.lbl_not_now, null)
+                .show()
+                .also { dialog ->
+                    dialog.setOnDismissListener {
+                        if (peerMediaDialog === dialog) peerMediaDialog = null
+                    }
+                }
     }
 
     private fun showCrewReaction(reaction: ActiveCrewReaction) {

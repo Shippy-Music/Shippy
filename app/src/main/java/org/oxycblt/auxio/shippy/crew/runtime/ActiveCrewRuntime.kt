@@ -118,13 +118,16 @@ constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutableState = MutableStateFlow<ActiveCrewRuntimeState>(ActiveCrewRuntimeState.Idle)
     private val mutableReactions = MutableSharedFlow<ActiveCrewReaction>(extraBufferCapacity = 32)
+    private val mutablePeerMediaBlocked = MutableStateFlow(false)
     private var generation = 0L
     private var ownedSession: OwnedSession? = null
     private var presentationJob: Job? = null
     private var reactionJob: Job? = null
+    private var peerMediaBlockedJob: Job? = null
 
     val state: StateFlow<ActiveCrewRuntimeState> = mutableState.asStateFlow()
     val reactions: SharedFlow<ActiveCrewReaction> = mutableReactions
+    val peerMediaBlocked: StateFlow<Boolean> = mutablePeerMediaBlocked.asStateFlow()
     val allowedReactions: List<String>
         get() = synchronized(lock) { ownedSession?.allowedReactions ?: emptyList() }
 
@@ -304,6 +307,16 @@ constructor(
                     }
                 }
             }
+        val nextPeerMediaBlockedJob =
+            scope.launch(start = CoroutineStart.LAZY) {
+                session.peerMediaBlocked.collect { blocked ->
+                    synchronized(lock) {
+                        if (this.generation == generation && ownedSession === session) {
+                            mutablePeerMediaBlocked.value = blocked
+                        }
+                    }
+                }
+            }
         val activated = synchronized(lock) {
             if (
                 this.generation != generation ||
@@ -314,10 +327,14 @@ constructor(
             } else {
                 presentationJob?.cancel()
                 reactionJob?.cancel()
+                peerMediaBlockedJob?.cancel()
                 presentationJob = nextPresentationJob
                 reactionJob = nextReactionJob
+                peerMediaBlockedJob = nextPeerMediaBlockedJob
+                mutablePeerMediaBlocked.value = false
                 nextPresentationJob.start()
                 nextReactionJob.start()
+                nextPeerMediaBlockedJob.start()
                 mutableState.value =
                     ActiveCrewRuntimeState.Active(session.presentation(session.state.value))
                 true
@@ -326,6 +343,7 @@ constructor(
         if (!activated) {
             nextPresentationJob.cancel()
             nextReactionJob.cancel()
+            nextPeerMediaBlockedJob.cancel()
             session.endExplicitly()
         }
     }
@@ -355,8 +373,11 @@ constructor(
                 if (generation == request.generation && ownedSession === request.session) {
                     presentationJob?.cancel()
                     reactionJob?.cancel()
+                    peerMediaBlockedJob?.cancel()
                     presentationJob = null
                     reactionJob = null
+                    peerMediaBlockedJob = null
+                    mutablePeerMediaBlocked.value = false
                     ownedSession = null
                     mutableState.value = ActiveCrewRuntimeState.Idle
                 }
@@ -378,6 +399,7 @@ constructor(
         val state: StateFlow<CrewState>
         val inviteLink: String?
         val reactions: SharedFlow<ActiveCrewReaction>
+        val peerMediaBlocked: StateFlow<Boolean>
         val allowedReactions: List<String>
 
         suspend fun endExplicitly()
@@ -395,6 +417,7 @@ constructor(
             override val state = session.state
             override val inviteLink = session.inviteLink
             override val reactions = session.reactions
+            override val peerMediaBlocked = session.peerMediaBlocked
             override val allowedReactions = session.allowedReactions
 
             override suspend fun endExplicitly() = session.end()
@@ -410,6 +433,7 @@ constructor(
             override val state = session.state
             override val inviteLink: String? = null
             override val reactions = session.reactions
+            override val peerMediaBlocked = session.peerMediaBlocked
             override val allowedReactions = session.allowedReactions
 
             override suspend fun endExplicitly() = session.leave()

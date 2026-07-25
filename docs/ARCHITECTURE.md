@@ -678,7 +678,12 @@ candidate can be opened; provider URLs, paths, credentials, and arbitrary
 discovered devices cannot cross the seam. Both production LAN launchers create
 one runtime before their session engine, pass it as that engine's authenticated
 media lifecycle, and tear the engine down before media/cache cleanup. Rolling
-prefetch and supplier scheduling remain the next seam.
+prefetch now binds to live engine state for the exact Local current item and
+next two queue items. The contributor first supplies the coordinator; remaining
+members request that occurrence from the coordinator after its verified
+temporary cache is ready. Requests are one-per-exact-key, retry on one bounded
+timer, cancel when the window changes, and stop at session teardown. This first
+path does not claim the final adaptive supplier policy for provider candidates.
 
 Primary evidence:
 
@@ -699,6 +704,9 @@ candidate is never serialized into canonical Crew state and is cleared at
 session end. `PlaybackResolutionCoordinator` applies this exact active overlay
 before verified-download projection, so an already received Crew object wins
 without altering the duplicate-safe queue identity or creating another player.
+Exact completion triggers one serialized queue re-resolution, allowing a
+previously blocked current item to enter the same Media3 player without a
+permanent library relationship.
 
 `CrewPlaybackBridge` is attached beside the existing playback-service
 observers. Active Crew state is prepared through the normal resolver before it

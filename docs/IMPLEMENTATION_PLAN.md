@@ -239,15 +239,19 @@ Crew with relay fallback hooks.
         authenticated outbound request/cancel operations.
   - [x] Publish verified completed media into an active-session-only local
         candidate overlay without mutating canonical Crew state.
-  - [ ] Connect the controller to authenticated peer lifecycle and end-to-end
+  - [x] Connect the controller to authenticated peer lifecycle and end-to-end
         runtime request, supplier, index, and playback callbacks.
 - [ ] Implement adaptive supplier selection independent of coordinator.
 - [x] Implement bounded temporary Crew cache and crash/session cleanup.
-- [ ] Allow temporary chunks to redistribute within the same active Crew.
-- [ ] Implement rolling prefetch, prioritization, cancellation, and reprioritizing.
-- [ ] Bridge peer media into Media3 playback without a permanent library record.
+- [x] Allow exact Local temporary chunks to redistribute through the coordinator
+      within the same active Crew.
+- [ ] Implement adaptive rolling prefetch, prioritization, and supplier failover.
+  - [x] Bind the exact Local current item plus next two items to live queue
+        changes with cancellation and one bounded retry timer.
+- [x] Bridge verified peer media into Media3 playback without a permanent
+      library record.
 - [ ] Implement explicit Download from temporary media.
-- [ ] Implement prompt when required peer media is blocked by the toggle.
+- [x] Implement prompt when required peer media is blocked by the toggle.
 
 **Validation:**
 

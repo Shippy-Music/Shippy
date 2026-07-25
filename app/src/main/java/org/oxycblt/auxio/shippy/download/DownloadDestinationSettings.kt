@@ -35,7 +35,10 @@ data class DownloadDestination(
 interface DownloadDestinationSettings : Settings<Nothing> {
     val destination: DownloadDestination?
 
-    fun setDestination(destination: DownloadDestination)
+    /** The destination URI Shippy inserted into Auxio's Local SAF sources, if any. */
+    val autoAddedLocalSourceUri: String?
+
+    fun setDestination(destination: DownloadDestination, autoAddedLocalSourceUri: String?)
 
     fun clearDestination()
 }
@@ -60,10 +63,27 @@ constructor(
             return DownloadDestination(uri, name)
         }
 
-    override fun setDestination(destination: DownloadDestination) {
+    override val autoAddedLocalSourceUri: String?
+        get() =
+            sharedPreferences
+                .getString(getString(R.string.set_key_download_destination_auto_local_source_uri), null)
+                ?.takeIf(String::isNotBlank)
+
+    override fun setDestination(
+        destination: DownloadDestination,
+        autoAddedLocalSourceUri: String?,
+    ) {
         sharedPreferences.edit {
             putString(getString(R.string.set_key_download_destination_uri), destination.treeUri)
             putString(getString(R.string.set_key_download_destination_name), destination.displayName)
+            if (autoAddedLocalSourceUri == null) {
+                remove(getString(R.string.set_key_download_destination_auto_local_source_uri))
+            } else {
+                putString(
+                    getString(R.string.set_key_download_destination_auto_local_source_uri),
+                    autoAddedLocalSourceUri,
+                )
+            }
         }
     }
 
@@ -71,6 +91,7 @@ constructor(
         sharedPreferences.edit {
             remove(getString(R.string.set_key_download_destination_uri))
             remove(getString(R.string.set_key_download_destination_name))
+            remove(getString(R.string.set_key_download_destination_auto_local_source_uri))
         }
     }
 

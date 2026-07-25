@@ -19,6 +19,7 @@ import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaIndex
 import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackState
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
@@ -35,6 +36,73 @@ import org.oxycblt.auxio.shippy.domain.TrackId
 import org.oxycblt.auxio.shippy.domain.TrackRealm
 
 class CrewActiveMediaRuntimeTest {
+    @Test
+    fun `local scheduler uses coordinator redistribution and skips verified media`() {
+        val coordinator = member("coordinator")
+        val contributor = member("contributor")
+        val joiner = member("joiner")
+        val item = localItem("one", contributor)
+        val state =
+            CrewState(
+                session("crew"),
+                ProtocolVersion(1),
+                CoordinatorTerm(1),
+                EventSequence(0),
+                coordinator,
+                listOf(
+                    CrewMember(coordinator, "Coordinator"),
+                    CrewMember(contributor, "Contributor"),
+                    CrewMember(joiner, "Joiner"),
+                ),
+                queue = listOf(item),
+                playback = CrewPlaybackState(currentQueueItemId = item.id),
+            )
+        val key = CrewLocalMediaKey(item.id, item.track.candidates.single().id)
+
+        assertEquals(
+            listOf(CrewLocalMediaDesired(key, contributor)),
+            planLocalMedia(state, coordinator, pushPullEnabled = true).desired,
+        )
+        assertEquals(
+            listOf(CrewLocalMediaDesired(key, coordinator)),
+            planLocalMedia(state, joiner, pushPullEnabled = true).desired,
+        )
+        assertTrue(
+            planLocalMedia(
+                state,
+                joiner,
+                pushPullEnabled = true,
+                available = setOf(key),
+            ).desired.isEmpty()
+        )
+    }
+
+    @Test
+    fun `disabled push pull blocks only missing current exact local item`() {
+        val coordinator = member("coordinator")
+        val contributor = member("contributor")
+        val current = localItem("current", contributor)
+        val next = localItem("next", contributor)
+        val state =
+            CrewState(
+                session("crew"),
+                ProtocolVersion(1),
+                CoordinatorTerm(1),
+                EventSequence(0),
+                coordinator,
+                listOf(
+                    CrewMember(coordinator, "Coordinator"),
+                    CrewMember(contributor, "Contributor"),
+                ),
+                queue = listOf(current, next),
+                playback = CrewPlaybackState(currentQueueItemId = current.id),
+            )
+
+        val plan = planLocalMedia(state, coordinator, pushPullEnabled = false)
+        assertTrue(plan.blockedCurrent)
+        assertTrue(plan.desired.isEmpty())
+    }
+
     @Test
     fun `exact available local candidate is selected`() {
         val fixture = Fixture(CandidateKind.LOCAL, "content://media/local", 7)
@@ -102,5 +170,32 @@ class CrewActiveMediaRuntimeTest {
     private companion object {
         fun session(value: String) = CrewSessionId(value, ProtocolVersion(1))
         fun member(value: String) = CrewMemberId(value, ProtocolVersion(1))
+
+        fun localItem(value: String, contributor: CrewMemberId): QueueItem {
+            val trackId = TrackId("track-$value")
+            return QueueItem(
+                QueueItemId("queue-$value"),
+                Track(
+                    trackId,
+                    TrackRealm.LOCAL,
+                    value,
+                    listOf("Artist"),
+                    candidates =
+                        listOf(
+                            TrackCandidate(
+                                CandidateId("candidate-$value"),
+                                trackId,
+                                CandidateKind.LOCAL,
+                                "local",
+                                value,
+                                CandidateAvailability.AVAILABLE,
+                                locator = "content://local/$value",
+                                media = MediaDescriptor("audio/test", contentLength = 7),
+                            )
+                        ),
+                ),
+                contributorId = contributor.value,
+            )
+        }
     }
 }

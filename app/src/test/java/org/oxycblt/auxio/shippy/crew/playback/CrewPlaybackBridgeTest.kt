@@ -31,6 +31,15 @@ import org.oxycblt.auxio.shippy.domain.TrackRealm
 
 class CrewPlaybackBridgeTest {
     @Test
+    fun `local crew queue item receives local contributor without replacing remote provenance`() {
+        val local = CrewMemberId("local", ProtocolVersion(1))
+        val localItem = item("local", CandidateKind.LOCAL)
+        val remoteItem = item("remote", CandidateKind.LOCAL).copy(contributorId = "remote-member")
+        val stamped = stampCrewContributor(listOf(localItem, remoteItem), local)
+        assertEquals("local", stamped[0].contributorId)
+        assertEquals("remote-member", stamped[1].contributorId)
+    }
+    @Test
     fun `canonical queue removes temporary and download candidates while retaining local`() {
         val item = item("one", CandidateKind.LOCAL, CandidateKind.DOWNLOAD, CandidateKind.CREW_TEMPORARY)
 

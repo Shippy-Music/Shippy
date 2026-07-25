@@ -104,6 +104,7 @@ class CrewLanJoinedSession internal constructor(
 
     val state: StateFlow<CrewState> = engine.state
     val reactions: SharedFlow<ActiveCrewReaction> = engine.reactions
+    val peerMediaBlocked: StateFlow<Boolean> = mediaRuntime.peerMediaBlocked
     val allowedReactions: List<String> = engine.allowedReactions
 
     override fun toString() = "CrewLanJoinedSession(identity=redacted, invite=redacted)"
@@ -295,6 +296,9 @@ constructor(
                 val activeEngine = engine ?: return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
                 val activeMediaRuntime = mediaRuntime ?: return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
                 val activeSessionId = joinState.snapshot.sessionId
+                if (runCatching { activeMediaRuntime.bind(activeEngine.state) }.isFailure) {
+                    return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
+                }
                 if (runCatching { leases.save(CrewRejoinLease(activeSessionId, localMemberId, invite)) }.isFailure) {
                     return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
                 }

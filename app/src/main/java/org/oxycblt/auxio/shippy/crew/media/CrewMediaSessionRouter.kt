@@ -103,6 +103,7 @@ class CrewMediaSessionRouter(
                 CrewMediaFrameResult.Accepted
             }
             is CrewMediaWireFrame.RetryLater -> {
+                state.controller.forget(decoded.transfer)
                 runCatching {
                     callbacks.onTransferRetryLater(decoded.transfer, state.peer.memberId)
                 }

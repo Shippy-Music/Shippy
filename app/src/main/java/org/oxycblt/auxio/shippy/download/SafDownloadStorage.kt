@@ -20,6 +20,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.oxycblt.auxio.music.MusicSettings
+import org.oxycblt.musikr.fs.Location
 
 sealed interface DownloadDestinationState {
     data object NotSelected : DownloadDestinationState
@@ -70,6 +72,7 @@ class SafDownloadStorage
 constructor(
     @ApplicationContext private val context: Context,
     private val settings: DownloadDestinationSettings,
+    private val musicSettings: MusicSettings,
 ) {
     private val resolver
         get() = context.contentResolver
@@ -82,6 +85,9 @@ constructor(
     ): StorageResult<DownloadDestination> =
         withContext(Dispatchers.IO) {
             val previous = settings.destination
+            val previousAutoAddedSourceUri = settings.autoAddedLocalSourceUri
+            val existingSourceUris = musicSettings.safQuery.source.map { it.uri.toString() }
+            val hadPersistedGrant = hasPersistedReadWriteGrant(treeUri)
             try {
                 resolver.takePersistableUriPermission(
                     treeUri,
@@ -96,15 +102,26 @@ constructor(
             }
             val root =
                 DocumentFile.fromTreeUri(context, treeUri)
-                    ?: return@withContext StorageResult.Failure(
-                        DownloadStorageFailure.NOT_A_TREE
-                    )
+                    ?: run {
+                        releaseNewGrantIfUnused(treeUri, hadPersistedGrant, existingSourceUris)
+                        return@withContext StorageResult.Failure(
+                            DownloadStorageFailure.NOT_A_TREE
+                        )
+                    }
             if (!root.canRead()) {
+                releaseNewGrantIfUnused(treeUri, hadPersistedGrant, existingSourceUris)
                 return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_READABLE)
             }
             if (!root.canWrite()) {
+                releaseNewGrantIfUnused(treeUri, hadPersistedGrant, existingSourceUris)
                 return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_WRITABLE)
             }
+            val openedLocation =
+                runCatching { Location.Unopened.from(context, treeUri)?.open(context) }.getOrNull()
+                    ?: run {
+                        releaseNewGrantIfUnused(treeUri, hadPersistedGrant, existingSourceUris)
+                        return@withContext StorageResult.Failure(DownloadStorageFailure.PERMISSION_REVOKED)
+                    }
             val destination =
                 DownloadDestination(
                     treeUri = treeUri.toString(),
@@ -113,22 +130,33 @@ constructor(
                             ?: root.name?.takeIf(String::isNotBlank)
                             ?: "Downloads",
                 )
-            settings.setDestination(destination)
-            previous
-                ?.treeUri
-                ?.takeIf { it != destination.treeUri }
-                ?.let(Uri::parse)
-                ?.let { previousUri ->
-                    try {
-                        resolver.releasePersistableUriPermission(
-                            previousUri,
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-                        )
-                    } catch (_: SecurityException) {
-                        // The old grant may already be revoked.
-                    }
+            val sourcePlan =
+                DownloadDestinationLocalSourcePlan.create(
+                    existingSourceUris = existingSourceUris,
+                    previousDestinationUri = previous?.treeUri,
+                    autoAddedDestinationUri = previousAutoAddedSourceUri,
+                    newDestinationUri = destination.treeUri,
+                )
+            if (sourcePlan.sourceChanged) {
+                val existingSources = musicSettings.safQuery.source
+                musicSettings.safQuery =
+                    musicSettings.safQuery.copy(
+                        source =
+                            sourcePlan.sourceUris.map { sourceUri ->
+                                existingSources.firstOrNull { it.uri.toString() == sourceUri }
+                                    ?: openedLocation.takeIf { it.uri.toString() == sourceUri }
+                                    ?: error("Missing Local source for $sourceUri")
+                            }
+                    )
+                musicSettings.forceLocationUpdate()
+            }
+            settings.setDestination(destination, sourcePlan.autoAddedDestinationUri)
+            previous?.treeUri?.takeIf { it != destination.treeUri }?.let(Uri::parse)?.let {
+                previousUri ->
+                if (sourcePlan.sourceUris.none { it == previousUri.toString() }) {
+                    releasePersistedGrant(previousUri)
                 }
+            }
             StorageResult.Success(destination)
         }
 
@@ -249,6 +277,27 @@ constructor(
         resolver.persistedUriPermissions.any {
             it.uri == uri && it.isReadPermission && it.isWritePermission
         }
+
+    private fun releaseNewGrantIfUnused(
+        uri: Uri,
+        hadPersistedGrant: Boolean,
+        sourceUris: List<String>,
+    ) {
+        if (!hadPersistedGrant && uri.toString() !in sourceUris) {
+            releasePersistedGrant(uri)
+        }
+    }
+
+    private fun releasePersistedGrant(uri: Uri) {
+        try {
+            resolver.releasePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+            )
+        } catch (_: SecurityException) {
+            // The grant may already be revoked.
+        }
+    }
 
     private fun scan(root: DocumentFile): List<StoredAudioDocument> {
         val pending = ArrayDeque<DocumentFile>().apply { add(root) }

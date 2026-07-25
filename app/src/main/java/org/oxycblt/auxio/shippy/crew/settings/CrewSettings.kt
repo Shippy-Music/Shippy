@@ -11,6 +11,7 @@
 package org.oxycblt.auxio.shippy.crew.settings
 
 import android.content.Context
+import androidx.core.content.edit
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -25,6 +26,7 @@ import org.oxycblt.auxio.settings.Settings
 interface CrewSettings : Settings<CrewSettings.Listener> {
     /** Whether active-Crew members may temporarily share missing media with each other. */
     val pushPullEnabled: Boolean
+    fun setPushPullEnabled(enabled: Boolean)
 
     interface Listener {
         /** Called when [pushPullEnabled] changes after this listener is registered. */
@@ -39,6 +41,10 @@ constructor(
 ) : Settings.Impl<CrewSettings.Listener>(context), CrewSettings {
     override val pushPullEnabled: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_crew_push_pull_enabled), false)
+
+    override fun setPushPullEnabled(enabled: Boolean) {
+        sharedPreferences.edit { putBoolean(getString(R.string.set_key_crew_push_pull_enabled), enabled) }
+    }
 
     override fun onSettingChanged(key: String, listener: CrewSettings.Listener) {
         if (key == getString(R.string.set_key_crew_push_pull_enabled)) {
