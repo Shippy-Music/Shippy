@@ -232,6 +232,12 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   the authenticated coordinator's normal snapshot containing the exact joining
   member. Wrong-session, forged, malformed, and election-bootstrap snapshots
   are rejected explicitly.
+- The LAN host now has a bounded admission coordinator that turns each
+  QR-authenticated signaling peer into one fingerprint-bound direct connection,
+  verifies the claimed member again at the transport boundary, then attaches
+  and admits that exact member with the transcript-bound display name.
+  Duplicate attempts replace only their own member connection, while malformed
+  later attempts cannot overwrite an already-active member state.
 - Election votes are retained once per authenticated voter, reject transport
   identity/candidate/checkpoint conflicts, and install a next-term snapshot only
   after a strict majority. A snapshot that arrives before all of its certificate
