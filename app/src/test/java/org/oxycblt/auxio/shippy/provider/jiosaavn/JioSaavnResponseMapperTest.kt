@@ -61,7 +61,7 @@ class JioSaavnResponseMapperTest {
     }
 
     @Test
-    fun `music field wins over artist map and malformed optional values stay absent`() {
+    fun `primary artist map wins over composer field`() {
         val song =
             JioSaavnResponseMapper.mapSong(
                 mapOf(
@@ -70,8 +70,13 @@ class JioSaavnResponseMapperTest {
                     "duration" to "",
                     "more_info" to
                         mapOf(
-                            "music" to "Lead &quot;Artist&quot;",
+                            "music" to "Composer",
                             "320kbps" to "unknown",
+                            "artistMap" to
+                                mapOf(
+                                    "primary_artists" to
+                                        listOf(mapOf("name" to "Lead &quot;Artist&quot;"))
+                                ),
                         ),
                 )
             )
@@ -79,6 +84,20 @@ class JioSaavnResponseMapperTest {
         assertEquals("Lead \"Artist\"", song.artist)
         assertNull(song.durationSeconds)
         assertNull(song.supports320Kbps)
+    }
+
+    @Test
+    fun `music field is used only when primary artists are absent`() {
+        val song =
+            JioSaavnResponseMapper.mapSong(
+                mapOf(
+                    "id" to "id",
+                    "song" to "Title",
+                    "more_info" to mapOf("music" to "Fallback composer"),
+                )
+            )
+
+        assertEquals("Fallback composer", song.artist)
     }
 
     @Test

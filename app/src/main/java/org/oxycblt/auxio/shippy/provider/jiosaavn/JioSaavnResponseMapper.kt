@@ -80,8 +80,6 @@ object JioSaavnResponseMapper {
         response: Map<String, Any?>,
         moreInfo: Map<String, Any?>?,
     ): String {
-        moreInfo?.text("music")?.decodeEntities()?.takeIf(String::isNotBlank)?.let { return it }
-
         val primaryArtists =
             moreInfo?.map("artistMap")
                 ?.list("primary_artists")
@@ -92,6 +90,12 @@ object JioSaavnResponseMapper {
             return primaryArtists.joinToString(", ")
         }
 
+        moreInfo
+            ?.text("primary_artists")
+            ?.decodeEntities()
+            ?.takeIf(String::isNotBlank)
+            ?.let { return it }
+        moreInfo?.text("music")?.decodeEntities()?.takeIf(String::isNotBlank)?.let { return it }
         return response.text("subtitle")?.decodeEntities()?.takeIf(String::isNotBlank) ?: "Unknown"
     }
 

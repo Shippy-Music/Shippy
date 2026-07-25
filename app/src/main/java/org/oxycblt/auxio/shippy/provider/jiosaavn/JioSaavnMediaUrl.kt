@@ -11,9 +11,9 @@
 package org.oxycblt.auxio.shippy.provider.jiosaavn
 
 import java.nio.charset.StandardCharsets
-import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.spec.SecretKeySpec
+import kotlin.io.encoding.Base64
 
 enum class JioSaavnQuality(val bitrateKbps: Int) {
     LOW(96),
@@ -36,7 +36,7 @@ object JioSaavnMediaUrl {
             SecretKeySpec(MEDIA_URL_KEY.toByteArray(StandardCharsets.US_ASCII), "DES"),
         )
         val decoded =
-            cipher.doFinal(Base64.getDecoder().decode(encryptedMediaUrl.trim()))
+            cipher.doFinal(Base64.decode(encryptedMediaUrl.trim()))
                 .toString(StandardCharsets.UTF_8)
                 .replace(trailingMediaData, "$1")
         require(decoded.startsWith("http://") || decoded.startsWith("https://")) {
