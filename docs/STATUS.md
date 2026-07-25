@@ -353,6 +353,12 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   `ActiveCrewRuntime` generation-checks that seam before and after submission,
   preserves exact local issuer identity, and never exposes an engine or
   transport to UI/player integration code.
+- A service-lifecycle `CrewPlaybackBridge` now connects canonical Crew state to
+  Auxio's one `PlaybackStateManager` and reconciles normal UI, MediaSession,
+  headset, queue, repeat, shuffle, play/pause, and seek changes back through the
+  ordered Crew action gateway. Remote queues resolve before replacement,
+  duplicate-safe IDs are retained, host sessions seed an existing player once,
+  and debounced final-state comparison prevents ordinary echo loops.
 - Library's New playlist action now creates a collision-safe, unpinned Shippy
   Room playlist after native name validation. Auxio's existing Import action
   remains a separate device-playlist import.
@@ -382,8 +388,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Adding live provider health verification.
 - Hosted signaling, QR rendering/scanning, and remaining transport lifecycle.
 - Transport migration after a reconnect.
-- Connecting Crew request scheduling, rolling prefetch, and canonical
-  queue/playback commands to the one player authority.
+- Connecting Crew request scheduling and rolling prefetch to the active media
+  runtime, then adding QR and reactions to the visible Crew flow.
 
 ## Not Started
 
@@ -403,6 +409,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Crew control serialization, chunk reassembly/media transfer, Room checkpoint
   and Last.fm v7 generation, session-engine convergence, and persistence tests
   are authored/static-parsed only and remain uncompiled.
+- The first top-down Crew/player bridge keeps an exact Local `content://`
+  candidate in canonical queue state because current supplier authorization
+  still depends on it. A private per-device source projection must remove that
+  locator from transmitted canonical state before Crew media is release-ready.
 - Safe ungraceful election needs a strict majority. A direct two-member Crew
   pauses after coordinator loss until reconnection; the future relay/witness
   path must restore availability without weakening split-brain safety.

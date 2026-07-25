@@ -36,6 +36,7 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleTracker
+import org.oxycblt.auxio.shippy.crew.playback.CrewPlaybackBridge
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
 import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.musikr.MusicParent
@@ -54,6 +55,7 @@ private constructor(
     systemReceiverFactory: SystemPlaybackReceiver.Factory,
     private val lastFmScrobbleTracker: LastFmScrobbleTracker,
     private val sleepTimerController: SleepTimerController,
+    private val crewPlaybackBridge: CrewPlaybackBridge,
 ) : PlaybackStateManager.Listener {
     class Factory
     @Inject
@@ -66,6 +68,7 @@ private constructor(
         private val systemReceiverFactory: SystemPlaybackReceiver.Factory,
         private val lastFmScrobbleTracker: LastFmScrobbleTracker,
         private val sleepTimerController: SleepTimerController,
+        private val crewPlaybackBridge: CrewPlaybackBridge,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
             PlaybackServiceFragment(
@@ -79,6 +82,7 @@ private constructor(
                 systemReceiverFactory,
                 lastFmScrobbleTracker,
                 sleepTimerController,
+                crewPlaybackBridge,
             )
     }
 
@@ -130,6 +134,7 @@ private constructor(
         playbackManager.addListener(this)
         lastFmScrobbleTracker.attach(playbackManager)
         sleepTimerController.attach(playbackManager)
+        crewPlaybackBridge.attach()
         updateAutoStopTimer(playbackManager.progression.isPlaying)
         return sessionHolder.token
     }
@@ -188,6 +193,7 @@ private constructor(
         playbackManager.removeListener(this)
         lastFmScrobbleTracker.release(playbackManager)
         sleepTimerController.release(playbackManager)
+        crewPlaybackBridge.release()
         systemReceiver.release()
         widgetComponent.release()
         sessionHolder.release()

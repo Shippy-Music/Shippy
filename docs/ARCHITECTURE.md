@@ -689,6 +689,23 @@ session end. `PlaybackResolutionCoordinator` applies this exact active overlay
 before verified-download projection, so an already received Crew object wins
 without altering the duplicate-safe queue identity or creating another player.
 
+`CrewPlaybackBridge` is attached beside the existing playback-service
+observers. Active Crew state is prepared through the normal resolver before it
+may replace the Auxio queue; equal queue IDs reuse the current prepared player
+state. Repeat, shuffle, current duplicate-safe occurrence, monotonic position,
+and play intent are then applied through `PlaybackStateManager`. Normal player,
+MediaSession, headset, and UI callbacks debounce into one final-state
+comparison and submit only real differences through `ActiveCrewRuntime`, so a
+remote application does not ordinarily echo back as a second action. An
+existing host player seeds an empty new Crew once.
+
+The first broad bridge removes synthesized `DOWNLOAD` and `CREW_TEMPORARY`
+candidates before publication. It temporarily retains exact Local
+`content://` candidates because supplier authorization still reads that local
+source from canonical state. Release hardening must move that locator into a
+private per-device source projection while leaving only path-free identity in
+the shared queue.
+
 ## 12. UI Runtime
 
 Auxio is an Android Views/Fragments application. Preserve its real UI runtime
