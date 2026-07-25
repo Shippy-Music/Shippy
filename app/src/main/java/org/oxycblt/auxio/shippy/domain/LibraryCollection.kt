@@ -16,7 +16,14 @@ value class LibraryCollectionId(val value: String) {
         require(value.isNotBlank()) { "LibraryCollectionId cannot be blank" }
     }
 
+    val isSystem: Boolean
+        get() = value.startsWith(SYSTEM_COLLECTION_PREFIX)
+
     override fun toString() = value
+
+    private companion object {
+        const val SYSTEM_COLLECTION_PREFIX = "system:"
+    }
 }
 
 sealed interface LibraryCollection {
@@ -60,4 +67,10 @@ data class LibraryRelationship(
     val liked: Boolean = false,
     val downloaded: Boolean = false,
     val playlistIds: Set<LibraryCollectionId> = emptySet(),
-)
+) {
+    init {
+        require(playlistIds.none(LibraryCollectionId::isSystem)) {
+            "System collections are derived relationships, not user playlist memberships"
+        }
+    }
+}
