@@ -484,6 +484,13 @@ successor, then sends a self-leave request through that new coordinator. The
 departing device clears only its exact active checkpoint after the accepted
 `MemberLeft` event reaches it.
 
+A joining device does not invent provisional Crew state. Before constructing
+its `CrewSessionEngine`, a bounded `CrewJoinBootstrapAccumulator` consumes only
+frames from the already-authenticated coordinator transport, waits through the
+preceding admission event, and accepts a normal snapshot only when its
+session/protocol match and the exact local member is present. Election-certified
+or forged-coordinator snapshots are rejected at this bootstrap boundary.
+
 `CrewLivenessTracker` keeps transport loss separate from membership mutation.
 It uses monotonic configurable reconnect grace, cancels expiry on authenticated
 activity, lets only the coordinator remove an expired ordinary member, and

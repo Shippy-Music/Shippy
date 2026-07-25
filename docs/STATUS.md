@@ -224,6 +224,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   ordinary members leave through the ordered coordinator sequencer, while
   ungraceful coordinator loss emits standalone checkpoint-bound votes from each
   authenticated surviving peer.
+- Join bootstrap no longer needs fabricated provisional state: a bounded
+  pre-engine accumulator waits through valid admission traffic and accepts only
+  the authenticated coordinator's normal snapshot containing the exact joining
+  member. Wrong-session, forged, malformed, and election-bootstrap snapshots
+  are rejected explicitly.
 - Election votes are retained once per authenticated voter, reject transport
   identity/candidate/checkpoint conflicts, and install a next-term snapshot only
   after a strict majority. A snapshot that arrives before all of its certificate

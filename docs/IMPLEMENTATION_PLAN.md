@@ -195,6 +195,9 @@ code/test level, ready for later device verification.
       reassembly for requests, events, rejections, and snapshots.
 - [x] Connect authenticated peer transports to the control/session engine with
       bounded backpressure and snapshot-gap recovery.
+- [x] Add a bounded pre-engine join bootstrap that waits through the admission
+      event and accepts only the authenticated coordinator's normal snapshot
+      containing the exact local member.
 - [ ] Expose only clear join/connection states in UI.
 
 **Validation:**
