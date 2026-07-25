@@ -98,6 +98,11 @@ request ID becomes the durable event ID so an optimistic client can reconcile
 the exact accepted action. Duplicate retries return the original event;
 rejected actions do not create gaps in the event sequence.
 
+Clients keep only a small bounded optimistic ledger. Exact accepted events clear
+their matching intent; reused IDs with a different issuer or action are
+conflicts. Coordinator rejection, timeout, and session replacement explicitly
+roll back pending UI instead of pretending the action converged.
+
 ## 5. Canonical Session State
 
 ```text

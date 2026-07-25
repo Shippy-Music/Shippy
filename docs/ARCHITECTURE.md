@@ -407,6 +407,12 @@ publication, and reuses the request ID as the durable event ID for optimistic
 reconciliation. Rejected actions do not consume sequence numbers, and bounded
 recent results make retries idempotent even across a graceful handoff.
 
+`CrewOptimisticActionTracker` is the matching bounded client ledger. Pending UI
+intent is confirmed only by the exact durable ID, issuer, and action; ID reuse
+with different content becomes a visible protocol conflict. Coordinator
+rejection, timeout, and session replacement return explicit rollback reasons
+instead of leaving speculative UI state behind.
+
 ### Transport adapters
 
 The 2026-07-25 focused spike selected:

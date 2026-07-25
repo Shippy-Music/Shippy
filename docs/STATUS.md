@@ -190,6 +190,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   authenticated member. It separates requester from publisher, assigns the
   canonical term/sequence, rejects forged issuers, avoids sequence gaps on
   invalid actions, and returns the original event for bounded duplicate retries.
+- Client optimistic intent is now bounded and reconciles only against the exact
+  accepted event ID, issuer, and action. Conflicts, coordinator rejection,
+  timeout, and session replacement produce explicit rollback outcomes.
 
 ## In Progress
 
@@ -255,8 +258,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
-| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/signaling/direct-connection/transport policies |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
+| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/signaling/direct-connection/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 338-file app AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 340-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |
