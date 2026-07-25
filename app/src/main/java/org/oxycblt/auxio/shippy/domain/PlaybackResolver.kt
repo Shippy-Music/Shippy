@@ -10,6 +10,8 @@
 
 package org.oxycblt.auxio.shippy.domain
 
+import javax.inject.Inject
+
 data class ResolutionPolicy(
     val providerPriority: List<ProviderId>,
     val pushPullEnabled: Boolean,
@@ -27,7 +29,7 @@ sealed interface ResolutionResult {
  * Resolution order is the product contract. Exact local candidates participate only for tracks
  * that explicitly belong to the Local realm; they never silently replace a provider track.
  */
-class PlaybackResolver {
+class PlaybackResolver @Inject constructor() {
     fun resolve(track: Track, policy: ResolutionPolicy): ResolutionResult {
         select(track, CandidateKind.CREW_TEMPORARY)?.let {
             return ResolutionResult.Selected(it)
