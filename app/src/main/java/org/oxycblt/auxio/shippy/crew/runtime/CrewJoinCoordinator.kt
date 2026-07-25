@@ -53,7 +53,7 @@ class CrewSessionEngineJoinPort(
 }
 
 fun interface CrewJoinSessionFactory {
-    fun create(snapshot: CrewSnapshot): CrewJoinedSessionPort
+    suspend fun create(snapshot: CrewSnapshot): CrewJoinedSessionPort
 }
 
 fun interface CrewDirectInitiatorHandleFactory {

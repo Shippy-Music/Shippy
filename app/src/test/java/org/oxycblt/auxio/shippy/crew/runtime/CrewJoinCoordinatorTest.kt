@@ -210,7 +210,7 @@ class CrewJoinCoordinatorTest {
 
     private class FakeSessions(private val session: FakeSession) : CrewJoinSessionFactory {
         val snapshots = mutableListOf<CrewSnapshot>()
-        override fun create(snapshot: CrewSnapshot) = session.also { snapshots += snapshot }
+        override suspend fun create(snapshot: CrewSnapshot) = session.also { snapshots += snapshot }
     }
 
     private class FakeSession(private val startFails: Boolean) : CrewJoinedSessionPort {
