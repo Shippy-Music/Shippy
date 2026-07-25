@@ -337,6 +337,13 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   assemblies across publication retry, and preserves control connectivity when
   Push & Pull is locally disabled or a supplier lacks the item. Active-session
   construction and player/preparation integration remain incomplete.
+- One active-session Crew media composition now owns the Push & Pull policy,
+  temporary cache/index, receiver/router, live Settings toggle, and verified
+  download view. Supplier authorization requires the exact active session,
+  member, queue occurrence, and original candidate; it can expose only an exact
+  private temporary file, exact Local content URI, or verified Shippy download
+  as bytes. Provider URLs, file paths, stale candidates, and unrelated devices
+  cannot cross the seam. LAN launcher, prefetch, and player composition remain.
 - Library's New playlist action now creates a collision-safe, unpinned Shippy
   Room playlist after native name validation. Auxio's existing Import action
   remains a separate device-playlist import.
@@ -366,9 +373,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Adding live provider health verification.
 - Hosted signaling, QR rendering/scanning, and remaining transport lifecycle.
 - Transport migration after a reconnect.
-- Composing the active Crew runtime around Push & Pull availability, supplier
-  authorization, request scheduling, prefetch, the temporary candidate overlay,
-  and the one player authority.
+- Composing the active LAN launchers with the Crew media runtime, then connecting
+  request scheduling, prefetch, the temporary candidate overlay, and the one
+  player authority.
 
 ## Not Started
 

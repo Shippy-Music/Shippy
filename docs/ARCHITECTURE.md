@@ -650,9 +650,19 @@ chunk and the complete SHA-256 object, and publishes only into the
 session-temporary cache. Completion is acknowledged only after the verified
 file is published to the local playback overlay. The controller is
 deliberately event-driven: a writable callback or acknowledgement resumes one
-bounded send; it never busy-loops. Active-session runtime composition, rolling
-prefetch, supplier selection, and cache-to-player integration remain the next
-seam.
+bounded send; it never busy-loops.
+
+`CrewActiveMediaRuntime` now composes one active session's policy, private
+temporary cache/index, receiver, authenticated router, live Push & Pull setting,
+and immutable verified-download view. Supplier authorization rechecks the exact
+session, authenticated requester/target, local supplier, active membership,
+duplicate-safe queue occurrence, and original candidate against current
+canonical state. Only exact private temporary bytes, exact available Local
+`content://` bytes, or a verified Shippy download tied to the requested
+candidate can be opened; provider URLs, paths, credentials, and arbitrary
+discovered devices cannot cross the seam. The runtime is not yet installed by
+the host/join launchers. Rolling prefetch, supplier selection, and
+cache-to-player integration remain the next seam.
 
 Primary evidence:
 
