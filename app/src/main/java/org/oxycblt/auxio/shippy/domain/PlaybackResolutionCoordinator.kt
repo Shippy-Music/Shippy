@@ -12,6 +12,9 @@ package org.oxycblt.auxio.shippy.domain
 
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import org.oxycblt.auxio.shippy.download.withVerifiedDownloadCandidate
+import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
+import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderResult
@@ -28,19 +31,38 @@ sealed interface PlaybackPreparation {
     ) : PlaybackPreparation
 }
 
-class PlaybackResolutionCoordinator
-@Inject
-constructor(
+class PlaybackResolutionCoordinator private constructor(
     private val playbackResolver: PlaybackResolver,
     private val providerRegistry: ProviderRegistry,
+    private val latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?,
 ) {
+    @Inject
+    constructor(
+        playbackResolver: PlaybackResolver,
+        providerRegistry: ProviderRegistry,
+        downloadJobs: DownloadJobRepository,
+    ) : this(playbackResolver, providerRegistry, downloadJobs::getLatestForTrack)
+
+    internal constructor(
+        playbackResolver: PlaybackResolver,
+        providerRegistry: ProviderRegistry,
+    ) : this(playbackResolver, providerRegistry, { null })
+
+    internal constructor(
+        playbackResolver: PlaybackResolver,
+        providerRegistry: ProviderRegistry,
+        latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?,
+        @Suppress("UNUSED_PARAMETER") testSeam: Unit = Unit,
+    ) : this(playbackResolver, providerRegistry, latestDownloadForTrack)
+
     suspend fun prepare(
         item: QueueItem,
         policy: ResolutionPolicy,
         constraints: StreamConstraints = StreamConstraints(),
     ): PlaybackPreparation {
+        val resolvedItem = item.withLatestVerifiedDownload()
         val candidate =
-            when (val selection = playbackResolver.resolve(item.track, policy)) {
+            when (val selection = playbackResolver.resolve(resolvedItem.track, policy)) {
                 is ResolutionResult.Selected -> selection.candidate
                 is ResolutionResult.Unavailable ->
                     return PlaybackPreparation.Failed(
@@ -52,11 +74,20 @@ constructor(
             }
 
         return if (candidate.kind == CandidateKind.PROVIDER) {
-            prepareProvider(item, candidate, constraints)
+            prepareProvider(resolvedItem, candidate, constraints)
         } else {
-            prepareDirect(item, candidate)
+            prepareDirect(resolvedItem, candidate)
         }
     }
+
+    private suspend fun QueueItem.withLatestVerifiedDownload(): QueueItem =
+        try {
+            withVerifiedDownloadCandidate(latestDownloadForTrack(track.id))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            this
+        }
 
     private suspend fun prepareProvider(
         item: QueueItem,

@@ -15,6 +15,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.shippy.download.DownloadArtifact
+import org.oxycblt.auxio.shippy.download.DownloadJob
+import org.oxycblt.auxio.shippy.download.DownloadJobId
+import org.oxycblt.auxio.shippy.download.DownloadState
+import org.oxycblt.auxio.shippy.download.withVerifiedDownloadCandidate
+import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 import org.oxycblt.auxio.shippy.provider.MusicProvider
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderDescriptor
@@ -104,6 +110,73 @@ class PlaybackResolutionCoordinatorTest {
         assertEquals(callsBefore, provider.resolveCalls)
     }
 
+    @Test
+    fun `available verified download wins and preserves exact queue item`() = runBlocking {
+        val item = queueItem("download-occurrence")
+        val coordinator = coordinatorWithDownload { verifiedDownload(item) }
+        val callsBefore = provider.resolveCalls
+
+        val result =
+            coordinator.prepare(
+                item,
+                ResolutionPolicy(listOf(provider.descriptor.id), pushPullEnabled = false),
+            ) as PlaybackPreparation.Ready
+
+        assertEquals(item.id, result.value.item.id)
+        assertEquals(item.id, result.value.playback.queueItemId)
+        assertEquals("content://shippy/download/verified", result.value.playback.uri)
+        assertEquals(CandidateKind.DOWNLOAD, result.value.item.track.candidates.last().kind)
+        assertEquals(callsBefore, provider.resolveCalls)
+    }
+
+    @Test
+    fun `only available matching verified download is synthesized`() {
+        val item = queueItem("guarded-download")
+        val originalCandidates = item.track.candidates
+        val valid = verifiedDownload(item)
+        val invalidDownloads =
+            listOf(
+                valid.copy(job = valid.job.copy(candidateId = CandidateId("provider:other"))),
+                valid.copy(job = valid.job.copy(trackId = TrackId("provider:other"))),
+                valid.copy(job = valid.job.copy(artifact = valid.job.artifact!!.copy(contentLength = 0))),
+                valid.copy(job = valid.job.copy(state = DownloadState.VERIFYING, artifact = null)),
+            )
+
+        invalidDownloads.forEach { download ->
+            val augmented = item.withVerifiedDownloadCandidate(download)
+            assertEquals(item, augmented)
+            assertEquals(originalCandidates, augmented.track.candidates)
+        }
+    }
+
+    @Test
+    fun `download repository failure falls back to provider`() = runBlocking {
+        val item = queueItem("repository-failure")
+        val coordinator = coordinatorWithDownload { error("download database unavailable") }
+        val callsBefore = provider.resolveCalls
+
+        val result =
+            coordinator.prepare(
+                item,
+                ResolutionPolicy(listOf(provider.descriptor.id), pushPullEnabled = false),
+            ) as PlaybackPreparation.Ready
+
+        assertEquals(CandidateId("provider:track"), result.value.playback.candidateId)
+        assertEquals(callsBefore + 1, provider.resolveCalls)
+    }
+
+    @Test
+    fun `download candidate augmentation is idempotent`() {
+        val item = queueItem("idempotent-download")
+        val download = verifiedDownload(item)
+
+        val once = item.withVerifiedDownloadCandidate(download)
+        val twice = once.withVerifiedDownloadCandidate(download)
+
+        assertEquals(once, twice)
+        assertEquals(1, twice.track.candidates.count { it.kind == CandidateKind.DOWNLOAD })
+    }
+
     private fun queueItem(queueId: String): QueueItem {
         val providerId = provider.descriptor.id
         val trackId = TrackId("provider:track")
@@ -128,6 +201,41 @@ class PlaybackResolutionCoordinatorTest {
                             )
                         ),
                 ),
+        )
+    }
+
+    private fun coordinatorWithDownload(
+        latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?,
+    ): PlaybackResolutionCoordinator =
+        PlaybackResolutionCoordinator(
+            PlaybackResolver(),
+            ProviderRegistry(setOf(provider)),
+            latestDownloadForTrack,
+        )
+
+    private fun verifiedDownload(item: QueueItem): PersistedDownload {
+        val artifact =
+            DownloadArtifact(
+                contentUri = "content://shippy/download/verified",
+                contentLength = 1024,
+                mimeType = "audio/mpeg",
+                verifiedAtEpochMs = 1,
+            )
+        return PersistedDownload(
+            job =
+                DownloadJob(
+                    id = DownloadJobId("download-job"),
+                    trackId = item.track.id,
+                    candidateId = CandidateId("provider:track"),
+                    state = DownloadState.AVAILABLE,
+                    bytesTransferred = artifact.contentLength,
+                    expectedBytes = artifact.contentLength,
+                    artifact = artifact,
+                ),
+            track = item.track,
+            pendingDocument = null,
+            createdAtEpochMs = 1,
+            updatedAtEpochMs = 1,
         )
     }
 

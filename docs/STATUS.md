@@ -316,6 +316,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Liked, Downloads, and user-playlist track rows now expose direct download,
   resume, and retry actions from the same durable state used by the full player.
   Local rows remain outside provider-download behavior.
+- Every Shippy playback entry point now projects the latest exact verified SAF
+  artifact into a deterministic `DOWNLOAD` candidate before resolution. The
+  offline copy therefore wins ahead of providers while preserving the original
+  queue-item identity; mismatched, empty, non-content, or non-final artifacts
+  cannot become playable candidates, and repository failure falls back safely.
 - The player now offers provider-safe original sharing and a bounded,
   versioned `shippy://track/v1` recording link. Shippy links contain metadata
   and provider provenance only, are handled before file intents, and never

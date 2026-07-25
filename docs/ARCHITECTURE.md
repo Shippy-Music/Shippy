@@ -349,6 +349,14 @@ The selected SAF destination and existing-file index must reconcile against
 Room state. Final availability is published only after the output exists,
 matches expected constraints, and is indexable/playable.
 
+At playback preparation, the latest available job is revalidated against the
+exact track and originally requested candidate, then projected as one
+deterministic `DOWNLOAD` candidate carrying only its verified SAF content URI,
+MIME type, and length. This projection occurs before the global resolver so the
+same download-first rule applies to Search, Library, playlists, and Crew. It
+does not mutate stored provider metadata. Invalid or unavailable persistence
+falls back to ordinary candidate resolution rather than blocking playback.
+
 Do not copy Bloomee’s in-memory task list, SSL-ignore behavior, path
 concatenation, rename bugs, or stale filename records.
 
