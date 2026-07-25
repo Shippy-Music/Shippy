@@ -277,6 +277,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   UTF-8-bounded listener display name. Neither is derived from an Android,
   hardware, or account identifier, and the stable member value is wrapped in
   the active protocol version rather than regenerated per session.
+- Host startup now has a pure secure bootstrap factory for the canonical
+  one-member initial state and a 15-minute Shippy invite/link. Session,
+  invitation, and 256-bit secret tokens are independently generated; the
+  opaque session token intentionally also keys LAN rendezvous discovery.
 - Anonymous YouTube Music is now a second provider adapter: it bootstraps public
   Innertube configuration at runtime, searches WEB_REMIX song results, retries
   playback through Android Music/iOS client contexts, and accepts direct HTTPS
