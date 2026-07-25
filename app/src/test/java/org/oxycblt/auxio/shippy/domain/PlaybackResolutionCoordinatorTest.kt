@@ -10,11 +10,21 @@
 
 package org.oxycblt.auxio.shippy.domain
 
+import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaIndex
+import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
+import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
+import org.oxycblt.auxio.shippy.crew.media.CrewMediaChunkDescriptor
+import org.oxycblt.auxio.shippy.crew.media.CrewMediaDigest
+import org.oxycblt.auxio.shippy.crew.media.CrewMediaManifest
+import org.oxycblt.auxio.shippy.crew.media.CrewMediaRequestId
+import org.oxycblt.auxio.shippy.crew.media.CrewMediaTransferRef
 import org.oxycblt.auxio.shippy.download.DownloadArtifact
 import org.oxycblt.auxio.shippy.download.DownloadJob
 import org.oxycblt.auxio.shippy.download.DownloadJobId
@@ -130,6 +140,73 @@ class PlaybackResolutionCoordinatorTest {
     }
 
     @Test
+    fun `exact active Crew temporary media wins ahead of verified download without another player path`() = runBlocking {
+        val item = queueItem("crew-occurrence")
+        val file = crewTemporaryFile()
+        try {
+            val index = activeCrewIndex(item, file)
+            val expected = requireNotNull(index.augmentActive(item)).track.candidates.last()
+            val coordinator = coordinatorWithCrewTemporary(index, { verifiedDownload(item) })
+            val callsBefore = provider.resolveCalls
+
+            val result =
+                coordinator.prepare(
+                    item,
+                    ResolutionPolicy(listOf(provider.descriptor.id), pushPullEnabled = false),
+                ) as PlaybackPreparation.Ready
+
+            assertEquals(item.id, result.value.item.id)
+            assertEquals(item.id, result.value.playback.queueItemId)
+            assertEquals(expected.id, result.value.playback.candidateId)
+            assertEquals(expected.locator, result.value.playback.uri)
+            assertEquals(CandidateKind.CREW_TEMPORARY, result.value.item.track.candidates.first { it.id == expected.id }.kind)
+            assertEquals(callsBefore, provider.resolveCalls)
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `ended Crew overlay leaves verified download behavior unchanged`() = runBlocking {
+        val item = queueItem("ended-crew-occurrence")
+        val file = crewTemporaryFile()
+        try {
+            val index = activeCrewIndex(item, file)
+            index.endSession(CrewSessionId("playback-crew", ProtocolVersion(1)))
+            val coordinator = coordinatorWithCrewTemporary(index, { verifiedDownload(item) })
+
+            val result =
+                coordinator.prepare(
+                    item,
+                    ResolutionPolicy(listOf(provider.descriptor.id), pushPullEnabled = false),
+                ) as PlaybackPreparation.Ready
+
+            assertEquals(item.id, result.value.playback.queueItemId)
+            assertEquals("content://shippy/download/verified", result.value.playback.uri)
+            assertTrue(result.value.item.track.candidates.none { it.kind == CandidateKind.CREW_TEMPORARY })
+        } finally {
+            file.delete()
+        }
+    }
+
+    @Test
+    fun `no active Crew overlay leaves provider behavior unchanged`() = runBlocking {
+        val item = queueItem("inactive-crew-occurrence")
+        val coordinator = coordinatorWithCrewTemporary(CrewTemporaryMediaIndex(), { null })
+        val callsBefore = provider.resolveCalls
+
+        val result =
+            coordinator.prepare(
+                item,
+                ResolutionPolicy(listOf(provider.descriptor.id), pushPullEnabled = false),
+            ) as PlaybackPreparation.Ready
+
+        assertEquals(item.id, result.value.playback.queueItemId)
+        assertEquals(CandidateId("provider:track"), result.value.playback.candidateId)
+        assertEquals(callsBefore + 1, provider.resolveCalls)
+    }
+
+    @Test
     fun `only available matching verified download is synthesized`() {
         val item = queueItem("guarded-download")
         val originalCandidates = item.track.candidates
@@ -212,6 +289,47 @@ class PlaybackResolutionCoordinatorTest {
             ProviderRegistry(setOf(provider)),
             latestDownloadForTrack,
         )
+
+    private fun coordinatorWithCrewTemporary(
+        index: CrewTemporaryMediaIndex,
+        latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?,
+    ): PlaybackResolutionCoordinator =
+        PlaybackResolutionCoordinator(
+            PlaybackResolver(),
+            ProviderRegistry(setOf(provider)),
+            latestDownloadForTrack,
+            index::augmentActive,
+        )
+
+    private fun activeCrewIndex(item: QueueItem, file: File): CrewTemporaryMediaIndex {
+        val session = CrewSessionId("playback-crew", ProtocolVersion(1))
+        val bytes = file.readBytes()
+        val manifest =
+            CrewMediaManifest(
+                transfer =
+                    CrewMediaTransferRef(
+                        session,
+                        CrewMediaRequestId("playback-request"),
+                        item.id,
+                        CandidateId("provider:track"),
+                        CrewMemberId("target", ProtocolVersion(1)),
+                        CrewMemberId("supplier", ProtocolVersion(1)),
+                    ),
+                mimeType = "audio/mpeg",
+                objectSizeBytes = bytes.size.toLong(),
+                objectIntegrity = CrewMediaDigest.sha256(bytes),
+                chunks = listOf(CrewMediaChunkDescriptor(0, bytes.size, CrewMediaDigest.sha256(bytes))),
+            )
+        return CrewTemporaryMediaIndex().also {
+            it.beginSession(session)
+            assertTrue(it.complete(manifest, file))
+        }
+    }
+
+    private fun crewTemporaryFile(): File {
+        val bytes = byteArrayOf(1, 2, 3, 4)
+        return File.createTempFile("playback-crew", ".media").also { it.writeBytes(bytes) }
+    }
 
     private fun verifiedDownload(item: QueueItem): PersistedDownload {
         val artifact =

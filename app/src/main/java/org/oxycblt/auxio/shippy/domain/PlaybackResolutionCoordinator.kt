@@ -12,6 +12,7 @@ package org.oxycblt.auxio.shippy.domain
 
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaIndex
 import org.oxycblt.auxio.shippy.download.withVerifiedDownloadCandidate
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
@@ -35,32 +36,47 @@ class PlaybackResolutionCoordinator private constructor(
     private val playbackResolver: PlaybackResolver,
     private val providerRegistry: ProviderRegistry,
     private val latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?,
+    private val augmentActiveCrewTemporary: (QueueItem) -> QueueItem?,
 ) {
     @Inject
     constructor(
         playbackResolver: PlaybackResolver,
         providerRegistry: ProviderRegistry,
         downloadJobs: DownloadJobRepository,
-    ) : this(playbackResolver, providerRegistry, downloadJobs::getLatestForTrack)
+        crewTemporaryMediaIndex: CrewTemporaryMediaIndex,
+    ) : this(
+        playbackResolver,
+        providerRegistry,
+        downloadJobs::getLatestForTrack,
+        crewTemporaryMediaIndex::augmentActive,
+    )
 
     internal constructor(
         playbackResolver: PlaybackResolver,
         providerRegistry: ProviderRegistry,
-    ) : this(playbackResolver, providerRegistry, { null })
+    ) : this(playbackResolver, providerRegistry, { null }, { null })
 
     internal constructor(
         playbackResolver: PlaybackResolver,
         providerRegistry: ProviderRegistry,
         latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?,
         @Suppress("UNUSED_PARAMETER") testSeam: Unit = Unit,
-    ) : this(playbackResolver, providerRegistry, latestDownloadForTrack)
+    ) : this(playbackResolver, providerRegistry, latestDownloadForTrack, { null })
+
+    internal constructor(
+        playbackResolver: PlaybackResolver,
+        providerRegistry: ProviderRegistry,
+        latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?,
+        augmentActiveCrewTemporary: (QueueItem) -> QueueItem?,
+        @Suppress("UNUSED_PARAMETER") testSeam: Boolean = true,
+    ) : this(playbackResolver, providerRegistry, latestDownloadForTrack, augmentActiveCrewTemporary)
 
     suspend fun prepare(
         item: QueueItem,
         policy: ResolutionPolicy,
         constraints: StreamConstraints = StreamConstraints(),
     ): PlaybackPreparation {
-        val resolvedItem = item.withLatestVerifiedDownload()
+        val resolvedItem = item.withActiveCrewTemporary().withLatestVerifiedDownload()
         val candidate =
             when (val selection = playbackResolver.resolve(resolvedItem.track, policy)) {
                 is ResolutionResult.Selected -> selection.candidate
@@ -86,6 +102,13 @@ class PlaybackResolutionCoordinator private constructor(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
+            this
+        }
+
+    private fun QueueItem.withActiveCrewTemporary(): QueueItem =
+        try {
+            augmentActiveCrewTemporary(this) ?: this
+        } catch (_: Exception) {
             this
         }
 

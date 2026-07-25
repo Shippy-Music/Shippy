@@ -610,8 +610,8 @@ Keystore rejoin lease is saved. Runtime `close()` preserves recovery state;
 explicit `leave()` releases the live join and clears only its exact checkpoint
 and lease. It does not yet claim the ordered graceful membership departure
 that the active-session manager must later route through the control plane.
-Playback and media remain separate
-seams rather than being hidden in either LAN launcher.
+Playback remains a separate seam; authenticated media is composed explicitly
+beside the engine rather than hidden in transport discovery.
 
 `ActiveCrewRuntime` is the application-wide LAN session owner above those two
 launchers. A generation-guarded state machine permits only one host, join, or
@@ -660,9 +660,10 @@ duplicate-safe queue occurrence, and original candidate against current
 canonical state. Only exact private temporary bytes, exact available Local
 `content://` bytes, or a verified Shippy download tied to the requested
 candidate can be opened; provider URLs, paths, credentials, and arbitrary
-discovered devices cannot cross the seam. The runtime is not yet installed by
-the host/join launchers. Rolling prefetch, supplier selection, and
-cache-to-player integration remain the next seam.
+discovered devices cannot cross the seam. Both production LAN launchers create
+one runtime before their session engine, pass it as that engine's authenticated
+media lifecycle, and tear the engine down before media/cache cleanup. Rolling
+prefetch and supplier scheduling remain the next seam.
 
 Primary evidence:
 
@@ -680,7 +681,9 @@ to `PlaybackStateManager` and contributes temporary candidates to
 overlay keyed by exact QueueItem and source-candidate identity. It may augment a
 local copy of a queue item with a `CREW_TEMPORARY` file candidate, but that
 candidate is never serialized into canonical Crew state and is cleared at
-session end.
+session end. `PlaybackResolutionCoordinator` applies this exact active overlay
+before verified-download projection, so an already received Crew object wins
+without altering the duplicate-safe queue identity or creating another player.
 
 ## 12. UI Runtime
 

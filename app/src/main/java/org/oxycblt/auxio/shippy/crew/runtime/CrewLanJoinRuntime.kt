@@ -36,6 +36,8 @@ import org.oxycblt.auxio.shippy.crew.lan.CrewLanRendezvous
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalConnectFailure
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalConnectResult
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingClient
+import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntime
+import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
@@ -83,6 +85,7 @@ class CrewLanJoinedSession internal constructor(
     private val engine: CrewSessionEngine,
     val joinState: StateFlow<CrewJoinState>,
     private val coordinator: CrewJoinCoordinator,
+    private val mediaRuntime: CrewActiveMediaRuntime,
     private val webRtcRuntime: CrewWebRtcRuntime,
     private val checkpoints: CrewCheckpointRepository,
     private val leases: CrewRejoinLeaseStore,
@@ -98,6 +101,8 @@ class CrewLanJoinedSession internal constructor(
     override fun close() {
         if (!markReleased()) return
         runCatching { coordinator.close() }
+        runCatching { engine.close() }
+        runCatching { mediaRuntime.close() }
         runCatching { webRtcRuntime.close() }
     }
 
@@ -131,6 +136,7 @@ constructor(
     private val profileSettings: CrewProfileSettings,
     private val checkpoints: CrewCheckpointRepository,
     private val leases: CrewRejoinLeaseStore,
+    private val mediaRuntimeFactory: CrewActiveMediaRuntimeFactory,
 ) {
     private val discoveryTimeoutMs = CREW_LAN_DISCOVERY_TIMEOUT_MS
     private val nowEpochMs: () -> Long = System::currentTimeMillis
@@ -187,6 +193,7 @@ constructor(
             }
 
         var engine: CrewSessionEngine? = null
+        var mediaRuntime: CrewActiveMediaRuntime? = null
         var webRtc: CrewWebRtcRuntime? = null
         var coordinator: CrewJoinCoordinator? = null
         val sessionId = signalPeer.sessionId
@@ -195,6 +202,7 @@ constructor(
             runCatching { coordinator?.close() }
             runCatching { engine?.close() }
             runCatching { signalPeer.close() }
+            runCatching { mediaRuntime?.close() }
             runCatching { webRtc?.close() }
             runCatching { checkpoints.clear(sessionId) }
             runCatching { leases.clear(sessionId) }
@@ -226,14 +234,28 @@ constructor(
                             },
                         sessions =
                             CrewJoinSessionFactory { snapshot ->
+                                check(mediaRuntime == null) {
+                                    "A LAN join may create only one media runtime"
+                                }
                                 check(engine == null) {
                                     "A LAN join may create only one session engine"
                                 }
+                                mediaRuntime =
+                                    mediaRuntimeFactory.create(
+                                        sessionId = snapshot.sessionId,
+                                        localMemberId = localMemberId,
+                                        stateProvider = {
+                                            checkNotNull(engine) {
+                                                "Crew media state requested before joined engine assignment"
+                                            }.state.value
+                                        },
+                                    )
+                                val activeMediaRuntime = checkNotNull(mediaRuntime)
                                 CrewSessionEngine(
                                     initialState = snapshot.toCrewState(),
                                     localMemberId = localMemberId,
                                     checkpointRepository = checkpoints,
-                                    mediaLifecycle = null,
+                                    mediaLifecycle = activeMediaRuntime,
                                 )
                                     .also { engine = it }
                                     .let(::CrewSessionEngineJoinPort)
@@ -249,6 +271,7 @@ constructor(
             is CrewJoinState.Rejected -> return fail(CrewLanJoinLaunchFailure.JoinRejected(joinState.reason))
             is CrewJoinState.Active -> {
                 val activeEngine = engine ?: return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
+                val activeMediaRuntime = mediaRuntime ?: return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
                 val activeSessionId = joinState.snapshot.sessionId
                 if (runCatching { leases.save(CrewRejoinLease(activeSessionId, localMemberId, invite)) }.isFailure) {
                     return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
@@ -260,6 +283,7 @@ constructor(
                         engine = activeEngine,
                         joinState = activeCoordinator.state,
                         coordinator = activeCoordinator,
+                        mediaRuntime = activeMediaRuntime,
                         webRtcRuntime = activeWebRtc,
                         checkpoints = checkpoints,
                         leases = leases,

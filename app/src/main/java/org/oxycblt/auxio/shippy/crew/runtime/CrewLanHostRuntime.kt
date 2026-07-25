@@ -13,6 +13,7 @@ package org.oxycblt.auxio.shippy.crew.runtime
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,6 +35,8 @@ import org.oxycblt.auxio.shippy.crew.lan.CrewLanDiscovery
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanFailureOperation
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanOperationState
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingHost
+import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntime
+import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
@@ -83,6 +86,7 @@ class CrewLanHostSession internal constructor(
     private val admissionCoordinator: CrewHostAdmissionCoordinator,
     private val advertisement: CrewLanAdvertisement,
     private val signalingHost: CrewLanSignalingHost,
+    private val mediaRuntime: CrewActiveMediaRuntime,
     private val webRtcRuntime: CrewWebRtcRuntime,
     private val checkpoints: CrewCheckpointRepository,
     private val leases: CrewRejoinLeaseStore,
@@ -130,6 +134,7 @@ class CrewLanHostSession internal constructor(
         runCatching { advertisement.close() }
         runCatching { signalingHost.close() }
         runCatching { engine.close() }
+        runCatching { mediaRuntime.close() }
         runCatching { webRtcRuntime.close() }
     }
 }
@@ -146,6 +151,7 @@ constructor(
     private val profileSettings: CrewProfileSettings,
     private val checkpoints: CrewCheckpointRepository,
     private val leases: CrewRejoinLeaseStore,
+    private val mediaRuntimeFactory: CrewActiveMediaRuntimeFactory,
 ) {
     private val advertisementTimeoutMs = DEFAULT_ADVERTISEMENT_TIMEOUT_MS
     private val nowEpochMs: () -> Long = System::currentTimeMillis
@@ -169,6 +175,7 @@ constructor(
             }
 
         var engine: CrewSessionEngine? = null
+        var mediaRuntime: CrewActiveMediaRuntime? = null
         var webRtc: CrewWebRtcRuntime? = null
         var signaling: CrewLanSignalingHost? = null
         var admission: CrewHostAdmissionCoordinator? = null
@@ -184,19 +191,37 @@ constructor(
             runCatching { advertisement?.close() }
             runCatching { signaling?.close() }
             runCatching { engine?.close() }
+            runCatching { mediaRuntime?.close() }
             runCatching { webRtc?.close() }
             runCatching { checkpoints.clear(sessionId) }
             runCatching { leases.clear(sessionId) }
             return CrewLanHostLaunchResult.Failed(reason)
         }
 
+        mediaRuntime =
+            try {
+                mediaRuntimeFactory.create(
+                    sessionId = sessionId,
+                    localMemberId = localMemberId,
+                    stateProvider = {
+                        checkNotNull(engine) {
+                            "Crew media state requested before host engine assignment"
+                        }.state.value
+                    },
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
+            }
+        val activeMediaRuntime = checkNotNull(mediaRuntime)
         engine =
             runCatching {
                     CrewSessionEngine(
                         initialState = bootstrap.initialState,
                         localMemberId = localMemberId,
                         checkpointRepository = checkpoints,
-                        mediaLifecycle = null,
+                        mediaLifecycle = activeMediaRuntime,
                     )
                 }
                 .getOrElse { return fail(CrewLanHostLaunchFailure.EngineOrPersistence) }
@@ -278,6 +303,7 @@ constructor(
                 admissionCoordinator = activeAdmission,
                 advertisement = activeAdvertisement,
                 signalingHost = activeSignaling,
+                mediaRuntime = activeMediaRuntime,
                 webRtcRuntime = activeWebRtc,
                 checkpoints = checkpoints,
                 leases = leases,

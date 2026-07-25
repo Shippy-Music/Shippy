@@ -335,15 +335,20 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   acknowledgement/complete/retry/reject/cancel handling to the exact attached
   member, permits any authorized member to supply media, retains bounded cache
   assemblies across publication retry, and preserves control connectivity when
-  Push & Pull is locally disabled or a supplier lacks the item. Active-session
-  construction and player/preparation integration remain incomplete.
+  Push & Pull is locally disabled or a supplier lacks the item.
 - One active-session Crew media composition now owns the Push & Pull policy,
   temporary cache/index, receiver/router, live Settings toggle, and verified
   download view. Supplier authorization requires the exact active session,
   member, queue occurrence, and original candidate; it can expose only an exact
   private temporary file, exact Local content URI, or verified Shippy download
   as bytes. Provider URLs, file paths, stale candidates, and unrelated devices
-  cannot cross the seam. LAN launcher, prefetch, and player composition remain.
+  cannot cross the seam.
+- Both production LAN launchers now create exactly one active media runtime
+  before their session engine, pass it through the authenticated engine media
+  lifecycle, and close engine peers before media/cache teardown. The global
+  playback coordinator also applies the exact active temporary overlay before
+  verified downloads and providers without changing queue-item identity.
+  Request scheduling, rolling prefetch, and Crew-to-player commands remain.
 - Library's New playlist action now creates a collision-safe, unpinned Shippy
   Room playlist after native name validation. Auxio's existing Import action
   remains a separate device-playlist import.
@@ -373,9 +378,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Adding live provider health verification.
 - Hosted signaling, QR rendering/scanning, and remaining transport lifecycle.
 - Transport migration after a reconnect.
-- Composing the active LAN launchers with the Crew media runtime, then connecting
-  request scheduling, prefetch, the temporary candidate overlay, and the one
-  player authority.
+- Connecting Crew request scheduling, rolling prefetch, and canonical
+  queue/playback commands to the one player authority.
 
 ## Not Started
 
