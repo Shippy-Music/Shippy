@@ -155,7 +155,7 @@ code/test level, ready for later device verification.
 ## Stage 6 — Crew LAN And Remote Connectivity
 
 - [x] Implement QR/deep-link invitation encoding and validation.
-- [ ] Implement LAN advertisement/discovery compatible with Android constraints.
+- [x] Implement LAN advertisement/discovery compatible with Android constraints.
 - [x] Select and code-spike encrypted direct transport.
 - [ ] Implement remote signaling and direct P2P candidate negotiation.
 - [ ] Implement reconnection and network-change handling.

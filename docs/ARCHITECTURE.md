@@ -433,6 +433,29 @@ gated before that point. ICE candidates carry a negotiation generation and wait
 for the matching remote description, preventing ordinary trickle candidates
 from being lost during offer/answer ordering.
 
+The implemented join authenticator is a four-message challenge/proof/confirmation
+exchange. The final responder confirmation prevents the initiator from exposing
+ordinary Crew frames before both sides have completed mutual authentication.
+It uses HMAC-SHA-256 with the short-lived QR invitation secret and binds the
+protocol, invitation/session identity, both member IDs, both random nonces,
+invitation lifetime, and the exact initiator/responder WebRTC DTLS certificate
+fingerprints. The secret never travels over signaling or the data channel.
+Successful peers independently create the same transcript hash, while the
+transport still verifies that the authenticated binding matches its expected
+session and claimed signaling member.
+
+The Android LAN adapter advertises and discovers `_shippy-crew._tcp.` through
+`NsdManager`. DNS-SD TXT records contain only protocol, opaque session locator,
+and invite ID; the QR/link secret is never advertised. Discovery is scoped to the
+exact decoded invitation, serializes legacy resolution requests, bounds results,
+redacts addresses from diagnostics, and acquires the legacy Wi-Fi multicast lock
+only on platform/extension versions that require it.
+
+Shippy currently targets SDK 36. Therefore Android 17's
+`ACCESS_LOCAL_NETWORK` runtime permission is not declared yet; official Android
+guidance says it becomes required when targeting SDK 37. The existing adapter
+must add that release-time permission flow when the target SDK is raised.
+
 The selected dependency and Android wrapper are code/static-inspected, not
 device-proven. LAN signaling, hosted signaling, network migration, TURN, and
 multi-phone behavior remain explicit implementation and device-verification
@@ -441,6 +464,8 @@ work. QR is invitation/authentication, never the transport itself.
 Primary evidence:
 
 - Android NSD: https://developer.android.com/reference/android/net/nsd/NsdManager
+- Android local-network permission:
+  https://developer.android.com/privacy-and-security/local-network-permission
 - WebRTC Android API: https://webrtc.googlesource.com/src/+/main/sdk/android/README
 - WebRTC Android artifact: https://github.com/webrtc-sdk/android
 

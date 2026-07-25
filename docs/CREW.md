@@ -502,14 +502,31 @@ wrapper treats a member ID presented during signaling as a claim, not authority.
 Trickle ICE candidates are tagged with an increasing negotiation generation and
 queued until the matching remote description is installed.
 
+The join proof is a bounded initiator hello, responder proof, initiator proof,
+and responder-finished confirmation. The final confirmation prevents either
+side from opening ordinary Crew traffic before mutual authentication converges.
+HMAC-SHA-256 uses the QR invitation secret without transmitting it. The
+canonical transcript binds invitation/session identity and lifetime, both
+member IDs, fresh 256-bit nonces, protocol version, roles, and both WebRTC DTLS
+SHA-256 fingerprints. Replayed state-machine steps, wrong secrets, expired
+invites, changed fingerprints, and mismatched sessions/members are rejected.
+
+LAN DNS-SD publishes only protocol, opaque session locator, and invite ID. A
+joiner resolves only the service matching its decoded QR/link invitation.
+Android's legacy multicast-lock requirement is handled without exposing the
+secret or treating an NSD result as authenticated. The resolved address is only
+a short-lived signaling rendezvous; the join proof and WebRTC DTLS remain the
+security boundary.
+
 Inbound control overflow is a protocol failure because durable state cannot be
 dropped. Clock/reaction overflow is intentionally lossy. Media overflow emits a
 bounded drop signal for manifest/chunk acknowledgement and retry instead of
 terminating the Crew connection.
 
-This decision satisfies the architecture gate at source/API level only. It is
-not a claim of LAN, NAT, TURN, migration, relay, or multi-phone runtime proof.
-Those remain implementation work and owner device acceptance.
+This decision and the join/NSD adapters satisfy the architecture gate at
+source/API level only. They are not a claim of local signaling sockets, NAT,
+TURN, migration, relay, or multi-phone runtime proof. Those remain
+implementation work and owner device acceptance.
 
 QR is an invitation/authentication mechanism. Signaling, ICE/STUN/TURN, LAN
 discovery, and relay remain necessary and are not collapsed into “QR contains

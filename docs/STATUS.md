@@ -160,6 +160,17 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   binding from the future join authenticator before exposing ordinary traffic,
   queues generation-bound trickle ICE, and returns explicit sender/receiver
   backpressure signals.
+- A bounded four-message Crew join handshake now authenticates the short-lived
+  invitation secret without transmitting it, confirms both peers finished, and
+  binds session/invite lifetime, member identities, roles, fresh nonces, and
+  both WebRTC DTLS SHA-256 fingerprints before creating transport peer bindings.
+- Android NSD advertisement/discovery now exposes only protocol and opaque
+  invitation locators, filters resolved services to the scanned invitation,
+  serializes/bounds legacy resolution, handles required multicast locks, and
+  redacts endpoint addresses from diagnostics.
+- The manifest now declares the Wi-Fi state/multicast permissions needed by the
+  legacy Android NSD path. SDK 37 local-network runtime permission work remains
+  correctly deferred until Shippy raises its current target from SDK 36.
 
 ## In Progress
 
@@ -173,9 +184,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Crew persistence, join transcript authentication, authenticated signaling,
-  LAN discovery, transport/session engine, and active UI behind the new Crew
-  destination.
+- Crew persistence, local/hosted signaling sockets, join-handshake orchestration,
+  transport/session engine, and active UI behind the new Crew destination.
 
 ## Not Started
 
@@ -188,9 +198,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   exact verification before selecting the day-to-day development branch.
 - Bloomee provider logic is Dart/Flutter and must be ported/reimplemented, not
   assumed reusable as native Kotlin.
-- Crew transport selection and wrapper are source/API-inspected only. LAN
-  signaling, NAT traversal, TURN, reconnection, and multi-phone behavior remain
-  compile/device-unverified.
+- Crew transport, join authentication, and NSD adapters are source/API-inspected
+  only. Local signaling sockets, NAT traversal, TURN, reconnection, and
+  multi-phone behavior remain compile/device-unverified.
 - Safe ungraceful election needs a strict majority. A direct two-member Crew
   pauses after coordinator loss until reconnection; the future relay/witness
   path must restore availability without weakening split-brain safety.
@@ -213,8 +223,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 1. Resolve canonical metadata into permanent collection and mixed-playlist rows.
 2. Add unmanaged-folder indexing and direct collection-row download state.
 3. Add the next viable provider/YouTube adapter and Musixmatch broker boundary.
-4. Implement authenticated LAN/hosted signaling, NSD discovery, and Crew session
-   orchestration around the selected WebRTC boundary.
+4. Implement local/hosted signaling exchange and Crew session orchestration
+   around the authenticated NSD/WebRTC boundary.
 
 ## Verification Ledger
 
@@ -228,5 +238,5 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites and WebRTC boundary |
 | New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 326-file app AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 330-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |
