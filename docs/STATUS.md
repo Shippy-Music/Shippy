@@ -294,6 +294,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   `close()` preserves recovery state; explicit `leave()` releases the live join
   and clears only that session's checkpoint and lease. Ordered graceful leave
   remains an active-session integration seam.
+- One application-wide `ActiveCrewRuntime` now owns LAN host/join exclusivity,
+  survives fragment/ViewModel lifetimes, publishes only UI-safe session
+  presentation, rejects overlapping operations, and performs exact explicit
+  host end or joined leave. Stale completions cannot replace a newer generation,
+  and transport/session objects never enter UI state.
 - Anonymous YouTube Music is now a second provider adapter: it bootstraps public
   Innertube configuration at runtime, searches WEB_REMIX song results, retries
   playback through Android Music/iOS client contexts, and accepts direct HTTPS
@@ -349,7 +354,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
 - Adding live provider health verification.
-- Hosted signaling, remaining transport lifecycle, and active UI behind the new Crew destination.
+- Hosted signaling, remaining transport lifecycle, and active UI binding behind
+  the new Crew destination.
 - Transport migration after a reconnect.
 - Composing the active Crew runtime around Push & Pull availability, supplier
   authorization, request scheduling, prefetch, the temporary candidate overlay,

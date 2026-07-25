@@ -1,0 +1,274 @@
+/*
+ * Copyright (c) 2026 Shippy contributors
+ * ActiveCrewRuntime.kt is part of Shippy.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ */
+
+package org.oxycblt.auxio.shippy.crew.runtime
+
+import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
+import org.oxycblt.auxio.shippy.crew.core.CrewState
+
+enum class ActiveCrewMode {
+    HOST,
+    JOIN,
+}
+
+sealed interface ActiveCrewRequestResult {
+    data object Accepted : ActiveCrewRequestResult
+
+    data object Busy : ActiveCrewRequestResult
+
+    data object NothingToEnd : ActiveCrewRequestResult
+}
+
+sealed interface ActiveCrewRuntimeFailure {
+    class Host(val launchFailure: CrewLanHostLaunchFailure) : ActiveCrewRuntimeFailure {
+        override fun toString() = "ActiveCrewRuntimeFailure.Host(redacted)"
+    }
+
+    class Join(val launchFailure: CrewLanJoinLaunchFailure) : ActiveCrewRuntimeFailure {
+        override fun toString() = "ActiveCrewRuntimeFailure.Join(redacted)"
+    }
+
+    data object BlankInviteLink : ActiveCrewRuntimeFailure
+
+    data object Internal : ActiveCrewRuntimeFailure
+}
+
+/** The safe, UI-facing view of the one Crew currently owned by this process. */
+class ActiveCrewPresentation internal constructor(
+    val role: ActiveCrewMode,
+    val sessionId: CrewSessionId,
+    val localMemberId: CrewMemberId,
+    val crewState: CrewState,
+    val inviteLink: String?,
+) {
+    override fun toString() =
+        "ActiveCrewPresentation(role=$role, sessionId=redacted, localMemberId=redacted, " +
+            "crewState=redacted, inviteLink=${if (inviteLink == null) "none" else "redacted"})"
+}
+
+sealed interface ActiveCrewRuntimeState {
+    data object Idle : ActiveCrewRuntimeState
+
+    data class Starting(val mode: ActiveCrewMode) : ActiveCrewRuntimeState
+
+    data class Active(val presentation: ActiveCrewPresentation) : ActiveCrewRuntimeState
+
+    data class Ending(val presentation: ActiveCrewPresentation) : ActiveCrewRuntimeState
+
+    data class Failed(val failure: ActiveCrewRuntimeFailure) : ActiveCrewRuntimeState
+}
+
+/**
+ * Application-wide owner for the one live LAN Crew. It owns launch, state observation, and
+ * explicit teardown so a fragment or ViewModel cannot orphan a session.
+ */
+@Singleton
+class ActiveCrewRuntime
+@Inject
+constructor(
+    private val hostLauncher: CrewLanHostLauncher,
+    private val joinLauncher: CrewLanJoinLauncher,
+) {
+    private val lock = Any()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val mutableState = MutableStateFlow<ActiveCrewRuntimeState>(ActiveCrewRuntimeState.Idle)
+    private var generation = 0L
+    private var ownedSession: OwnedSession? = null
+
+    val state: StateFlow<ActiveCrewRuntimeState> = mutableState.asStateFlow()
+
+    fun startHost(): ActiveCrewRequestResult =
+        begin(ActiveCrewMode.HOST) { generation -> launchHost(generation) }
+
+    fun join(inviteLink: String): ActiveCrewRequestResult {
+        val generation = synchronized(lock) {
+            if (!mutableState.value.isStartable()) return ActiveCrewRequestResult.Busy
+            generation += 1
+            if (inviteLink.isBlank()) {
+                mutableState.value = ActiveCrewRuntimeState.Failed(ActiveCrewRuntimeFailure.BlankInviteLink)
+                return ActiveCrewRequestResult.Accepted
+            }
+            mutableState.value = ActiveCrewRuntimeState.Starting(ActiveCrewMode.JOIN)
+            generation
+        }
+        launch(generation) { launchJoin(generation, inviteLink) }
+        return ActiveCrewRequestResult.Accepted
+    }
+
+    fun end(): ActiveCrewRequestResult {
+        val ending = synchronized(lock) {
+            val active = mutableState.value as? ActiveCrewRuntimeState.Active
+                ?: return when (mutableState.value) {
+                    ActiveCrewRuntimeState.Idle,
+                    is ActiveCrewRuntimeState.Failed -> ActiveCrewRequestResult.NothingToEnd
+                    else -> ActiveCrewRequestResult.Busy
+                }
+            val session = ownedSession ?: return ActiveCrewRequestResult.Busy
+            generation += 1
+            val endGeneration = generation
+            mutableState.value = ActiveCrewRuntimeState.Ending(active.presentation)
+            EndRequest(endGeneration, session)
+        }
+        launch(ending.generation) { endOwnedSession(ending) }
+        return ActiveCrewRequestResult.Accepted
+    }
+
+    fun dismissFailure() {
+        synchronized(lock) {
+            if (mutableState.value is ActiveCrewRuntimeState.Failed) {
+                mutableState.value = ActiveCrewRuntimeState.Idle
+            }
+        }
+    }
+
+    private fun begin(
+        mode: ActiveCrewMode,
+        work: suspend (Long) -> Unit,
+    ): ActiveCrewRequestResult {
+        val generation = synchronized(lock) {
+            if (!mutableState.value.isStartable()) return ActiveCrewRequestResult.Busy
+            generation += 1
+            mutableState.value = ActiveCrewRuntimeState.Starting(mode)
+            generation
+        }
+        launch(generation) { work(generation) }
+        return ActiveCrewRequestResult.Accepted
+    }
+
+    private fun launch(generation: Long, work: suspend () -> Unit) {
+        try {
+            scope.launch {
+                try {
+                    work()
+                } catch (_: Throwable) {
+                    publishFailure(generation, ActiveCrewRuntimeFailure.Internal)
+                }
+            }
+        } catch (_: Throwable) {
+            publishFailure(generation, ActiveCrewRuntimeFailure.Internal)
+        }
+    }
+
+    private suspend fun launchHost(generation: Long) {
+        when (val result = hostLauncher.start()) {
+            is CrewLanHostLaunchResult.Failed ->
+                publishFailure(generation, ActiveCrewRuntimeFailure.Host(result.reason))
+            is CrewLanHostLaunchResult.Started ->
+                activate(generation, OwnedSession.Host(result.session))
+        }
+    }
+
+    private suspend fun launchJoin(generation: Long, inviteLink: String) {
+        when (val result = joinLauncher.join(inviteLink)) {
+            is CrewLanJoinLaunchResult.Failed ->
+                publishFailure(generation, ActiveCrewRuntimeFailure.Join(result.reason))
+            is CrewLanJoinLaunchResult.Started ->
+                activate(generation, OwnedSession.Join(result.session))
+        }
+    }
+
+    private suspend fun activate(generation: Long, session: OwnedSession) {
+        val activated = synchronized(lock) {
+            if (this.generation != generation || mutableState.value !is ActiveCrewRuntimeState.Starting) {
+                false
+            } else {
+                ownedSession = session
+                mutableState.value = ActiveCrewRuntimeState.Active(session.presentation(session.state.value))
+                true
+            }
+        }
+        if (!activated) {
+            session.endExplicitly()
+            return
+        }
+        scope.launch {
+            session.state.collect { crewState -> refreshPresentation(generation, session, crewState) }
+        }
+    }
+
+    private fun refreshPresentation(generation: Long, session: OwnedSession, crewState: CrewState) {
+        synchronized(lock) {
+            if (this.generation == generation && ownedSession === session) {
+                val active = mutableState.value as? ActiveCrewRuntimeState.Active ?: return
+                mutableState.value = active.copy(presentation = session.presentation(crewState))
+            }
+        }
+    }
+
+    private fun publishFailure(generation: Long, failure: ActiveCrewRuntimeFailure) {
+        synchronized(lock) {
+            if (this.generation == generation && mutableState.value is ActiveCrewRuntimeState.Starting) {
+                mutableState.value = ActiveCrewRuntimeState.Failed(failure)
+            }
+        }
+    }
+
+    private suspend fun endOwnedSession(request: EndRequest) {
+        try {
+            request.session.endExplicitly()
+        } finally {
+            synchronized(lock) {
+                if (generation == request.generation && ownedSession === request.session) {
+                    ownedSession = null
+                    mutableState.value = ActiveCrewRuntimeState.Idle
+                }
+            }
+        }
+    }
+
+    private fun ActiveCrewRuntimeState.isStartable() =
+        this == ActiveCrewRuntimeState.Idle || this is ActiveCrewRuntimeState.Failed
+
+    private data class EndRequest(val generation: Long, val session: OwnedSession)
+
+    private sealed interface OwnedSession {
+        val role: ActiveCrewMode
+        val sessionId: CrewSessionId
+        val localMemberId: CrewMemberId
+        val state: StateFlow<CrewState>
+        val inviteLink: String?
+
+        suspend fun endExplicitly()
+
+        fun presentation(crewState: CrewState) =
+            ActiveCrewPresentation(role, sessionId, localMemberId, crewState, inviteLink)
+
+        class Host(private val session: CrewLanHostSession) : OwnedSession {
+            override val role = ActiveCrewMode.HOST
+            override val sessionId = session.sessionId
+            override val localMemberId = session.localMemberId
+            override val state = session.state
+            override val inviteLink = session.inviteLink
+
+            override suspend fun endExplicitly() = session.end()
+        }
+
+        class Join(private val session: CrewLanJoinedSession) : OwnedSession {
+            override val role = ActiveCrewMode.JOIN
+            override val sessionId = session.sessionId
+            override val localMemberId = session.localMemberId
+            override val state = session.state
+            override val inviteLink: String? = null
+
+            override suspend fun endExplicitly() = session.leave()
+        }
+    }
+}

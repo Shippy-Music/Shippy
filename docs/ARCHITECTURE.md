@@ -601,8 +601,18 @@ the only transport-frame collector. Success is published only after the exact
 Keystore rejoin lease is saved. Runtime `close()` preserves recovery state;
 explicit `leave()` releases the live join and clears only its exact checkpoint
 and lease. It does not yet claim the ordered graceful membership departure
-owned by the future active-session manager. Playback and media remain separate
+that the active-session manager must later route through the control plane.
+Playback and media remain separate
 seams rather than being hidden in either LAN launcher.
+
+`ActiveCrewRuntime` is the application-wide LAN session owner above those two
+launchers. A generation-guarded state machine permits only one host, join, or
+end operation, retains the live session outside fragment/ViewModel lifetimes,
+and projects only role, stable IDs, canonical `CrewState`, and the host invite
+link into presentation state. UI never receives an engine, signaling peer,
+transport, invite secret, or runtime session object. Explicit end still uses
+the launcher's exact checkpoint/lease cleanup contract; graceful ordered
+membership departure remains a later control-plane integration.
 
 Shippy currently targets SDK 36. Therefore Android 17's
 `ACCESS_LOCAL_NETWORK` runtime permission is not declared yet; official Android
