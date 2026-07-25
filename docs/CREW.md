@@ -1,7 +1,7 @@
 # Shippy Crew Contract
 
 **Status:** Canonical product and protocol behavior  
-**Implementation technology:** Validated during the networking spike  
+**Implementation technology:** Selected by source/API spike; runtime validation pending
 **Scope:** LAN, remote P2P, hosted relay, synchronized session state, temporary
 peer media, lyrics/artwork, and reactions
 
@@ -472,19 +472,45 @@ Required later physical-device tests:
 - Coordinator and supplier device leaving
 - Reduced motion and TalkBack during Crew
 
-## 18. Implementation Decision Gate
+## 18. Transport Decision
 
-The product contract above is locked. The exact transport/library selection is
-chosen only after a focused spike proves:
+The 2026-07-25 code/static spike selected Android NSD plus data-only WebRTC:
 
-- Android support and maintenance quality
-- P2P plus relay path
-- Ordered reliable control messages
-- Backpressure-aware binary streaming
-- Connection migration/recovery
-- Reasonable binary/app-size cost
-- Testability without full device builds
+- `NsdManager`/DNS-SD advertises and discovers the active LAN rendezvous.
+- A short-lived versioned Shippy invite authenticates the intended session.
+- WebRTC data channels carry encrypted direct control and bounded binary media.
+- ICE attempts LAN/remote direct connectivity; configured STUN/TURN supports
+  traversal and relay.
+- Hosted signaling and larger-session fan-out remain a separate self-hostable
+  relay responsibility.
 
-The QR is an invitation/authentication mechanism. Signaling, ICE/STUN/TURN, LAN
-discovery, and relay remain necessary implementation concerns and must not be
-collapsed into “QR contains the address.”
+The Android dependency is
+`io.github.webrtc-sdk:android-prefixed-stripped:144.7559.09`. It is shadowed to
+avoid `org.webrtc` collisions and stripped of irrelevant software video codecs.
+Shippy creates no microphone, camera, audio, or video WebRTC tracks.
+
+Four channels isolate behavior:
+
+1. `control`: ordered and reliable.
+2. `clock`: unordered with no retransmission.
+3. `reaction`: unordered with no retransmission.
+4. `media`: ordered, reliable, chunk-bounded, and backpressure-limited.
+
+Ordinary Crew frames are not exposed until the join authenticator verifies a
+session/member transcript bound to the short-lived invitation. The WebRTC
+wrapper treats a member ID presented during signaling as a claim, not authority.
+Trickle ICE candidates are tagged with an increasing negotiation generation and
+queued until the matching remote description is installed.
+
+Inbound control overflow is a protocol failure because durable state cannot be
+dropped. Clock/reaction overflow is intentionally lossy. Media overflow emits a
+bounded drop signal for manifest/chunk acknowledgement and retry instead of
+terminating the Crew connection.
+
+This decision satisfies the architecture gate at source/API level only. It is
+not a claim of LAN, NAT, TURN, migration, relay, or multi-phone runtime proof.
+Those remain implementation work and owner device acceptance.
+
+QR is an invitation/authentication mechanism. Signaling, ICE/STUN/TURN, LAN
+discovery, and relay remain necessary and are not collapsed into “QR contains
+the address.”

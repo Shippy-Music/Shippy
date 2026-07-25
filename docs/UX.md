@@ -338,7 +338,11 @@ No continuous background animation, unnecessary blur recomputation, or motion
 that delays input. Reduced motion removes shared-element travel and floating
 reactions in favor of direct fades/state changes.
 
-## 12. Accessibility Checklist
+## 12. Release Accessibility Checklist
+
+This checklist is intentionally executed after the functional application and
+product polish are complete. It remains a release requirement, not a current
+first-pass implementation blocker.
 
 Every new component must verify:
 
@@ -367,4 +371,3 @@ A change is rejected when it:
 - Places a delete icon permanently beside normal tracks
 - Causes Back from Now Playing to leave the app
 - Sacrifices TalkBack, large text, or reduced motion for visual polish
-

@@ -401,17 +401,48 @@ This layer has deterministic JVM tests.
 
 ### Transport adapters
 
-Exact P2P library is chosen by a focused spike. The product requires:
+The 2026-07-25 focused spike selected:
 
-- Android LAN discovery
-- Secure invitation and authentication
-- Reliable ordered control messaging
-- Binary media chunks with backpressure
-- Remote ICE/STUN/TURN or equivalent traversal
-- Relay fallback
-- Reconnection/network migration
+- Android `NsdManager`/DNS-SD for foreground LAN advertisement and discovery.
+- WebRTC SCTP data channels over DTLS for encrypted direct peer traffic.
+- The maintained, shadowed, stripped
+  `io.github.webrtc-sdk:android-prefixed-stripped:144.7559.09` Android artifact.
+- WebRTC ICE with STUN/TURN for remote direct attempts and transport relay.
+- A separate authenticated signaling boundary for LAN rendezvous and hosted
+  relay WebSocket exchange.
 
-QR is invitation/authentication, not the networking transport.
+The stripped artifact keeps the current WebRTC data-channel/ICE APIs while
+removing unneeded software video codecs. Its published minimum SDK is 21
+(Shippy is 24), and the inspected AAR is about 13.8 MB before APK ABI splitting
+and shrinking. Shippy creates no WebRTC audio/video tracks.
+
+One peer connection exposes separate channels:
+
+- Reliable ordered control
+- Unordered, no-retry clock probes
+- Unordered, no-retry reactions
+- Reliable ordered bounded media chunks
+
+Each channel has an application payload limit and buffered-byte ceiling.
+Backpressure is returned to the caller; media traffic cannot silently consume
+unbounded memory or share the control channel.
+
+The peer is a negotiating connection until a separate invitation authenticator
+supplies a verified session/member transcript binding. Normal Crew frames stay
+gated before that point. ICE candidates carry a negotiation generation and wait
+for the matching remote description, preventing ordinary trickle candidates
+from being lost during offer/answer ordering.
+
+The selected dependency and Android wrapper are code/static-inspected, not
+device-proven. LAN signaling, hosted signaling, network migration, TURN, and
+multi-phone behavior remain explicit implementation and device-verification
+work. QR is invitation/authentication, never the transport itself.
+
+Primary evidence:
+
+- Android NSD: https://developer.android.com/reference/android/net/nsd/NsdManager
+- WebRTC Android API: https://webrtc.googlesource.com/src/+/main/sdk/android/README
+- WebRTC Android artifact: https://github.com/webrtc-sdk/android
 
 ### Playback bridge
 

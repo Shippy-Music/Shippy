@@ -16,6 +16,8 @@ next stage from unstable foundations. The final target remains the complete app.
 - Never label a placeholder as implemented.
 - Do not expand scope beyond the canonical documents without updating them.
 - Engineer exactly enough for the locked requirements.
+- Complete functional behavior and product polish first. Accessibility is the
+  dedicated release-hardening pass and does not block earlier stages.
 
 ## Stage 0 — Foundation And Evidence
 
@@ -45,14 +47,13 @@ subsequent task names an actual module.
 - [x] Rebuild player action hierarchy without duplicate save/download actions.
 - [x] Place lyrics below the main player content.
 - [ ] Move technical/provider actions to Song Information.
-- [ ] Establish accessible reusable track rows, collection rows, controls,
-      dialogs, sheets, and empty/error/loading states.
+- [ ] Establish reusable track rows, collection rows, controls, dialogs, sheets,
+      and empty/error/loading states.
 - [x] Preserve real Auxio local playback through the entire shell.
 
 **Validation:**
 
 - Focused navigation/presentation tests
-- Accessibility semantics checks where available
 - Static Kotlin/Android resource checks
 - Later device checklist: local song -> mini-player -> full player -> Back
 
@@ -138,9 +139,9 @@ code/test level, ready for later device verification.
 - [ ] Implement equal member control and optimistic reconciliation.
 - [ ] Implement coordinator terms, election, handoff, and stale-message rejection.
 - [x] Implement queue replacement from any member’s song/playlist selection.
-- [ ] Implement availability summaries per member and queue item.
+- [x] Implement availability summaries per member and queue item.
 - [x] Implement monotonic session clock probes and scheduled playback decisions.
-- [ ] Implement readiness, buffering, late join, and drift decision logic.
+- [x] Implement readiness, buffering, late join, and drift decision logic.
 - [ ] Implement membership lifecycle and persistent active-session checkpoint.
 - [x] Implement ephemeral reactions.
 
@@ -153,12 +154,12 @@ code/test level, ready for later device verification.
 
 ## Stage 6 — Crew LAN And Remote Connectivity
 
-- [ ] Implement QR/deep-link invitation encoding and validation.
+- [x] Implement QR/deep-link invitation encoding and validation.
 - [ ] Implement LAN advertisement/discovery compatible with Android constraints.
-- [ ] Select and prove encrypted direct transport.
+- [x] Select and code-spike encrypted direct transport.
 - [ ] Implement remote signaling and direct P2P candidate negotiation.
 - [ ] Implement reconnection and network-change handling.
-- [ ] Separate durable control, transient reaction, clock, and media channels.
+- [x] Separate durable control, transient reaction, clock, and media channels.
 - [ ] Expose only clear join/connection states in UI.
 
 **Validation:**
@@ -213,7 +214,9 @@ temporarily by the active Crew.
 **Exit:** Configured relay reliably supports sessions that cannot or should not
 use a direct full mesh.
 
-## Stage 9 — Quality Completion
+## Stage 9 — Accessibility And Release Completion
+
+Begin only after Stages 1–8 are functionally complete and polished.
 
 - [ ] TalkBack and focus-order pass on every surface.
 - [ ] Large-text, contrast, dynamic-color, and reduced-motion checks.

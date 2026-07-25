@@ -1,8 +1,11 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-25  
-**Current stage:** Stages 2–5 — Library/player completion and Crew control plane
+**Current stage:** Stages 2–6 — Library/player completion and Crew connectivity
 **Overall state:** In progress
+
+**Current-pass boundary:** Complete and polish functional behavior first.
+Accessibility is deferred to the dedicated pre-release hardening pass.
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
@@ -140,6 +143,23 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   configurable drift corrections without hard-coded device promises.
 - Pure Crew reactions are active-session/member scoped, sender-authenticated,
   rate-limited, bounded, and expired against receiver-local monotonic time.
+- Crew availability now distinguishes exact local, temporary cache, download,
+  preferred/fallback provider, peer-only, blocked, and unavailable without
+  sharing file paths or provider URLs.
+- Supplier selection is coordinator-independent and deterministic across source
+  quality, completion/connection estimates, upload pressure, battery/network
+  eligibility, and stable member identity.
+- Pure readiness and prefetch planning now cover bounded common starts, late
+  joins, current/upcoming priorities, reuse, reprioritization, and cancellation.
+- Crew invites now have a strict versioned `shippy://` codec with short-lived
+  opaque session identity, redacted bearer secret, optional validated HTTPS
+  relay, payload bounds, issue/expiry validation, and corruption rejection.
+- The focused transport spike selected Android NSD plus the stripped, shadowed
+  WebRTC M144 Android runtime. A data-only peer adapter separates reliable
+  control/media from lossy clock/reaction channels, requires a session/member
+  binding from the future join authenticator before exposing ordinary traffic,
+  queues generation-bound trickle ICE, and returns explicit sender/receiver
+  backpressure signals.
 
 ## In Progress
 
@@ -153,8 +173,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Crew availability/readiness, persistence, transport/session engine, and active
-  UI behind the new Crew destination.
+- Crew persistence, join transcript authentication, authenticated signaling,
+  LAN discovery, transport/session engine, and active UI behind the new Crew
+  destination.
 
 ## Not Started
 
@@ -167,8 +188,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   exact verification before selecting the day-to-day development branch.
 - Bloomee provider logic is Dart/Flutter and must be ported/reimplemented, not
   assumed reusable as native Kotlin.
-- Crew transport must be proven with a focused spike before committing to a
-  networking library.
+- Crew transport selection and wrapper are source/API-inspected only. LAN
+  signaling, NAT traversal, TURN, reconnection, and multi-phone behavior remain
+  compile/device-unverified.
 - Safe ungraceful election needs a strict majority. A direct two-member Crew
   pauses after coordinator loss until reconnection; the future relay/witness
   path must restore availability without weakening split-brain safety.
@@ -191,7 +213,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 1. Resolve canonical metadata into permanent collection and mixed-playlist rows.
 2. Add unmanaged-folder indexing and direct collection-row download state.
 3. Add the next viable provider/YouTube adapter and Musixmatch broker boundary.
-4. Continue Crew domain, transport, and active-session UI.
+4. Implement authenticated LAN/hosted signaling, NSD discovery, and Crew session
+   orchestration around the selected WebRTC boundary.
 
 ## Verification Ledger
 
@@ -202,8 +225,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions |
-| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction policies |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/download/lyrics persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/detail management/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, live provider/Search-to-play, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites and WebRTC boundary |
+| New tests | Authored, not run | Resolver, collections/projections/detail/onboarding, provider registry, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/transport policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
-| Static structure | Parsed | Graphify 276-file AST extraction, XML parsing, `git diff --check` |
+| Static structure | Parsed | Graphify 326-file app AST extraction, XML parsing, `git diff --check` |
 | APK/device | Not verified | Owner handoff stage |

@@ -72,6 +72,9 @@ These decisions came directly from the product owner.
 22. AI is not part of the product unless a later explicit decision adds a
     narrowly useful feature.
 23. Full chat and a general-purpose social network are not part of Crew.
+24. Accessibility implementation is a release-hardening pass after the
+    functional application and product polish are complete. It remains required
+    before public release, but does not block the current implementation pass.
 
 ## 3. Product Principles
 
@@ -105,10 +108,12 @@ prefetch, peer negotiation, clock synchronization, retries, coordinator
 handoff—but should expose only progress or a decision the listener genuinely
 needs to understand.
 
-### 3.6 Accessible by construction
+### 3.6 Accessibility is a release gate
 
-TalkBack, large text, touch targets, focus order, contrast, reduced motion, and
-accessible sliders are component requirements, not a final cleanup milestone.
+The first implementation pass prioritizes complete, correct product behavior and
+polish. TalkBack, large text, touch targets, focus order, contrast, reduced
+motion, and accessible controls are completed together in the dedicated
+release-hardening pass before public release.
 
 ### 3.7 Exactly enough engineering
 
@@ -396,7 +401,7 @@ Required product integrations:
 Bloomee code is not dropped into the Kotlin app blindly. Each capability is
 ported or reimplemented behind a Shippy-owned Kotlin contract.
 
-## 11. Android Experience And Accessibility
+## 11. Android Experience And Release Accessibility
 
 Shippy must support:
 
@@ -451,7 +456,8 @@ vertical stages because each stage must leave one coherent, testable path:
 5. Crew control plane
 6. LAN and remote media plane with Push & Pull
 7. Hosted relay and larger-session behavior
-8. Android integration, accessibility, performance, and resilience
+8. Android integration, performance, and resilience
+9. Accessibility and release hardening
 
 Stages are implementation order, not permission to omit later requirements.
 

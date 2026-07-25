@@ -75,3 +75,12 @@ Use only accurate labels:
 
 Never say “fully working” without the actual end-to-end device workflow.
 
+## Graphify
+
+- From the repository root, update the active Android code graph with
+  `rtk graphify update app --no-cluster`.
+- Do not target the repository root or nested source directories. The root
+  includes large vendored media fixtures, while nested targets create stray
+  `graphify-out` folders inside source trees.
+- `graphify-out/graph.json` mirrors the curated `app` graph for normal queries.
+  The lower-level `musikr` graph remains separate under its existing output.

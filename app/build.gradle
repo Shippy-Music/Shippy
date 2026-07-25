@@ -165,6 +165,9 @@ dependencies {
     // Image loading
     implementation 'io.coil-kt.coil3:coil-core:3.4.0'
 
+    // Crew direct P2P data channels (shadowed, stripped WebRTC runtime)
+    implementation 'io.github.webrtc-sdk:android-prefixed-stripped:144.7559.09'
+
     // Material
     // TODO: Exactly figure out the conditions that the 1.7.0 ripple bug occurred so you can just
     //  PR a fix.
