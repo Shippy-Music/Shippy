@@ -395,6 +395,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Selecting a SAF download destination now validates it as an Auxio Local source,
   tracks whether Shippy auto-added it, preserves manual sources/grants, removes
   only a replaced Shippy-owned source, and requests a local reindex.
+- Android playback polish reuses Auxio instead of rebuilding it: the existing
+  system equalizer session/panel, ReplayGain processor, public MediaStyle
+  notification/lock-screen controls, audio-focus/noisy handling, headset and
+  Bluetooth commands, and responsive home-screen widgets remain connected to
+  Shippy's canonical player state.
 
 ## In Progress
 

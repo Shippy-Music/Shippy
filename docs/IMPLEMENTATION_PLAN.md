@@ -44,7 +44,8 @@ subsequent task names an actual module.
 
 ## Stage 1 — Shippy Shell And Existing Local Playback
 
-- [ ] Introduce Shippy product identity and design tokens.
+- [x] Introduce Shippy product identity while retaining Auxio's real native
+      theme/style tokens as the locked visual foundation.
 - [x] Implement four-destination shell: Home, Search, Library, Crew.
 - [x] Preserve destination state across navigation.
 - [x] Attach persistent mini-player above navigation.
@@ -81,7 +82,10 @@ through Auxio’s existing playback stack.
   - Retained Auxio's persisted SAF source/excluded-location selection,
     `LocationsDialog`, indexing listener, and forced rescan path.
 - [x] Add selected Download destination with persisted Android access.
-- [ ] Index pre-existing supported media in the Download destination.
+- [ ] Index pre-existing supported media in the Download destination in every
+      Local location mode.
+  - [x] Add the selected destination to Auxio's recursive SAF source query
+        without filename adoption or removal of manual sources.
 - [x] Add download relationship/state without isolating tracks from normal views.
 - [x] Make queue the canonical playback order for UI, MediaSession, and later
       Crew.
@@ -137,13 +141,19 @@ code/test level, ready for later device verification.
   - [x] Settings credential entry, browser authorization, manual reconnect, and
         sign-out with pending application credentials kept memory-only.
   - [x] Surface an invalid-session delivery result as a visible reauth state.
-- [ ] Equalizer and audio options.
-- [ ] Gapless/crossfade/normalization settings according to actual Media3 support.
+- [x] Retain Auxio's system equalizer session/panel and existing audio options.
+- [ ] Complete gapless/crossfade/normalization behavior according to actual
+      Media3 support.
+  - [x] Retain Auxio's configurable ReplayGain processor and pre-amp.
+  - [ ] Add and device-verify crossfade; verify gapless transitions on the final
+        provider/local queue path.
 - [x] Sleep timer utility.
 - [x] Original-link and Shippy-deep-link sharing.
 - [x] MediaSession commands remain consistent with Shippy queue/player.
-- [ ] Notification, lock screen, headset, Bluetooth, and interruptions.
-- [ ] Home-screen widgets using the same state/commands.
+- [x] Retain Auxio's MediaSession notification, lock-screen, headset, Bluetooth,
+      audio-focus, and becoming-noisy paths on the canonical Shippy player.
+- [x] Retain Auxio's responsive home-screen widgets on the same canonical
+      playback state and command receiver.
 - [ ] Android Auto after MediaSession stability.
 
 **Validation:**
