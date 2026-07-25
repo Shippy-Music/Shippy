@@ -22,6 +22,7 @@ import org.oxycblt.auxio.shippy.provider.ProviderDescriptor
 import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderResult
+import org.oxycblt.auxio.shippy.provider.ProviderSettings
 
 data class ProviderSearchSnapshot(
     val query: String,
@@ -49,15 +50,19 @@ class UnifiedSearchRepository
 @Inject
 constructor(
     private val providerRegistry: ProviderRegistry,
+    private val providerSettings: ProviderSettings,
 ) {
     suspend fun search(query: String): ProviderSearchSnapshot {
         val normalizedQuery = query.trim()
         if (normalizedQuery.isEmpty()) return ProviderSearchSnapshot.EMPTY
 
+        val searchableProviders = providerRegistry.supporting(ProviderCapability.SEARCH)
+        val byId = searchableProviders.associateBy { it.descriptor.id }
+        val selection = providerSettings.selection(byId.keys)
         val sections =
             supervisorScope {
-                providerRegistry
-                    .supporting(ProviderCapability.SEARCH)
+                selection.priority
+                    .mapNotNull(byId::get)
                     .map { provider ->
                         async { provider.searchSection(normalizedQuery) }
                     }

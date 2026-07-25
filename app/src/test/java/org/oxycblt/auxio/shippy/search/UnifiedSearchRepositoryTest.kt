@@ -24,6 +24,8 @@ import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
 import org.oxycblt.auxio.shippy.provider.ProviderHealth
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderResult
+import org.oxycblt.auxio.shippy.provider.ProviderSelection
+import org.oxycblt.auxio.shippy.provider.ProviderSettings
 import org.oxycblt.auxio.shippy.provider.ResolvedStream
 import org.oxycblt.auxio.shippy.provider.SearchPage
 import org.oxycblt.auxio.shippy.provider.StreamConstraints
@@ -40,7 +42,11 @@ class UnifiedSearchRepositoryTest {
                     retryable = true,
                 ),
             )
-        val repository = UnifiedSearchRepository(ProviderRegistry(setOf(success, failure)))
+        val repository =
+            UnifiedSearchRepository(
+                ProviderRegistry(setOf(success, failure)),
+                FixedProviderSettings(listOf(failure.descriptor.id, success.descriptor.id)),
+            )
 
         val snapshot = repository.search("  song  ")
 
@@ -53,7 +59,11 @@ class UnifiedSearchRepositoryTest {
     @Test
     fun `blank query avoids provider work`() = runBlocking {
         val provider = FakeProvider("provider", ProviderResult.Success(SearchPage(emptyList())))
-        val repository = UnifiedSearchRepository(ProviderRegistry(setOf(provider)))
+        val repository =
+            UnifiedSearchRepository(
+                ProviderRegistry(setOf(provider)),
+                FixedProviderSettings(listOf(provider.descriptor.id)),
+            )
 
         val snapshot = repository.search(" ")
 
@@ -91,5 +101,16 @@ class UnifiedSearchRepositoryTest {
                 ProviderFailureKind.UNSUPPORTED,
                 retryable = false,
             )
+    }
+
+    private class FixedProviderSettings(private val priority: List<ProviderId>) : ProviderSettings {
+        override fun selection(available: Collection<ProviderId>) =
+            ProviderSelection(priority.filter(available::contains))
+
+        override fun setPriority(priority: List<ProviderId>) = Unit
+
+        override fun registerListener(listener: Nothing) = Unit
+
+        override fun unregisterListener(listener: Nothing) = Unit
     }
 }
