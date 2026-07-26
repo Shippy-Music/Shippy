@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { encodeRegister, ROLE, TYPE } from "../src/protocol.js";
+import { decode, encodeRegister, ROLE, TYPE } from "../src/protocol.js";
 import { RelayRegistry } from "../src/registry.js";
 
 const registration = (role, locator = "a", invite = "b") => ({
@@ -150,7 +150,7 @@ test("join closure affects only its route, while host closure cleans every route
   });
   registry.close(host);
   assert.deepEqual(registry.counts(), {
-    sessions: 0,
+    sessions: 1,
     routes: 0,
     connections: 0,
   });
@@ -195,4 +195,47 @@ test("an authenticated host or route joiner can close only its live route", () =
     routes: 0,
     connections: 1,
   });
+});
+
+test("host disconnect holds bounded presence and only its rotated opaque token can resume", () => {
+  let now = 1_000;
+  let nextToken = 1;
+  const { registry, sent } = fixture({
+    now: () => now,
+    hostPresenceMs: 30_000,
+    randomToken: () => Buffer.alloc(32, nextToken++),
+  });
+  const host = {};
+  assert.equal(registry.register(host, registration(ROLE.HOST, "resume")).ok, true);
+  const initialToken = decode(sent.get(host).at(-1)).resumeToken;
+  assert.equal(
+    registry.resume({}, { ...registration(ROLE.HOST, "resume"), resumeToken: initialToken }).reason,
+    "HOST_UNAVAILABLE",
+  );
+  registry.close(host);
+  assert.deepEqual(registry.counts(), { sessions: 1, routes: 0, connections: 0 });
+  assert.equal(registry.register({}, registration(ROLE.JOIN, "resume")).reason, "HOST_UNAVAILABLE");
+  assert.equal(
+    registry.resume({}, { ...registration(ROLE.HOST, "resume"), resumeToken: Buffer.alloc(32, 9) }).reason,
+    "INVALID_RESUME",
+  );
+  const resumedHost = {};
+  assert.equal(
+    registry.resume(resumedHost, { ...registration(ROLE.HOST, "resume"), resumeToken: initialToken }).ok,
+    true,
+  );
+  const rotatedToken = decode(sent.get(resumedHost).at(-1)).resumeToken;
+  assert.notDeepEqual(rotatedToken, initialToken);
+  registry.close(resumedHost);
+  assert.equal(
+    registry.resume({}, { ...registration(ROLE.HOST, "resume"), resumeToken: initialToken }).reason,
+    "INVALID_RESUME",
+  );
+  now += 30_000;
+  registry.sweep();
+  assert.equal(registry.counts().sessions, 0);
+  assert.equal(
+    registry.resume({}, { ...registration(ROLE.HOST, "resume"), resumeToken: rotatedToken }).reason,
+    "HOST_UNAVAILABLE",
+  );
 });

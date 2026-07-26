@@ -11,8 +11,10 @@ export const TYPE = Object.freeze({
   ERROR: 6,
   PING: 7,
   PONG: 8,
+  HOST_RESUME: 9,
 });
 export const ROUTE_ID_BYTES = 16;
+export const RESUME_TOKEN_BYTES = 32;
 export const LIMITS = Object.freeze({
   locator: 96,
   invite: 64,
@@ -63,12 +65,31 @@ export function encodeRegister({
   return out;
 }
 
-export function encodeRegistered({ role, routeId = null }) {
+export function encodeRegistered({ role, routeId = null, resumeToken = null }) {
+  if (![ROLE.HOST, ROLE.JOIN].includes(role)) fail("BAD_REGISTERED");
   const route = routeId ? routeBytes(routeId) : null;
-  const out = header(TYPE.REGISTERED, 2 + (route ? ROUTE_ID_BYTES : 0));
+  const token = resumeToken ? resumeTokenBytes(resumeToken) : null;
+  if ((role === ROLE.HOST && (route || !token)) || (role === ROLE.JOIN && (!route || token)))
+    fail("BAD_REGISTERED");
+  const payload = route ?? token;
+  const out = header(TYPE.REGISTERED, 2 + payload.length);
   out[2] = role;
   out[3] = route ? 1 : 0;
-  if (route) route.copy(out, 4);
+  payload.copy(out, 4);
+  return out;
+}
+export function encodeHostResume({ protocolVersion = 1, sessionLocator, inviteId, resumeToken }) {
+  if (protocolVersion !== 1) fail("BAD_HOST_RESUME");
+  const locator = bounded(sessionLocator, LIMITS.locator, "BAD_LOCATOR");
+  const invite = bounded(inviteId, LIMITS.invite, "BAD_INVITE");
+  const token = resumeTokenBytes(resumeToken);
+  const out = header(TYPE.HOST_RESUME, 3 + locator.length + invite.length + token.length);
+  out[2] = protocolVersion;
+  out[3] = locator.length;
+  locator.copy(out, 4);
+  out[4 + locator.length] = invite.length;
+  invite.copy(out, 5 + locator.length);
+  token.copy(out, 5 + locator.length + invite.length);
   return out;
 }
 export function encodeRoute(type, routeId, reason = "") {
@@ -105,6 +126,11 @@ export const routeBytes = (routeId) => {
   if (out.length !== ROUTE_ID_BYTES) fail("BAD_ROUTE");
   return out;
 };
+export const resumeTokenBytes = (token) => {
+  const out = bytes(token);
+  if (out.length !== RESUME_TOKEN_BYTES) fail("BAD_RESUME_TOKEN");
+  return out;
+};
 
 export function decode(frame) {
   const input = bytes(frame);
@@ -139,6 +165,46 @@ export function decode(frame) {
       sessionLocator: input.subarray(5, inviteAt),
       inviteId: input.subarray(inviteAt + 1),
     };
+  }
+  if (type === TYPE.HOST_RESUME) {
+    if (input.length < 2 + 3 + RESUME_TOKEN_BYTES) fail("BAD_HOST_RESUME");
+    const protocolVersion = input[2];
+    const locatorLength = input[3];
+    const inviteAt = 4 + locatorLength;
+    if (
+      protocolVersion !== 1 ||
+      locatorLength < 1 ||
+      locatorLength > LIMITS.locator ||
+      inviteAt >= input.length
+    )
+      fail("BAD_HOST_RESUME");
+    const inviteLength = input[inviteAt];
+    const tokenAt = inviteAt + 1 + inviteLength;
+    if (
+      inviteLength < 1 ||
+      inviteLength > LIMITS.invite ||
+      tokenAt + RESUME_TOKEN_BYTES !== input.length
+    )
+      fail("BAD_HOST_RESUME");
+    return {
+      type,
+      protocolVersion,
+      sessionLocator: input.subarray(4, inviteAt),
+      inviteId: input.subarray(inviteAt + 1, tokenAt),
+      resumeToken: input.subarray(tokenAt),
+    };
+  }
+  if (type === TYPE.REGISTERED) {
+    if (input.length < 4) fail("BAD_REGISTERED");
+    const role = input[2];
+    const hasRoute = input[3];
+    if (![ROLE.HOST, ROLE.JOIN].includes(role) || ![0, 1].includes(hasRoute))
+      fail("BAD_REGISTERED");
+    if (role === ROLE.HOST && hasRoute === 0 && input.length === 4 + RESUME_TOKEN_BYTES)
+      return { type, role, resumeToken: input.subarray(4) };
+    if (role === ROLE.JOIN && hasRoute === 1 && input.length === 4 + ROUTE_ID_BYTES)
+      return { type, role, routeId: input.subarray(4) };
+    fail("BAD_REGISTERED");
   }
   if (type === TYPE.DATA) {
     if (input.length <= 18 || input.length - 18 > LIMITS.data) fail("BAD_DATA");

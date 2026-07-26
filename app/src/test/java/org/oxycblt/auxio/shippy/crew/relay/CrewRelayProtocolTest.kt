@@ -50,6 +50,28 @@ class CrewRelayProtocolTest {
     }
 
     @Test
+    fun `host resume wire carries only exact opaque credential`() {
+        val token = ByteArray(CREW_RELAY_RESUME_TOKEN_BYTES) { 7 }
+        val registered = CrewRelayCodec.encode(CrewRelayFrame.Registered(CrewRelayRole.HOST, resumeToken = token))
+        assertArrayEquals(byteArrayOf(1, 2, 1, 0) + token, registered)
+        assertEquals(
+            CrewRelayFrame.Registered(CrewRelayRole.HOST, resumeToken = token).role,
+            (CrewRelayCodec.decode(registered) as CrewRelayFrame.Registered).role,
+        )
+        assertArrayEquals(
+            token,
+            (CrewRelayCodec.decode(registered) as CrewRelayFrame.Registered).resumeToken,
+        )
+        assertArrayEquals(
+            byteArrayOf(1, 9, 1, 1, 's'.code.toByte(), 1, 'i'.code.toByte()) + token,
+            CrewRelayCodec.encode(CrewRelayFrame.HostResume(1, "s".toByteArray(), "i".toByteArray(), token)),
+        )
+        assertFails {
+            CrewRelayCodec.encode(CrewRelayFrame.HostResume(1, "s".toByteArray(), "i".toByteArray(), ByteArray(31)))
+        }
+    }
+
+    @Test
     fun `directional crypto rejects wrong relay identity secret and replay`() {
         val host = CrewRelayRouteCrypto(invite, route, CrewRelayRole.HOST)
         val join = CrewRelayRouteCrypto(invite, route, CrewRelayRole.JOIN)

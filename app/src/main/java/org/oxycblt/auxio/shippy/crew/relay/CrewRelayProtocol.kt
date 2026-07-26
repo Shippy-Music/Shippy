@@ -13,6 +13,7 @@ import java.net.URI
 internal const val CREW_RELAY_MAX_DATA_BYTES = 32 * 1024
 private const val VERSION = 1
 private const val ROUTE_BYTES = 16
+internal const val CREW_RELAY_RESUME_TOKEN_BYTES = 32
 private const val MAX_FRAME_BYTES = 33 * 1024
 private const val MAX_LOCATOR = 96
 private const val MAX_INVITE = 64
@@ -32,6 +33,7 @@ enum class CrewRelayType(val wire: Int) {
     ERROR(6),
     PING(7),
     PONG(8),
+    HOST_RESUME(9),
 }
 
 class CrewRelayRouteId(source: ByteArray) {
@@ -58,7 +60,19 @@ sealed interface CrewRelayFrame {
         val inviteId: ByteArray,
     ) : CrewRelayFrame
 
-    data class Registered(val role: CrewRelayRole, val routeId: CrewRelayRouteId?) : CrewRelayFrame
+    data class HostResume(
+        val protocolVersion: Int,
+        val sessionLocator: ByteArray,
+        val inviteId: ByteArray,
+        val resumeToken: ByteArray,
+    ) : CrewRelayFrame
+
+    /** Hosts receive a 32-byte opaque in-memory resume credential; joiners receive only a route. */
+    data class Registered(
+        val role: CrewRelayRole,
+        val routeId: CrewRelayRouteId? = null,
+        val resumeToken: ByteArray? = null,
+    ) : CrewRelayFrame
 
     data class RouteOpen(val routeId: CrewRelayRouteId, val reason: ByteArray = ByteArray(0)) : CrewRelayFrame
 
@@ -91,11 +105,34 @@ object CrewRelayCodec {
                         output.writeByte(frame.inviteId.size)
                         output.write(frame.inviteId)
                     }
+                    is CrewRelayFrame.HostResume -> {
+                        require(frame.protocolVersion == VERSION)
+                        bounded(frame.sessionLocator, MAX_LOCATOR)
+                        bounded(frame.inviteId, MAX_INVITE)
+                        resumeToken(frame.resumeToken)
+                        output.writeByte(CrewRelayType.HOST_RESUME.wire)
+                        output.writeByte(frame.protocolVersion)
+                        output.writeByte(frame.sessionLocator.size)
+                        output.write(frame.sessionLocator)
+                        output.writeByte(frame.inviteId.size)
+                        output.write(frame.inviteId)
+                        output.write(frame.resumeToken)
+                    }
                     is CrewRelayFrame.Registered -> {
+                        when (frame.role) {
+                            CrewRelayRole.HOST -> {
+                                require(frame.routeId == null)
+                                resumeToken(checkNotNull(frame.resumeToken))
+                            }
+                            CrewRelayRole.JOIN -> {
+                                require(frame.routeId != null && frame.resumeToken == null)
+                            }
+                        }
                         output.writeByte(CrewRelayType.REGISTERED.wire)
                         output.writeByte(frame.role.wire)
                         output.writeByte(if (frame.routeId == null) 0 else 1)
                         frame.routeId?.let { output.write(it.bytes) }
+                        frame.resumeToken?.let(output::write)
                     }
                     is CrewRelayFrame.RouteOpen -> writeRoute(output, CrewRelayType.ROUTE_OPEN, frame.routeId, frame.reason)
                     is CrewRelayFrame.RouteClose -> writeRoute(output, CrewRelayType.ROUTE_CLOSE, frame.routeId, frame.reason)
@@ -129,7 +166,16 @@ object CrewRelayCodec {
                         val registeredRole = role(data.readUnsignedByte())
                         val hasRoute = data.readUnsignedByte()
                         require(hasRoute in 0..1)
-                        CrewRelayFrame.Registered(registeredRole, if (hasRoute == 1) CrewRelayRouteId(read(data, ROUTE_BYTES, ROUTE_BYTES)) else null)
+                        when (registeredRole) {
+                            CrewRelayRole.HOST -> {
+                                require(hasRoute == 0)
+                                CrewRelayFrame.Registered(registeredRole, resumeToken = read(data, CREW_RELAY_RESUME_TOKEN_BYTES, CREW_RELAY_RESUME_TOKEN_BYTES))
+                            }
+                            CrewRelayRole.JOIN -> {
+                                require(hasRoute == 1)
+                                CrewRelayFrame.Registered(registeredRole, CrewRelayRouteId(read(data, ROUTE_BYTES, ROUTE_BYTES)))
+                            }
+                        }
                     }
                     3 -> readRoute(data, true)
                     4 -> readRoute(data, false)
@@ -137,6 +183,16 @@ object CrewRelayCodec {
                     6 -> CrewRelayFrame.Error(read(data, data.readUnsignedByte(), MAX_REASON))
                     7 -> CrewRelayFrame.Ping
                     8 -> CrewRelayFrame.Pong
+                    9 -> {
+                        val protocolVersion = data.readUnsignedByte()
+                        require(protocolVersion == VERSION)
+                        CrewRelayFrame.HostResume(
+                            protocolVersion,
+                            read(data, data.readUnsignedByte(), MAX_LOCATOR),
+                            read(data, data.readUnsignedByte(), MAX_INVITE),
+                            read(data, CREW_RELAY_RESUME_TOKEN_BYTES, CREW_RELAY_RESUME_TOKEN_BYTES),
+                        )
+                    }
                     else -> throw IllegalArgumentException("Unexpected relay frame")
                 }
             require(data.available() == 0) { "Relay frame has trailing data" }
@@ -168,6 +224,8 @@ object CrewRelayCodec {
     private fun bounded(value: ByteArray, max: Int) = require(value.size in 1..max)
 
     private fun boundedAllowEmpty(value: ByteArray, max: Int) = require(value.size <= max)
+
+    private fun resumeToken(value: ByteArray) = require(value.size == CREW_RELAY_RESUME_TOKEN_BYTES)
 }
 
 /** The relay locator is an HTTPS URL; only its scheme changes for the WebSocket connection. */

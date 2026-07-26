@@ -3,13 +3,38 @@ import assert from "node:assert/strict";
 import {
   decode,
   encodeData,
+  encodeHostResume,
   encodeRegister,
+  encodeRegistered,
   encodeRoute,
   LIMITS,
   ProtocolError,
   ROLE,
   TYPE,
 } from "../src/protocol.js";
+
+test("host registration and resume envelopes carry exactly one opaque 32-byte token", () => {
+  const token = Buffer.alloc(32, 4);
+  assert.deepEqual(decode(encodeRegistered({ role: ROLE.HOST, resumeToken: token })), {
+    type: TYPE.REGISTERED,
+    role: ROLE.HOST,
+    resumeToken: token,
+  });
+  assert.deepEqual(
+    decode(encodeHostResume({ sessionLocator: Buffer.from("locator"), inviteId: Buffer.from("invite"), resumeToken: token })),
+    {
+      type: TYPE.HOST_RESUME,
+      protocolVersion: 1,
+      sessionLocator: Buffer.from("locator"),
+      inviteId: Buffer.from("invite"),
+      resumeToken: token,
+    },
+  );
+  assert.throws(
+    () => encodeHostResume({ sessionLocator: Buffer.from("l"), inviteId: Buffer.from("i"), resumeToken: Buffer.alloc(31) }),
+    /BAD_RESUME_TOKEN/,
+  );
+});
 
 test("register envelope round-trips bounded opaque identifiers", () => {
   const frame = encodeRegister({

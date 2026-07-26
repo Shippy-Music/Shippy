@@ -15,13 +15,20 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -43,6 +50,10 @@ private const val RELAY_MAX_ROUTES = 16
 private const val RELAY_HANDSHAKE_TIMEOUT_MS = 8_000L
 private const val RELAY_INCOMING_CAPACITY = 64
 private const val RELAY_MAX_QUEUED_BYTES = 1024L * 1024L
+private const val RELAY_RECONNECT_INITIAL_DELAY_MS = 250L
+private const val RELAY_RECONNECT_MAX_DELAY_MS = 8_000L
+private const val RELAY_RECONNECT_HANDSHAKE_TIMEOUT_MS = 3_000L
+private const val RELAY_RECONNECT_MAX_ATTEMPTS = 5
 
 enum class CrewHostedRelayFailure {
     INVITATION_INACTIVE,
@@ -81,9 +92,13 @@ class CrewHostedRelayHost(
     private val closed = AtomicBoolean(false)
     private val routes = ConcurrentHashMap<CrewRelayRouteId, PendingRoute>()
     private val peersChannel = Channel<CrewSignalPeer>(maxRoutes)
+    private val reconnectScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val registrationResult = CompletableDeferred<CrewHostedRelayRegistrationState>()
     private val mutableRegistration = MutableStateFlow<CrewHostedRelayRegistrationState>(CrewHostedRelayRegistrationState.Connecting)
     @Volatile private var socket: WebSocket? = null
+    @Volatile private var resumeToken: ByteArray? = null
+    @Volatile private var reconnectJob: Job? = null
+    @Volatile private var registeredOnce = false
 
     val peers: Flow<CrewSignalPeer> = peersChannel.receiveAsFlow()
     val registration: StateFlow<CrewHostedRelayRegistrationState> = mutableRegistration.asStateFlow()
@@ -93,10 +108,8 @@ class CrewHostedRelayHost(
         require(sessionId.protocolVersion == invite.protocolVersion)
         require(localMemberId.protocolVersion == invite.protocolVersion)
         require(nowEpochMs() in invite.issuedAtEpochMs until invite.expiresAtEpochMs)
-        val locator = checkNotNull(invite.relayLocator) { "Hosted relay requires a relay locator" }.value
-        val opened = client.newWebSocket(Request.Builder().url(CrewRelayLocatorWebSocketUrl(locator)).build(), listener())
-        socket = opened
-        if (closed.get()) opened.cancel()
+        checkNotNull(invite.relayLocator) { "Hosted relay requires a relay locator" }
+        openSocket(null)
     }
 
     suspend fun awaitRegistration(timeoutMs: Long = RELAY_HANDSHAKE_TIMEOUT_MS): CrewHostedRelayRegistrationState =
@@ -105,27 +118,37 @@ class CrewHostedRelayHost(
                 fail(CrewHostedRelayFailure.REGISTRATION)
             }
 
-    private fun listener() = object : WebSocketListener() {
+    private fun openSocket(token: ByteArray?) {
+        if (closed.get()) return
+        val locator = checkNotNull(invite.relayLocator).value
+        val opened = client.newWebSocket(Request.Builder().url(CrewRelayLocatorWebSocketUrl(locator)).build(), listener(token))
+        socket = opened
+        if (closed.get()) opened.cancel()
+    }
+
+    private fun listener(registrationToken: ByteArray?) = object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
-            if (!send(webSocket, registerFrame())) fail(CrewHostedRelayFailure.CONNECTION)
+            val frame = registrationToken?.let(::resumeFrame) ?: registerFrame()
+            if (!send(webSocket, frame)) connectionLost(webSocket)
         }
 
         override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            if (socket !== webSocket) return
             runCatching { onFrame(CrewRelayCodec.decode(bytes.toByteArray())) }
                 .onFailure { fail(CrewHostedRelayFailure.PROTOCOL) }
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-            fail(CrewHostedRelayFailure.CONNECTION)
+            connectionLost(webSocket)
             webSocket.close(code, "")
         }
 
         override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            fail(CrewHostedRelayFailure.CONNECTION)
+            connectionLost(webSocket)
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            fail(CrewHostedRelayFailure.CONNECTION)
+            connectionLost(webSocket)
         }
     }
 
@@ -137,10 +160,23 @@ class CrewHostedRelayHost(
             invite.inviteId.value.toByteArray(Charsets.UTF_8),
         )
 
+    private fun resumeFrame(token: ByteArray) =
+        CrewRelayFrame.HostResume(
+            invite.protocolVersion.value,
+            invite.sessionLocator.value.toByteArray(Charsets.UTF_8),
+            invite.inviteId.value.toByteArray(Charsets.UTF_8),
+            token.copyOf(),
+        )
+
     private fun onFrame(frame: CrewRelayFrame) {
         when (frame) {
             is CrewRelayFrame.Registered -> {
-                require(frame.role == CrewRelayRole.HOST && frame.routeId == null)
+                require(frame.role == CrewRelayRole.HOST && frame.routeId == null && frame.resumeToken != null)
+                resumeToken?.fill(0)
+                resumeToken = frame.resumeToken.copyOf()
+                registeredOnce = true
+                reconnectJob?.cancel()
+                reconnectJob = null
                 completeRegistration(CrewHostedRelayRegistrationState.Registered)
             }
             is CrewRelayFrame.RouteOpen -> openRoute(frame.routeId)
@@ -206,9 +242,44 @@ class CrewHostedRelayHost(
         rejectRoute(routeId)
     }
 
+    @Synchronized
+    private fun connectionLost(source: WebSocket? = null) {
+        if (closed.get() || (source != null && socket != null && socket !== source)) return
+        socket = null
+        routes.values.forEach { it.peer?.closeFromRelay() }
+        routes.clear()
+        if (!registeredOnce || resumeToken == null) {
+            fail(CrewHostedRelayFailure.CONNECTION)
+            return
+        }
+        mutableRegistration.value = CrewHostedRelayRegistrationState.Connecting
+        if (reconnectJob?.isActive == true) return
+        reconnectJob =
+            reconnectScope.launch {
+                repeat(RELAY_RECONNECT_MAX_ATTEMPTS) { attempt ->
+                    val delayMs = minOf(
+                        RELAY_RECONNECT_MAX_DELAY_MS,
+                        RELAY_RECONNECT_INITIAL_DELAY_MS shl attempt,
+                    )
+                    delay(delayMs)
+                    if (closed.get() || registration.value is CrewHostedRelayRegistrationState.Registered) return@launch
+                    val token = resumeToken ?: return@launch
+                    openSocket(token)
+                    // Wait for callbacks before attempting another socket; failures wake the next iteration.
+                    delay(RELAY_RECONNECT_HANDSHAKE_TIMEOUT_MS)
+                    if (registration.value is CrewHostedRelayRegistrationState.Registered) return@launch
+                    socket?.cancel()
+                    socket = null
+                }
+                if (!closed.get() && registration.value !is CrewHostedRelayRegistrationState.Registered) {
+                    fail(CrewHostedRelayFailure.CONNECTION)
+                }
+            }
+    }
+
     private fun send(frame: CrewRelayFrame): Boolean {
         val sent = socket?.let { send(it, frame) } == true
-        if (!sent) fail(CrewHostedRelayFailure.CONNECTION)
+        if (!sent) connectionLost()
         return sent
     }
 
@@ -224,6 +295,10 @@ class CrewHostedRelayHost(
 
     private fun fail(reason: CrewHostedRelayFailure) {
         if (!closed.compareAndSet(false, true)) return
+        reconnectJob?.cancel()
+        reconnectScope.cancel()
+        resumeToken?.fill(0)
+        resumeToken = null
         completeRegistration(CrewHostedRelayRegistrationState.Failed(reason))
         routes.values.forEach { it.peer?.closeFromRelay() }
         routes.clear()
@@ -233,6 +308,10 @@ class CrewHostedRelayHost(
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        reconnectJob?.cancel()
+        reconnectScope.cancel()
+        resumeToken?.fill(0)
+        resumeToken = null
         completeRegistration(CrewHostedRelayRegistrationState.Closed)
         routes.values.forEach { it.peer?.closeFromRelay() }
         routes.clear()

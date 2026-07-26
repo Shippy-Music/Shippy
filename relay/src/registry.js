@@ -1,3 +1,4 @@
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   ROLE,
   TYPE,
@@ -6,7 +7,16 @@ import {
   encodeRoute,
   newRouteId,
   routeKey,
+  resumeTokenBytes,
 } from "./protocol.js";
+
+const RESUME_TOKEN_BYTES = 32;
+const tokenVerifier = (token) =>
+  createHash("sha256").update(resumeTokenBytes(token)).digest();
+const matchesVerifier = (expected, token) => {
+  const actual = tokenVerifier(token);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+};
 
 const sessionKey = ({ sessionLocator, inviteId }) => {
   const locator = Buffer.from(sessionLocator);
@@ -24,11 +34,17 @@ export class RelayRegistry {
     maxSessions = 256,
     maxJoinsPerSession = 16,
     randomRoute = newRouteId,
+    randomToken = randomBytes,
+    hostPresenceMs = 30_000,
+    now = Date.now,
     deliver,
   }) {
     this.maxSessions = maxSessions;
     this.maxJoinsPerSession = maxJoinsPerSession;
     this.randomRoute = randomRoute;
+    this.randomToken = randomToken;
+    this.hostPresenceMs = hostPresenceMs;
+    this.now = now;
     this.deliver = deliver;
     this.sessions = new Map();
     this.members = new Map();
@@ -36,6 +52,7 @@ export class RelayRegistry {
 
   register(connection, registration) {
     const key = sessionKey(registration);
+    this.sweep();
     if (this.members.has(connection))
       return { ok: false, reason: "ALREADY_REGISTERED" };
 
@@ -45,18 +62,25 @@ export class RelayRegistry {
       if (this.sessions.size >= this.maxSessions)
         return { ok: false, reason: "SESSION_LIMIT" };
 
-      session = { key, host: connection, routes: new Map() };
+      const resumeToken = this.newResumeToken();
+      session = {
+        key,
+        host: connection,
+        routes: new Map(),
+        resumeVerifier: tokenVerifier(resumeToken),
+        hostlessUntilEpochMs: null,
+      };
       this.sessions.set(key, session);
       this.members.set(connection, { session, role: ROLE.HOST });
-      if (!this.deliver(connection, encodeRegistered({ role: ROLE.HOST }))) {
+      if (!this.deliver(connection, encodeRegistered({ role: ROLE.HOST, resumeToken }))) {
         this.members.delete(connection);
         this.sessions.delete(key);
         return { ok: false, reason: "REGISTRATION_DELIVERY_FAILED" };
       }
-      return { ok: true };
+      return { ok: true, resumeToken };
     }
 
-    if (!session) return { ok: false, reason: "HOST_UNAVAILABLE" };
+    if (!session || !session.host) return { ok: false, reason: "HOST_UNAVAILABLE" };
     if (session.routes.size >= this.maxJoinsPerSession)
       return { ok: false, reason: "JOIN_LIMIT" };
 
@@ -81,6 +105,29 @@ export class RelayRegistry {
       return { ok: false, reason: "REGISTRATION_DELIVERY_FAILED" };
     }
     return { ok: true, routeId };
+  }
+
+  resume(connection, registration) {
+    if (this.members.has(connection)) return { ok: false, reason: "ALREADY_REGISTERED" };
+    this.sweep();
+    const session = this.sessions.get(sessionKey(registration));
+    if (!session || session.host || !session.hostlessUntilEpochMs)
+      return { ok: false, reason: "HOST_UNAVAILABLE" };
+    if (this.now() >= session.hostlessUntilEpochMs) {
+      this.sessions.delete(session.key);
+      return { ok: false, reason: "HOST_UNAVAILABLE" };
+    }
+    if (!matchesVerifier(session.resumeVerifier, registration.resumeToken))
+      return { ok: false, reason: "INVALID_RESUME" };
+
+    const resumeToken = this.newResumeToken();
+    if (!this.deliver(connection, encodeRegistered({ role: ROLE.HOST, resumeToken })))
+      return { ok: false, reason: "REGISTRATION_DELIVERY_FAILED" };
+    session.host = connection;
+    session.hostlessUntilEpochMs = null;
+    session.resumeVerifier = tokenVerifier(resumeToken);
+    this.members.set(connection, { session, role: ROLE.HOST });
+    return { ok: true, resumeToken };
   }
 
   forward(connection, { routeId, payload }) {
@@ -118,7 +165,8 @@ export class RelayRegistry {
     if (member.role === ROLE.HOST) {
       for (const route of [...member.session.routes.values()])
         this.closeRoute(member.session, route, "HOST_CLOSED");
-      this.sessions.delete(member.session.key);
+      member.session.host = null;
+      member.session.hostlessUntilEpochMs = this.now() + this.hostPresenceMs;
     } else {
       this.closeRoute(member.session, member.route, reason);
     }
@@ -126,17 +174,27 @@ export class RelayRegistry {
   }
 
   hasSession(registration) {
-    return this.sessions.has(sessionKey(registration));
+    this.sweep();
+    return this.sessions.get(sessionKey(registration))?.host != null;
+  }
+
+  sweep(now = this.now()) {
+    for (const session of this.sessions.values()) {
+      if (!session.host && session.hostlessUntilEpochMs != null && now >= session.hostlessUntilEpochMs)
+        this.sessions.delete(session.key);
+    }
   }
 
   closeRoute(session, route, reason) {
     if (!session.routes.delete(routeKey(route.id))) return;
     this.members.delete(route.join);
-    this.deliver(session.host, encodeRoute(TYPE.ROUTE_CLOSE, route.id, reason));
+    if (session.host)
+      this.deliver(session.host, encodeRoute(TYPE.ROUTE_CLOSE, route.id, reason));
     this.deliver(route.join, encodeRoute(TYPE.ROUTE_CLOSE, route.id, reason));
   }
 
   counts() {
+    this.sweep();
     let routes = 0;
     for (const session of this.sessions.values()) routes += session.routes.size;
     return {
@@ -144,5 +202,10 @@ export class RelayRegistry {
       routes,
       connections: this.members.size,
     };
+  }
+
+  newResumeToken() {
+    const token = this.randomToken(RESUME_TOKEN_BYTES);
+    return Buffer.from(resumeTokenBytes(token));
   }
 }

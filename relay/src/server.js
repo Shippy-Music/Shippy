@@ -66,6 +66,13 @@ export function loadConfig(env = process.env) {
     port: intEnv(env, "PORT", 8080),
     maxSessions: intEnv(env, "CREW_RELAY_MAX_SESSIONS", 256),
     maxJoins: intEnv(env, "CREW_RELAY_MAX_JOINS", 16),
+    hostPresenceMs: boundedIntEnv(
+      env,
+      "CREW_RELAY_HOST_PRESENCE_MS",
+      30_000,
+      5_000,
+      120_000,
+    ),
     maxInflight: intEnv(env, "CREW_RELAY_MAX_INFLIGHT_BYTES", 1024 * 1024),
     registrationMs: intEnv(env, "CREW_RELAY_REGISTRATION_MS", 10_000),
     idleMs: intEnv(env, "CREW_RELAY_IDLE_MS", 90_000),
@@ -174,6 +181,7 @@ export function createRelayServer(config = loadConfig()) {
   const registry = new RelayRegistry({
     maxSessions: config.maxSessions,
     maxJoinsPerSession: config.maxJoins,
+    hostPresenceMs: config.hostPresenceMs,
     deliver: send,
   });
   const server = http.createServer((req, res) => {
@@ -277,9 +285,12 @@ export function createRelayServer(config = loadConfig()) {
       try {
         const message = decode(raw);
         if (!client.registered) {
-          if (message.type !== TYPE.REGISTER)
+          if (message.type !== TYPE.REGISTER && message.type !== TYPE.HOST_RESUME)
             return close(client, "REGISTER_REQUIRED");
-          const result = registry.register(client, message);
+          const result =
+            message.type === TYPE.HOST_RESUME
+              ? registry.resume(client, message)
+              : registry.register(client, message);
           if (!result.ok) return close(client, result.reason);
           client.registered = true;
           clearTimeout(registrationTimer);
@@ -318,6 +329,7 @@ export function createRelayServer(config = loadConfig()) {
 
   const heartbeat = setInterval(() => {
     const now = Date.now();
+    registry.sweep(now);
     for (const client of clients) {
       if (now - client.lastSeen > config.idleMs) client.ws.terminate();
       else if (client.ws.readyState === WebSocket.OPEN) client.ws.ping();
