@@ -24,7 +24,7 @@ import kotlinx.coroutines.sync.withLock
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLeaseCodec
-import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLeaseDecodeResult
+import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLeasePersistencePolicy
 
 interface CrewRejoinLeaseStore {
     suspend fun load(): CrewRejoinLease?
@@ -80,7 +80,7 @@ constructor(@ApplicationContext context: Context) : CrewRejoinLeaseStore {
         if (!file.exists()) return null
         val decoded = runCatching { decrypt(readBoundedEnvelope()) }.getOrNull()
             ?.let(CrewRejoinLeaseCodec::decode)
-        return (decoded as? CrewRejoinLeaseDecodeResult.Accepted)?.lease
+        return CrewRejoinLeasePersistencePolicy.acceptedLease(decoded)
             ?: run {
                 atomicFile.delete()
                 null

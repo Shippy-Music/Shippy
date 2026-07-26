@@ -52,7 +52,6 @@ import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayJoin
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayJoinResult
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHttpClient
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayIceServerProvider
-import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
@@ -353,9 +352,9 @@ constructor(
                 if (runCatching { activeMediaRuntime.bind(activeEngine.state, activeEngine.availability, activeEngine::publishLocalAvailability) }.isFailure) {
                     return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
                 }
-                if (runCatching { leases.save(CrewRejoinLease(activeSessionId, localMemberId, invite)) }.isFailure) {
-                    return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
-                }
+                // Active-session credential issuance is intentionally not wired until the
+                // coordinator can authenticate and verify the v2 credential registry. Do not
+                // persist the public invite here: it is not a rejoin credential.
                 val activeReconnectController =
                     CrewJoinReconnectController(
                         localMemberId = localMemberId,

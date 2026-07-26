@@ -17,9 +17,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
-import org.oxycblt.auxio.shippy.crew.invite.CrewInvite
 import org.oxycblt.auxio.shippy.crew.invite.CrewInviteId
-import org.oxycblt.auxio.shippy.crew.invite.CrewInviteSecret
 import org.oxycblt.auxio.shippy.crew.invite.CrewSessionLocator
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointLoadResult
@@ -77,16 +75,15 @@ class CrewSessionOrchestratorTest {
         private val memberId = CrewMemberId("member_id", protocol)
         val lease =
             CrewRejoinLease(
-                sessionId,
-                memberId,
-                CrewInvite(
-                    protocol,
-                    CrewSessionLocator("session_locator"),
-                    CrewInviteId("invite_id"),
-                    CrewInviteSecret("secret_abcdefghijklmnopqrstuvwxyz"),
-                    1_000L,
-                    2_000L,
-                ),
+                sessionId = sessionId,
+                memberId = memberId,
+                sessionLocator = CrewSessionLocator("session_locator"),
+                relayLocator = null,
+                rendezvousInviteId = CrewInviteId("invite_id"),
+                credentialId = "a".repeat(22),
+                credentialSecret = "b".repeat(43),
+                issuedAtEpochMs = 1_000L,
+                expiresAtEpochMs = 2_000L,
             )
         val snapshot =
             CrewSnapshot(

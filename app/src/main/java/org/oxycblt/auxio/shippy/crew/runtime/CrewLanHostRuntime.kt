@@ -46,7 +46,6 @@ import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayHost
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayRegistrationState
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHttpClient
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayIceServerProvider
-import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
@@ -382,9 +381,8 @@ constructor(
             CrewLanOperationState.Starting ->
                 return fail(CrewLanHostLaunchFailure.AdvertisementTimedOut)
         }
-        if (runCatching { leases.save(CrewRejoinLease(sessionId, localMemberId, bootstrap.invite)) }.isFailure) {
-            return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
-        }
+        // Credential issuance belongs to the authenticated coordinator registry. The bootstrap
+        // invite is deliberately never persisted as a process-rejoin secret.
 
         return CrewLanHostLaunchResult.Started(
             CrewLanHostSession(
