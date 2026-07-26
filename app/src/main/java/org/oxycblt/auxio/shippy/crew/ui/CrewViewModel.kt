@@ -13,8 +13,11 @@ package org.oxycblt.auxio.shippy.crew.ui
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRequestResult
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewReactionSendResult
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 
@@ -24,12 +27,19 @@ class CrewViewModel @Inject constructor(
     private val runtime: ActiveCrewRuntime,
 ) : ViewModel() {
     val state: StateFlow<ActiveCrewRuntimeState> = runtime.state
+    val reactions: SharedFlow<ActiveCrewReaction> = runtime.reactions
+    val peerMediaBlocked: StateFlow<Boolean> = runtime.peerMediaBlocked
+
+    val allowedReactions: List<String>
+        get() = runtime.allowedReactions
 
     fun startHost(): ActiveCrewRequestResult = runtime.startHost()
 
     fun join(link: String): ActiveCrewRequestResult = runtime.join(link)
 
     fun end(): ActiveCrewRequestResult = runtime.end()
+
+    suspend fun sendReaction(emoji: String): ActiveCrewReactionSendResult = runtime.sendReaction(emoji)
 
     fun dismissFailure() = runtime.dismissFailure()
 }

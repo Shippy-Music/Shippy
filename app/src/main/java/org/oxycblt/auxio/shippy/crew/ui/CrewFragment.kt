@@ -13,12 +13,17 @@ package org.oxycblt.auxio.shippy.crew.ui
 import android.content.Intent
 import android.os.Bundle
 import android.text.InputType
+import android.view.Gravity
 import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
+import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -27,6 +32,7 @@ import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import org.oxycblt.auxio.R
@@ -43,12 +49,20 @@ import org.oxycblt.auxio.shippy.crew.runtime.CrewJoinReconnectState
 import org.oxycblt.auxio.shippy.crew.runtime.CrewJoinFailure
 import org.oxycblt.auxio.shippy.crew.runtime.CrewLanHostLaunchFailure
 import org.oxycblt.auxio.shippy.crew.runtime.CrewLanJoinLaunchFailure
+import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.ui.ViewBindingFragment
 
 @AndroidEntryPoint
 class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
     private val model: CrewViewModel by viewModels()
+    private val playbackModel: PlaybackViewModel by activityViewModels()
+    @Inject lateinit var crewSettings: CrewSettings
     private var qrDialog: androidx.appcompat.app.AlertDialog? = null
+    private var reactionDialog: androidx.appcompat.app.AlertDialog? = null
+    private val reactionViews = mutableSetOf<View>()
     private val scanQr = registerForActivityResult(ScanContract()) { result ->
         result.contents?.trim()?.takeIf(String::isNotBlank)?.let(model::join)
     }
@@ -60,10 +74,26 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         binding.crewJoin.setOnClickListener { showJoinDialog() }
         binding.crewScanQr.setOnClickListener { scanQr.launch(scanOptions()) }
         binding.crewDismissFailure.setOnClickListener { model.dismissFailure() }
+        binding.crewOpenQueue.setOnClickListener { playbackModel.openQueue() }
+        binding.crewReact.setOnClickListener(::showReactionPicker)
+        binding.crewEnablePushPull.setOnClickListener {
+            crewSettings.setPushPullEnabled(true)
+            renderPeerMediaBlocked(model.peerMediaBlocked.value)
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 model.state.collect(::render)
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                model.reactions.collect(::showCrewReaction)
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                model.peerMediaBlocked.collect(::renderPeerMediaBlocked)
             }
         }
     }
@@ -71,6 +101,13 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
     override fun onDestroyView() {
         qrDialog?.dismiss()
         qrDialog = null
+        reactionDialog?.dismiss()
+        reactionDialog = null
+        reactionViews.toList().forEach { reaction ->
+            reaction.animate().cancel()
+            (reaction.parent as? ViewGroup)?.removeView(reaction)
+        }
+        reactionViews.clear()
         super.onDestroyView()
     }
 
@@ -132,6 +169,7 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
             presentation.crewState.members.size,
             presentation.crewState.members.size,
         )
+        renderQueue(presentation)
         renderMembers(presentation)
 
         val host = presentation.role == ActiveCrewMode.HOST
@@ -154,6 +192,7 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         binding.crewEnd.setOnClickListener { showEndDialog(host) }
         binding.crewEndingStatus.isVisible = ending
         binding.crewEndingProgress.isVisible = ending
+        binding.crewReact.isEnabled = !ending && model.allowedReactions.isNotEmpty()
     }
 
     private fun roleCopy(presentation: ActiveCrewPresentation) =
@@ -250,6 +289,102 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
                 )
             }
         }
+    }
+
+    private fun renderQueue(presentation: ActiveCrewPresentation) {
+        val crewState = presentation.crewState
+        val current = crewState.queue.firstOrNull { it.id == crewState.playback.currentQueueItemId }
+        binding?.let { binding ->
+            binding.crewQueueSummary.text = resources.getQuantityString(
+                R.plurals.plr_crew_queue_items,
+                crewState.queue.size,
+                crewState.queue.size,
+            )
+            binding.crewNowPlayingCover.bindArtwork(
+                current?.track?.artwork,
+                current?.track?.album ?: current?.track?.title ?: getString(R.string.lbl_no_track_playing),
+            )
+            binding.crewNowPlayingTitle.text = current?.track?.title ?: getString(R.string.lbl_no_track_playing)
+            binding.crewNowPlayingArtists.text = current?.track?.artists?.joinToString(", ") ?: ""
+            binding.crewNowPlayingArtists.isVisible = current != null
+            val contributor = current?.contributorId?.let { id ->
+                crewState.members.firstOrNull { it.id.value == id }?.displayName
+            }
+            binding.crewNowPlayingContributor.isVisible = contributor != null
+            binding.crewNowPlayingContributor.text = contributor?.let {
+                getString(R.string.lbl_added_by_crew_member, it)
+            }
+            binding.crewPlaybackMode.setText(playbackModeCopy(crewState.playback.mode))
+            binding.crewQueuePreview.text = crewState.queue
+                .filter { it.id != crewState.playback.currentQueueItemId }
+                .take(2)
+                .joinToString(separator = " · ") { it.track.title }
+                .ifBlank { getString(R.string.lng_crew_queue_preview_empty) }
+        }
+    }
+
+    private fun playbackModeCopy(mode: CrewPlaybackMode) =
+        when (mode) {
+            CrewPlaybackMode.IDLE -> R.string.lbl_crew_playback_idle
+            CrewPlaybackMode.PREPARING -> R.string.lbl_crew_playback_preparing
+            CrewPlaybackMode.PLAYING -> R.string.lbl_crew_playback_playing
+            CrewPlaybackMode.PAUSED -> R.string.lbl_crew_playback_paused
+            CrewPlaybackMode.BUFFERING -> R.string.lbl_crew_playback_buffering
+            CrewPlaybackMode.ENDED -> R.string.lbl_crew_playback_ended
+        }
+
+    private fun renderPeerMediaBlocked(blocked: Boolean) {
+        binding?.crewPushPullPrompt?.isVisible = blocked && !crewSettings.pushPullEnabled
+    }
+
+    private fun showReactionPicker() {
+        val reactions = model.allowedReactions
+        if (reactions.isEmpty()) return
+        reactionDialog?.dismiss()
+        reactionDialog = MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.ttl_react_to_crew)
+            .setItems(reactions.toTypedArray()) { _, index ->
+                viewLifecycleOwner.lifecycleScope.launch { model.sendReaction(reactions[index]) }
+            }
+            .setNegativeButton(R.string.lbl_cancel, null)
+            .show()
+            .also { dialog ->
+                dialog.setOnDismissListener {
+                    if (reactionDialog === dialog) reactionDialog = null
+                }
+            }
+    }
+
+    private fun showCrewReaction(reaction: ActiveCrewReaction) {
+        val root = binding?.root ?: return
+        val density = resources.displayMetrics.density
+        val reactionView = TextView(requireContext()).apply {
+            text = reaction.event.emoji
+            textSize = 42f
+            alpha = 0f
+            scaleX = 0.82f
+            scaleY = 0.82f
+            translationX = (Math.floorMod(reaction.event.id.value.hashCode(), 81) - 40) * density
+        }
+        root.addView(
+            reactionView,
+            CoordinatorLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+                bottomMargin = (112 * density).toInt()
+            },
+        )
+        reactionViews += reactionView
+        reactionView.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(120L).withEndAction {
+            reactionView.animate().translationY(-180 * density).alpha(0f).setDuration(1_300L)
+                .withEndAction {
+                    (reactionView.parent as? ViewGroup)?.removeView(reactionView)
+                    reactionViews -= reactionView
+                }
+                .start()
+        }.start()
     }
 
     private fun shareInvite(inviteLink: String) {

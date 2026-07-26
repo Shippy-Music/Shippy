@@ -278,6 +278,22 @@
     <string name="lng_crew_qr_code">Scan this code to join the Crew.</string>
     <string name="lng_scan_crew_qr_code">Point your camera at a Crew QR code.</string>
     <string name="ttl_react_to_crew">React to Crew</string>
+    <string name="lbl_open_queue">Open queue</string>
+    <string name="lbl_react_to_crew">React</string>
+    <string name="lbl_now_playing">Now playing</string>
+    <string name="lbl_no_track_playing">Nothing playing</string>
+    <string name="lbl_added_by_crew_member">Added by %1$s</string>
+    <string name="lbl_crew_playback_idle">Idle</string>
+    <string name="lbl_crew_playback_preparing">Preparing</string>
+    <string name="lbl_crew_playback_playing">Playing</string>
+    <string name="lbl_crew_playback_paused">Paused</string>
+    <string name="lbl_crew_playback_buffering">Buffering</string>
+    <string name="lbl_crew_playback_ended">Ended</string>
+    <string name="lng_crew_queue_preview_empty">No more tracks queued.</string>
+    <plurals name="plr_crew_queue_items">
+        <item quantity="one">%d track in shared queue</item>
+        <item quantity="other">%d tracks in shared queue</item>
+    </plurals>
     <string name="lbl_end_crew">End Crew</string>
     <string name="lbl_leave_crew">Leave Crew</string>
     <string name="ttl_join_crew">Join Crew</string>
