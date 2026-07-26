@@ -168,6 +168,9 @@ dependencies {
     // Crew direct P2P data channels (shadowed, stripped WebRTC runtime)
     implementation 'io.github.webrtc-sdk:android-prefixed-stripped:144.7559.09'
 
+    // Crew hosted-relay WebSocket transport
+    implementation 'com.squareup.okhttp3:okhttp:5.3.0'
+
     // Crew invitation QR display and scanning
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
     implementation 'com.google.zxing:core:3.5.4'

@@ -295,6 +295,9 @@ temporarily by the active Crew.
         end-to-end encryption/authentication and explicit route closure.
 - [ ] Implement optional media fan-out with bounded memory and no permanent media.
 - [ ] Add configuration and health check in Shippy settings.
+  - [x] Add validated native edit/replace/clear configuration for the exact HTTPS
+        relay endpoint.
+  - [ ] Add bounded live health/registration feedback.
 - [ ] Support relay-assisted reconnection and larger groups.
 - [x] Package documented local/container deployment without unrelated services.
 

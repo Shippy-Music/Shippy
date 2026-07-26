@@ -365,6 +365,13 @@ TURN, control fan-out, media fan-out, or the completed larger-session relay.
 Those remain explicit later layers rather than being implied by the signaling
 service.
 
+The matching Android adapter keeps each signaling route end-to-end encrypted.
+It derives independent host-to-join and join-to-host AES-GCM keys from the
+short-lived invitation secret, exact invite identity/lifetime, configured relay
+endpoint, and relay-generated route ID. Strict sequence numbers reject replay
+and reordering. The first encrypted hello is still only a claim; the existing
+WebRTC DTLS-fingerprint-bound join proof authenticates the actual Crew member.
+
 ### Group scaling
 
 Small groups may use direct connections. Avoid an unbounded full media mesh.

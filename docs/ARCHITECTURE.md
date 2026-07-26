@@ -553,6 +553,14 @@ end-to-end signaling confidentiality and final fingerprint-bound Crew join
 authentication; the relay only routes ciphertext. It is a signaling foundation,
 not TURN, control fan-out, media fan-out, or a membership authority.
 
+The Android adapter mirrors that envelope through one bounded OkHttp WebSocket.
+Every random route derives directional AES-256-GCM keys and nonce prefixes from
+the invitation secret, exact invitation identity/lifetime, relay endpoint, and
+route ID. An encrypted hello supplies only a provisional member/display-name
+claim; the existing DTLS-fingerprint-bound WebRTC join proof remains the final
+membership authority. Host registration readiness is explicit so production
+launchers cannot advertise a remote invite before the relay accepts it.
+
 The stripped artifact keeps the current WebRTC data-channel/ICE APIs while
 removing unneeded software video codecs. Its published minimum SDK is 21
 (Shippy is 24), and the inspected AAR is about 13.8 MB before APK ABI splitting

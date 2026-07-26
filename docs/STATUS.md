@@ -395,6 +395,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Selecting a SAF download destination now validates it as an Auxio Local source,
   tracks whether Shippy auto-added it, preserves manual sources/grants, removes
   only a replaced Shippy-owned source, and requests a local reindex.
+- MediaStore-mode libraries now append configured SAF sources through the same
+  filesystem factory used by indexing and change observation. MediaStore wins
+  exact Musikr-path duplicates, so an existing file in the selected download
+  folder remains discoverable without changing the user's Local location mode.
 - Android playback polish reuses Auxio instead of rebuilding it: the existing
   system equalizer session/panel, ReplayGain processor, public MediaStyle
   notification/lock-screen controls, audio-focus/noisy handling, headset and
@@ -421,6 +425,14 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   rate/capacity/backpressure limits, health reporting, bounded shutdown, and a
   minimal non-root container. It retains/logs no identifiers or payloads and is
   explicitly not TURN, control fan-out, or media fan-out.
+- Android now has a bounded hosted-relay signaling adapter matching that wire
+  protocol. Each route performs invite-secret-derived directional AES-GCM,
+  exchanges an encrypted member/display-name claim, and still relies on the
+  existing WebRTC fingerprint-bound join proof as final membership authority.
+  Host multiplexing and join lifecycle are implemented but not yet launcher-wired.
+- Settings now stores only a validated optional HTTPS relay endpoint through the
+  typed Crew contract and provides native edit/replace/clear UI. Invalid or
+  corrupt persisted values are treated as unconfigured.
 
 ## In Progress
 
@@ -467,10 +479,6 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   probe rendering are XML/static-checked only and remain compile/device-unverified.
 - WorkManager/Hilt worker generation, SAF storage, and foreground download
   execution are code/static-checked but compile/device-unverified.
-- The selected download directory enters Auxio's SAF source query. Users already
-  in MediaStore location mode keep that mode to avoid silently replacing their
-  library; hybrid MediaStore-plus-SAF indexing remains an explicit integration
-  gap.
 - LRCLIB response shape was live-checked on 2026-07-25; Kotlin parsing, Hilt
   multibinding, and playback lookup remain compile/device-unverified.
 - Canonical Media3 custom-cache-key/header routing is implemented and
@@ -480,6 +488,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   artwork path.
 - Final device behavior is deliberately unverified until the owner performs the
   build/test handoff.
+- The hosted-relay Android adapter is static-checked only. Its OkHttp 5.3.0 API,
+  relay registration/route lifecycle, and encrypted signaling interoperability
+  still require a real Gradle/Android and relay integration pass.
 
 ## Next Concrete Actions
 
@@ -497,8 +508,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider and Search-to-play paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, and WebRTC boundary |
-| New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport policies |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider and Search-to-play paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
+| New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport/hosted-relay policies |
 | External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
 | Static structure | Parsed | Curated app Graphify AST refreshed after the Crew/player bridge; XML parsing and `git diff --check` used where applicable |
 | APK/device | Not verified | Owner handoff stage |
