@@ -22,6 +22,9 @@ different provider, download, local file, or Crew peer.
 8. The coordinator is an implementation role, not a privileged product role.
 9. Loss of one device must not corrupt session state.
 10. Network and provider machinery must not leak into normal playback UI.
+11. Canonical shared queue state contains stable media identity but never a
+    playable device/provider locator, permanent Download projection, or
+    Crew-temporary cache projection.
 
 ## 2. Terms
 
@@ -224,6 +227,13 @@ Local items:
 
 Availability messages reveal only necessary capability/status, not full local
 file paths or unrelated library contents.
+
+The contributing phone retains an exact Local `content://` locator only in one
+active-session private registry keyed by the duplicate-safe queue occurrence and
+candidate identity. It overlays that locator only for local playback and
+authorized Push & Pull supply. Queue replacement/pruning and session teardown
+remove stale entries. Every control serialization path independently strips
+playable locators and private candidate kinds as a final no-leak boundary.
 
 ## 9. Prefetch
 

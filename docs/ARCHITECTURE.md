@@ -583,6 +583,12 @@ loser, and hands only one peer to the existing join coordinator. The direct
 WebRTC attempt uses public STUN; TURN credentials, transport migration, and full
 relay fallback remain explicit later work.
 
+Relay Settings stores only a validated HTTPS endpoint. Its health probe derives
+the configured origin's public `/healthz`, performs one cancellable bounded GET
+through the relay HTTP client, and accepts only the relay's small typed 2xx JSON
+response. UI generation checks prevent a stale response from overwriting a
+newly replaced or cleared endpoint.
+
 The stripped artifact keeps the current WebRTC data-channel/ICE APIs while
 removing unneeded software video codecs. Its published minimum SDK is 21
 (Shippy is 24), and the inspected AAR is about 13.8 MB before APK ABI splitting
@@ -748,6 +754,16 @@ coordinator first fetches from another joiner, publishes temporary availability,
 and then redistributes. Reconciliation is serialized, obsolete requests are
 cancelled, and rejected/detached suppliers enter one bounded cooldown.
 
+`CrewPrivateSourceRegistry` is the separate per-device source projection for
+exact Local media. It exists only for the one active Crew, keys access by
+session/member/queue occurrence/candidate identity, and never enters Room,
+snapshots, or transport payloads. Local action submission captures the exact
+`content://` source before publicizing the queue; playback and supplier
+authorization overlay it only on the contributing phone. The control codec
+publicizes again defensively, stripping every playable locator and all
+Download/Crew-temporary projections while retaining stable provider identity
+and credential-free HTTPS artwork.
+
 Primary evidence:
 
 - Android NSD: https://developer.android.com/reference/android/net/nsd/NsdManager
@@ -781,12 +797,10 @@ comparison and submit only real differences through `ActiveCrewRuntime`, so a
 remote application does not ordinarily echo back as a second action. An
 existing host player seeds an empty new Crew once.
 
-The first broad bridge removes synthesized `DOWNLOAD` and `CREW_TEMPORARY`
-candidates before publication. It temporarily retains exact Local
-`content://` candidates because supplier authorization still reads that local
-source from canonical state. Release hardening must move that locator into a
-private per-device source projection while leaving only path-free identity in
-the shared queue.
+The bridge removes synthesized `DOWNLOAD` and `CREW_TEMPORARY` candidates before
+publication, captures exact Local sources into the active private registry, and
+compares only public queue projections. Canonical shared state therefore remains
+locator-free without creating a second playback queue.
 
 ## 12. UI Runtime
 

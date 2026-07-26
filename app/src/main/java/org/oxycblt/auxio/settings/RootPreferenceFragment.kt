@@ -40,6 +40,7 @@ import com.google.android.material.transition.MaterialFadeThrough
 import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.MusicViewModel
@@ -47,6 +48,8 @@ import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
 import org.oxycblt.auxio.shippy.crew.settings.CrewRelayLocatorSettingInput
 import org.oxycblt.auxio.shippy.crew.settings.CrewRelayLocatorSettingResult
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHealth
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHealthProbe
 import org.oxycblt.auxio.shippy.download.DownloadDestinationReconciler
 import org.oxycblt.auxio.shippy.download.DownloadDestinationState
 import org.oxycblt.auxio.shippy.download.SafDownloadStorage
@@ -70,6 +73,9 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     @Inject lateinit var downloadStorage: SafDownloadStorage
     @Inject lateinit var downloadDestinationReconciler: DownloadDestinationReconciler
     @Inject lateinit var crewSettings: CrewSettings
+    @Inject lateinit var crewRelayHealthProbe: CrewRelayHealthProbe
+    private var crewRelayHealthGeneration = 0L
+    private var crewRelayHealthJob: Job? = null
     private val downloadDestinationLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
             if (uri != null) {
@@ -96,7 +102,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         super.onResume()
         providerSettingsModel.refresh(force = false)
         lifecycleScope.launch { refreshDownloadDestination() }
-        updateCrewRelaySummary()
+        probeCrewRelayHealth()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -192,12 +198,34 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         updateDownloadDestinationSummary()
     }
 
-    private fun updateCrewRelaySummary() {
+    private fun probeCrewRelayHealth() {
         val preference =
             findPreference<Preference>(getString(R.string.set_key_crew_relay_locator)) ?: return
-        preference.summary =
-            CrewRelayLocatorSettingInput.summary(crewSettings.relayLocator)
-                ?: getString(R.string.set_crew_relay_not_configured)
+        val locator = crewSettings.relayLocator
+        val generation = ++crewRelayHealthGeneration
+        crewRelayHealthJob?.cancel()
+        if (locator == null) {
+            preference.summary = getString(R.string.set_crew_relay_not_configured)
+            return
+        }
+        val summary = CrewRelayLocatorSettingInput.summary(locator) ?: return
+        preference.summary = getString(R.string.set_crew_relay_checking, summary)
+        crewRelayHealthJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                when (crewRelayHealthProbe.probe(locator)) {
+                    is CrewRelayHealth.Healthy -> R.string.set_crew_relay_reachable
+                    CrewRelayHealth.Unreachable,
+                    CrewRelayHealth.InvalidResponse -> R.string.set_crew_relay_unreachable
+                }
+                    .let { result ->
+                        if (
+                            generation == crewRelayHealthGeneration &&
+                                crewSettings.relayLocator?.value == locator.value
+                        ) {
+                            preference.summary = getString(result, summary)
+                        }
+                    }
+            }
     }
 
     private fun renderLastFm(state: LastFmSettingsState) {
@@ -344,7 +372,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         dialog.setOnShowListener {
             dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
                 crewSettings.setRelayLocator("")
-                updateCrewRelaySummary()
+                probeCrewRelayHealth()
                 dialog.dismiss()
             }
             dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
@@ -352,7 +380,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 when (crewSettings.setRelayLocator(endpoint.text?.toString().orEmpty())) {
                     is CrewRelayLocatorSettingResult.Configured,
                     CrewRelayLocatorSettingResult.Cleared -> {
-                        updateCrewRelaySummary()
+                        probeCrewRelayHealth()
                         dialog.dismiss()
                     }
                     CrewRelayLocatorSettingResult.Invalid -> {

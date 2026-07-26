@@ -257,7 +257,7 @@ Crew with relay fallback hooks.
   - The persisted default-off preference exposes live changes to the future
     active runtime; media policy still scopes acceptance to its exact session.
 - [x] Implement supplier availability without exposing library contents.
-- [ ] Implement media manifest, chunking, integrity, encryption, and backpressure.
+- [x] Implement media manifest, chunking, integrity, encryption, and backpressure.
   - [x] Bounded encrypted-channel wire frames, exact transfer identity,
         SHA-256 manifest/chunks, receiver reservation, and explicit-resume
         controller foundation.
@@ -306,10 +306,10 @@ temporarily by the active Crew.
   - [x] Implement bounded opaque host/join signaling routes with endpoint-owned
         end-to-end encryption/authentication and explicit route closure.
 - [ ] Implement optional media fan-out with bounded memory and no permanent media.
-- [ ] Add configuration and health check in Shippy settings.
+- [x] Add configuration and health check in Shippy settings.
   - [x] Add validated native edit/replace/clear configuration for the exact HTTPS
         relay endpoint.
-  - [ ] Add bounded live health/registration feedback.
+  - [x] Add bounded live health/registration feedback.
     - [x] Surface per-host registration success/fallback truth in the active
           Crew presentation.
 - [ ] Support relay-assisted reconnection and larger groups.

@@ -468,6 +468,15 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   prefetch planner selects reachable suppliers, joiners wait for coordinator
   redistribution when another joiner is unreachable, failed suppliers enter a
   bounded cooldown, and obsolete transfers are cancelled.
+- Canonical Crew queue state is now path- and locator-free. One active-session
+  private source registry retains exact Local `content://` access only on the
+  contributing device, overlays it only for local resolution/supply, prunes it
+  with the accepted queue, and clears it at session end. The control codec
+  defensively removes every playable locator plus Download/Crew-temporary
+  candidates before any queue item reaches a transport.
+- Relay Settings now performs one bounded cancellable `GET /healthz` against the
+  configured HTTPS origin and reports Checking, Reachable, or Unreachable
+  without resolving media or exposing session identity.
 
 ## In Progress
 
@@ -478,8 +487,6 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Reconnection, transport migration, and TURN/relay fallback beyond hosted
   signaling.
 - Transport migration after a reconnect.
-- Removing the remaining canonical Local locator from shared Crew queue state
-  now that path-free availability and adaptive supplier selection are wired.
 
 ## Not Started
 
@@ -502,10 +509,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Canonical playback Room v8 generation, Hilt wiring, fresh-resolution restore,
   and its focused queue-remapping tests are authored/static-checked only and
   remain uncompiled.
-- The first top-down Crew/player bridge keeps an exact Local `content://`
-  candidate in canonical queue state because current supplier authorization
-  still depends on it. A private per-device source projection must remove that
-  locator from transmitted canonical state before Crew media is release-ready.
+- The private Crew source projection, protocol no-leak boundary, and relay
+  health rendering are static-inspected with focused tests authored, but remain
+  compile/device-unverified.
 - Safe ungraceful election needs a strict majority. A direct two-member Crew
   pauses after coordinator loss until reconnection; the future relay/witness
   path must restore availability without weakening split-brain safety.
@@ -534,10 +540,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Finish the remaining player/audio/widget action surfaces.
-2. Wire secure rejoin, transport migration, and practical TURN/relay fallback.
-3. Remove canonical Local locators from shared Crew state, then harden relay
-   media/reconnection behavior.
+1. Wire live secure rejoin and transport migration through the existing
+   authenticated session engine.
+2. Finish the remaining player/audio/Android Auto surfaces.
+3. Add practical TURN and bounded relay media/larger-session behavior.
 
 ## Verification Ledger
 

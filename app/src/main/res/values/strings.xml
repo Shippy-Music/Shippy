@@ -365,6 +365,9 @@
     <string name="set_crew_relay">Hosted Crew relay</string>
     <string name="set_key_crew_relay_locator">crew_relay_locator</string>
     <string name="set_crew_relay_not_configured">Not configured</string>
+    <string name="set_crew_relay_checking">%1$s · Checking…</string>
+    <string name="set_crew_relay_reachable">%1$s · Reachable</string>
+    <string name="set_crew_relay_unreachable">%1$s · Unreachable</string>
     <string name="set_crew_relay_endpoint">HTTPS relay endpoint</string>
     <string name="set_crew_relay_message">Optional. Used for remote Crew connectivity. Session traffic stays end-to-end encrypted.</string>
     <string name="set_crew_relay_save">Save relay</string>

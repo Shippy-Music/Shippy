@@ -305,7 +305,8 @@ Important choices:
 - Download destination and quality
 - Local source folders
 - Push & Pull one-toggle state
-- Hosted relay address/configuration
+- Hosted relay address/configuration with bounded Checking/Reachable/Unreachable
+  feedback
 - Equalizer, normalization, gapless/crossfade
 - Sleep timer defaults if any
 - Dynamic color, theme, reduced motion
