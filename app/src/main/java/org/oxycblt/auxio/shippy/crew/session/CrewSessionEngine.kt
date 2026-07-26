@@ -76,7 +76,9 @@ import org.oxycblt.auxio.shippy.crew.transport.CrewTransportState
 import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
 
-private const val MAX_SESSION_PEERS = 63
+/** Honest V1 product bound: one local member plus at most seven active peers. */
+const val CREW_MAX_SESSION_MEMBERS = 8
+private const val MAX_SESSION_PEERS = CREW_MAX_SESSION_MEMBERS
 private const val OUTBOUND_CONTROL_CAPACITY = 32
 private const val CONTROL_SEND_TIMEOUT_MS = 10_000L
 private const val CONTROL_RETRY_DELAY_MS = 20L
@@ -122,7 +124,12 @@ enum class CrewAdmissionRejection {
     NOT_COORDINATOR,
     PEER_NOT_ATTACHED,
     PEER_ID_MISMATCH,
+    SESSION_FULL,
     SEQUENCER_REJECTED,
+}
+
+internal object CrewSessionCapacity {
+    fun hasRoom(state: CrewState): Boolean = state.members.size < CREW_MAX_SESSION_MEMBERS
 }
 
 sealed interface CrewGracefulLeaveResult {
@@ -437,6 +444,11 @@ class CrewSessionEngine(
             if (peers[transportMemberId] == null) {
                 return@withLock CrewAdmissionResult.Rejected(
                     CrewAdmissionRejection.PEER_NOT_ATTACHED
+                )
+            }
+            if (!CrewSessionCapacity.hasRoom(current)) {
+                return@withLock CrewAdmissionResult.Rejected(
+                    CrewAdmissionRejection.SESSION_FULL
                 )
             }
             val request =
