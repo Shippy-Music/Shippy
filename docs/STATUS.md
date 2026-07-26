@@ -80,8 +80,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Provider albums, artists, and playlists now use one direct plus/check action,
   persist through a non-destructive Room v9 migration, support pinning from the
   restrained detail overflow, render artwork-first in Library, and reopen
-  through their exact provider identity. Metadata refresh preserves existing
-  pin and save-time state.
+  through their exact provider identity. Pinned provider collections join Home's
+  existing permanent and playlist shortcuts. Metadata refresh preserves
+  existing pin and save-time state.
 - Mini/full player identity, artwork, queue, MediaSession, notification metadata,
   headset/media-button presence checks, and widgets consume canonical playback
   items; exact local artwork behavior is retained.

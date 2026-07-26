@@ -23,6 +23,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentShippyHomeBinding
 import org.oxycblt.auxio.home.list.LibrarySystemCollectionAdapter
+import org.oxycblt.auxio.home.list.SavedProviderEntityAdapter
 import org.oxycblt.auxio.home.list.ShippyPlaylistProjectionAdapter
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicViewModel
@@ -39,6 +40,8 @@ import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsState
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
 import org.oxycblt.auxio.shippy.library.systemRows
+import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
+import org.oxycblt.auxio.shippy.provider.ui.ProviderEntityDetailFragment
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 
@@ -58,7 +61,10 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
         }
     private val pinnedPlaylistAdapter =
         ShippyPlaylistProjectionAdapter { playlist -> openCollection(playlist.id) }
-    private val libraryShortcutsAdapter = ConcatAdapter(systemCollectionAdapter, pinnedPlaylistAdapter)
+    private val pinnedProviderAdapter =
+        SavedProviderEntityAdapter { saved -> openProviderEntity(saved) }
+    private val libraryShortcutsAdapter =
+        ConcatAdapter(systemCollectionAdapter, pinnedPlaylistAdapter, pinnedProviderAdapter)
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentShippyHomeBinding.inflate(inflater)
@@ -176,12 +182,29 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
             )
         )
         pinnedPlaylistAdapter.update(state.userPlaylists.filter { it.isPinned })
+        pinnedProviderAdapter.submitList(state.savedProviderEntities.filter { it.isPinned })
     }
 
     private fun openCollection(collectionId: LibraryCollectionId) {
         findNavController().navigate(
             R.id.shippy_collection_detail_fragment,
             bundleOf("collectionId" to collectionId.value),
+        )
+    }
+
+    private fun openProviderEntity(saved: SavedProviderEntity) {
+        val entity = saved.entity
+        findNavController().navigate(
+            R.id.provider_entity_detail_fragment,
+            bundleOf(
+                ProviderEntityDetailFragment.ARG_PROVIDER_ID to entity.providerId.value,
+                ProviderEntityDetailFragment.ARG_SOURCE_ITEM_ID to entity.sourceItemId,
+                ProviderEntityDetailFragment.ARG_ENTITY_TYPE to entity.type.name,
+                ProviderEntityDetailFragment.ARG_TITLE to entity.title,
+                ProviderEntityDetailFragment.ARG_SUBTITLE to entity.subtitle,
+                ProviderEntityDetailFragment.ARG_ARTWORK to entity.artwork,
+                ProviderEntityDetailFragment.ARG_ORIGINAL_URL to entity.originalUrl,
+            ),
         )
     }
 }
