@@ -226,6 +226,40 @@
         <action
             android:id="@+id/play_from_genre"
             app:destination="@id/play_from_genre_dialog" />
+        <action
+            android:id="@+id/open_provider_entity"
+            app:destination="@id/provider_entity_detail_fragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/provider_entity_detail_fragment"
+        android:name="org.oxycblt.auxio.shippy.provider.ui.ProviderEntityDetailFragment"
+        android:label="provider_entity_detail_fragment"
+        tools:layout="@layout/fragment_provider_entity_detail">
+        <argument
+            android:name="providerId"
+            app:argType="string" />
+        <argument
+            android:name="sourceItemId"
+            app:argType="string" />
+        <argument
+            android:name="entityType"
+            app:argType="string" />
+        <argument
+            android:name="title"
+            app:argType="string" />
+        <argument
+            android:name="subtitle"
+            app:argType="string"
+            app:nullable="true" />
+        <argument
+            android:name="artwork"
+            app:argType="string"
+            app:nullable="true" />
+        <argument
+            android:name="originalUrl"
+            app:argType="string"
+            app:nullable="true" />
     </fragment>
 
     <fragment

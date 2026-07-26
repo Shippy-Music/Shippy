@@ -130,6 +130,9 @@ through Auxio’s existing playback stack.
       Crew cache -> download -> preferred -> fallback -> Crew peer.
 - [x] Add partial provider failure UI without failing the entire search.
 - [x] Add unified provider search and clearly labelled On this device results.
+- [x] Add typed JioSaavn album, artist, and playlist results with internal
+      detail, direct track playback, collection playback, and shuffle through
+      the canonical player.
 
 **Validation:**
 

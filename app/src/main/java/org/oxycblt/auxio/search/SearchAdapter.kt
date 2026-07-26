@@ -49,6 +49,7 @@ import org.oxycblt.musikr.Song
 class SearchAdapter(
     private val listener: SelectableListListener<Music>,
     private val onProviderTrackClick: (ProviderTrackItem) -> Unit,
+    private val onProviderEntityClick: (ProviderEntityItem) -> Unit,
 ) :
     SelectionIndicatorAdapter<Item, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
 
@@ -63,6 +64,7 @@ class SearchAdapter(
             is BasicHeader -> BasicHeaderViewHolder.VIEW_TYPE
             is SearchTextHeader -> SearchTextHeaderViewHolder.VIEW_TYPE
             is ProviderTrackItem -> ProviderTrackViewHolder.VIEW_TYPE
+            is ProviderEntityItem -> ProviderEntityViewHolder.VIEW_TYPE
             is ProviderSearchFailureItem -> ProviderSearchFailureViewHolder.VIEW_TYPE
             else -> super.getItemViewType(position)
         }
@@ -78,6 +80,7 @@ class SearchAdapter(
             BasicHeaderViewHolder.VIEW_TYPE -> BasicHeaderViewHolder.from(parent)
             SearchTextHeaderViewHolder.VIEW_TYPE -> SearchTextHeaderViewHolder.from(parent)
             ProviderTrackViewHolder.VIEW_TYPE -> ProviderTrackViewHolder.from(parent)
+            ProviderEntityViewHolder.VIEW_TYPE -> ProviderEntityViewHolder.from(parent)
             ProviderSearchFailureViewHolder.VIEW_TYPE ->
                 ProviderSearchFailureViewHolder.from(parent)
             else -> error("Invalid item type $viewType")
@@ -94,6 +97,8 @@ class SearchAdapter(
             is SearchTextHeader -> (holder as SearchTextHeaderViewHolder).bind(item)
             is ProviderTrackItem ->
                 (holder as ProviderTrackViewHolder).bind(item, onProviderTrackClick)
+            is ProviderEntityItem ->
+                (holder as ProviderEntityViewHolder).bind(item, onProviderEntityClick)
             is ProviderSearchFailureItem ->
                 (holder as ProviderSearchFailureViewHolder).bind(item)
         }
@@ -122,6 +127,8 @@ class SearchAdapter(
                         oldItem is SearchTextHeader && newItem is SearchTextHeader ->
                             oldItem == newItem
                         oldItem is ProviderTrackItem && newItem is ProviderTrackItem ->
+                            oldItem == newItem
+                        oldItem is ProviderEntityItem && newItem is ProviderEntityItem ->
                             oldItem == newItem
                         oldItem is ProviderSearchFailureItem &&
                             newItem is ProviderSearchFailureItem -> oldItem == newItem

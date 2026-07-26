@@ -11,9 +11,13 @@
 package org.oxycblt.auxio.shippy.provider.jiosaavn
 
 import java.io.IOException
+import java.net.URI
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.supervisorScope
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -29,6 +33,9 @@ import org.oxycblt.auxio.shippy.domain.TrackRealm
 import org.oxycblt.auxio.shippy.provider.MusicProvider
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderDescriptor
+import org.oxycblt.auxio.shippy.provider.ProviderBrowsePage
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
+import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
 import org.oxycblt.auxio.shippy.provider.ProviderHealth
 import org.oxycblt.auxio.shippy.provider.ProviderResult
@@ -51,6 +58,9 @@ constructor(
                 setOf(
                     ProviderCapability.SEARCH,
                     ProviderCapability.TRACK,
+                    ProviderCapability.ALBUM,
+                    ProviderCapability.ARTIST,
+                    ProviderCapability.PLAYLIST,
                     ProviderCapability.STREAM,
                     ProviderCapability.DOWNLOAD,
                 ),
@@ -79,56 +89,106 @@ constructor(
             return ProviderResult.Success(SearchPage(emptyList()))
         }
         val page = continuation?.toIntOrNull()?.takeIf { it > 0 } ?: 1
-        val response =
-            try {
-                transport.execute(
-                    ProviderHttpRequest(
-                        url = searchUrl(normalizedQuery, page),
-                        headers = REQUEST_HEADERS,
-                    )
-                )
-            } catch (error: IOException) {
-                return ProviderResult.Failure(
-                    kind = ProviderFailureKind.NETWORK,
-                    retryable = true,
-                    message = error.message,
-                )
-            }
-        if (response.statusCode !in 200..299) {
-            return response.statusFailure()
-        }
-
-        return try {
-            val resultArray = JSONObject(response.bodyAsUtf8()).songResults()
-            val tracks =
-                buildList {
-                    for (index in 0 until resultArray.length()) {
-                        val responseMap = resultArray.optJSONObject(index)?.toMap() ?: continue
-                        runCatching { JioSaavnResponseMapper.mapSong(responseMap).toTrack() }
-                            .getOrNull()
-                            ?.let(::add)
-                    }
+        return supervisorScope {
+            val entitySearch =
+                if (page == 1) async { searchEntities(normalizedQuery) } else null
+            val response =
+                try {
+                    request(searchUrl(normalizedQuery, page))
+                } catch (error: IOException) {
+                    entitySearch?.cancel()
+                    return@supervisorScope networkFailure(error)
                 }
-            if (resultArray.length() > 0 && tracks.isEmpty()) {
+            if (response.statusCode !in 200..299) {
+                entitySearch?.cancel()
+                return@supervisorScope response.statusFailure()
+            }
+
+            try {
+                val resultArray = JSONObject(response.bodyAsUtf8()).songResults()
+                val tracks =
+                    buildList {
+                        for (index in 0 until resultArray.length()) {
+                            val responseMap = resultArray.optJSONObject(index)?.toMap() ?: continue
+                            runCatching { JioSaavnResponseMapper.mapSong(responseMap).toTrack() }
+                                .getOrNull()
+                                ?.let(::add)
+                        }
+                    }
+                if (resultArray.length() > 0 && tracks.isEmpty()) {
+                    entitySearch?.cancel()
+                    ProviderResult.Failure(
+                        kind = ProviderFailureKind.MALFORMED_RESPONSE,
+                        retryable = false,
+                        message = "JioSaavn returned no usable song records",
+                    )
+                } else {
+                    ProviderResult.Success(
+                        SearchPage(
+                            tracks = tracks,
+                            entities = entitySearch?.await().orEmpty(),
+                            continuation =
+                                if (resultArray.length() >= PAGE_SIZE) "${page + 1}" else null,
+                        )
+                    )
+                }
+            } catch (error: JSONException) {
+                entitySearch?.cancel()
                 ProviderResult.Failure(
                     kind = ProviderFailureKind.MALFORMED_RESPONSE,
                     retryable = false,
-                    message = "JioSaavn returned no usable song records",
-                )
-            } else {
-                ProviderResult.Success(
-                    SearchPage(
-                        tracks = tracks,
-                        continuation = if (resultArray.length() >= PAGE_SIZE) "${page + 1}" else null,
-                    )
+                    message = error.message,
                 )
             }
-        } catch (error: JSONException) {
-            ProviderResult.Failure(
-                kind = ProviderFailureKind.MALFORMED_RESPONSE,
+        }
+    }
+
+    override suspend fun browse(
+        entity: ProviderEntity,
+        continuation: String?,
+    ): ProviderResult<ProviderBrowsePage> {
+        if (entity.providerId != ID) {
+            return ProviderResult.Failure(
+                ProviderFailureKind.UNSUPPORTED,
                 retryable = false,
-                message = error.message,
+                message = "Entity does not belong to JioSaavn",
             )
+        }
+        val page =
+            continuation
+                ?.toIntOrNull()
+                ?.takeIf { entity.type == ProviderEntityType.ARTIST && it in 0..MAX_BROWSE_PAGE }
+                ?: 0
+        val response =
+            try {
+                request(browseUrl(entity, page))
+            } catch (error: IOException) {
+                return networkFailure(error)
+            }
+        if (response.statusCode !in 200..299) return response.statusFailure()
+        return try {
+            val body = JSONObject(response.bodyAsUtf8())
+            val tracks = body.browseSongResults(entity.type).mapNotNull { responseMap ->
+                runCatching { JioSaavnResponseMapper.mapSong(responseMap).toTrack() }.getOrNull()
+            }
+            ProviderResult.Success(
+                ProviderBrowsePage(
+                    entity = body.updatedEntity(entity),
+                    tracks = tracks,
+                    continuation =
+                        if (
+                            entity.type == ProviderEntityType.ARTIST &&
+                                tracks.size >= PAGE_SIZE &&
+                                page < MAX_BROWSE_PAGE
+                        ) {
+                            "${page + 1}"
+                        } else {
+                            null
+                        },
+                )
+            )
+        } catch (error: JSONException) {
+            ProviderResult.Failure(ProviderFailureKind.MALFORMED_RESPONSE, false, error.message)
         }
     }
 
@@ -166,6 +226,57 @@ constructor(
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
         return "$API_ENDPOINT&__call=search.getResults&p=$page&q=$encoded&n=$PAGE_SIZE"
     }
+
+    private suspend fun searchEntities(query: String): List<ProviderEntity> =
+        supervisorScope {
+            ProviderEntityType.entries.map { type ->
+                async {
+                    try {
+                        val response = request(entitySearchUrl(query, type))
+                        if (response.statusCode !in 200..299) return@async emptyList()
+                        JSONObject(response.bodyAsUtf8()).entityResults().mapNotNull { it.toProviderEntity(type) }
+                            .take(ENTITY_PAGE_SIZE)
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (_: Exception) {
+                        emptyList()
+                    }
+                }
+            }.flatMap { it.await() }
+        }
+
+    private fun entitySearchUrl(query: String, type: ProviderEntityType): String {
+        val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
+        val call =
+            when (type) {
+                ProviderEntityType.ALBUM -> "search.getAlbumResults"
+                ProviderEntityType.ARTIST -> "search.getArtistResults"
+                ProviderEntityType.PLAYLIST -> "search.getPlaylistResults"
+            }
+        return "$API_ENDPOINT&__call=$call&q=$encoded&n=$ENTITY_PAGE_SIZE"
+    }
+
+    private fun browseUrl(entity: ProviderEntity, page: Int): String {
+        val token = URLEncoder.encode(entity.sourceItemId, StandardCharsets.UTF_8.name())
+        val type = entity.type.name.lowercase()
+        val extra =
+            if (entity.type == ProviderEntityType.ARTIST) {
+                "&p=$page&n_song=$PAGE_SIZE&n_album=0"
+            } else {
+                ""
+            }
+        return "$API_ENDPOINT&__call=webapi.get&token=$token&type=$type$extra"
+    }
+
+    private suspend fun request(url: String) =
+        transport.execute(ProviderHttpRequest(url = url, headers = REQUEST_HEADERS))
+
+    private fun networkFailure(error: IOException) =
+        ProviderResult.Failure(
+            kind = ProviderFailureKind.NETWORK,
+            retryable = true,
+            message = error.message,
+        )
 
     /** Deep links carry provenance but never an expiring media locator, so look up this exact song. */
     private suspend fun resolveSongMediaUrl(candidate: TrackCandidate): String? {
@@ -254,6 +365,74 @@ constructor(
             ?: optJSONObject("songs")?.optJSONArray("results")
             ?: JSONArray()
 
+    private fun JSONObject.entityResults(): List<Map<String, Any?>> {
+        val results =
+            optJSONArray("results")
+                ?: optJSONObject("data")?.optJSONArray("results")
+                ?: JSONArray()
+        return List(results.length()) { index -> results.optJSONObject(index)?.toMap() }.filterNotNull()
+    }
+
+    private fun JSONObject.browseSongResults(type: ProviderEntityType): List<Map<String, Any?>> {
+        val container = optJSONObject("data") ?: this
+        val results =
+            when (type) {
+                ProviderEntityType.ARTIST -> container.optJSONArray("topSongs")
+                ProviderEntityType.ALBUM,
+                ProviderEntityType.PLAYLIST -> container.optJSONArray("list")
+            } ?: JSONArray()
+        return List(results.length()) { index -> results.optJSONObject(index)?.toMap() }.filterNotNull()
+    }
+
+    private fun JSONObject.updatedEntity(fallback: ProviderEntity): ProviderEntity {
+        val source = optJSONObject("data") ?: this
+        val map = source.toMap()
+        return map.toProviderEntity(fallback.type) ?: fallback
+    }
+
+    private fun Map<String, Any?>.toProviderEntity(type: ProviderEntityType): ProviderEntity? {
+        val originalUrl = text("perma_url")?.trim()?.takeIf(::isHttpsUrl) ?: return null
+        val sourceItemId = browseToken(originalUrl) ?: return null
+        val title =
+            sequenceOf(text("title"), text("name"), text("album"))
+                .mapNotNull { it?.decodeEntities()?.takeIf(String::isNotBlank) }
+                .firstOrNull()
+                ?: return null
+        val subtitle =
+            sequenceOf(text("subtitle"), text("role"), text("description"), text("artist"))
+                .mapNotNull { it?.decodeEntities()?.takeIf(String::isNotBlank) }
+                .distinct()
+                .joinToString(" · ")
+                .takeIf(String::isNotBlank)
+        val artwork = text("image")?.trim()?.takeIf(::isHttpsUrl)?.let(JioSaavnResponseMapper::normalizeArtworkUrl)
+        return runCatching {
+                ProviderEntity(
+                    providerId = ID,
+                    sourceItemId = sourceItemId,
+                    type = type,
+                    title = title,
+                    subtitle = subtitle,
+                    artwork = artwork,
+                    originalUrl = originalUrl,
+                )
+            }
+            .getOrNull()
+    }
+
+    private fun browseToken(url: String): String? =
+        runCatching {
+                URI(url).path.trimEnd('/').substringAfterLast('/').trim()
+            }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() && it.length <= 512 && !it.all(Char::isDigit) }
+
+    private fun isHttpsUrl(value: String): Boolean =
+        runCatching { URI(value).scheme.equals("https", ignoreCase = true) && !URI(value).host.isNullOrBlank() }
+            .getOrDefault(false)
+
+    private fun String.decodeEntities() =
+        replace("&amp;", "&").replace("&#039;", "'").replace("&#39;", "'").replace("&quot;", "\"").trim()
+
     private fun JSONObject.toMap(): Map<String, Any?> =
         keys().asSequence().associateWith { key -> get(key).toKotlinValue() }
 
@@ -300,6 +479,8 @@ constructor(
     private companion object {
         val ID = ProviderId("jiosaavn")
         const val PAGE_SIZE = 20
+        const val ENTITY_PAGE_SIZE = 5
+        const val MAX_BROWSE_PAGE = 7
         const val API_ENDPOINT =
             "https://www.jiosaavn.com/api.php?_format=json&_marker=0&api_version=4&ctx=web6dot0"
         val REQUEST_HEADERS =

@@ -19,6 +19,7 @@ import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.provider.MusicProvider
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderDescriptor
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderResult
@@ -38,9 +39,10 @@ data class ProviderSearchSection(
     val tracks: List<Track>,
     val continuation: String? = null,
     val failure: ProviderResult.Failure? = null,
+    val entities: List<ProviderEntity> = emptyList(),
 ) {
     init {
-        require(failure == null || tracks.isEmpty()) {
+        require(failure == null || (tracks.isEmpty() && entities.isEmpty())) {
             "A failed provider section cannot also contain fresh results"
         }
     }
@@ -78,6 +80,7 @@ constructor(
                     ProviderSearchSection(
                         provider = descriptor,
                         tracks = result.value.tracks,
+                        entities = result.value.entities,
                         continuation = result.value.continuation,
                     )
                 is ProviderResult.Failure ->

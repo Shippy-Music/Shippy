@@ -22,6 +22,8 @@ import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderDescriptor
 import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
 import org.oxycblt.auxio.shippy.provider.ProviderHealth
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
+import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderResult
 import org.oxycblt.auxio.shippy.provider.ProviderSelection
@@ -69,6 +71,28 @@ class UnifiedSearchRepositoryTest {
 
         assertEquals(ProviderSearchSnapshot.EMPTY, snapshot)
         assertTrue(provider.queries.isEmpty())
+    }
+
+    @Test
+    fun `provider entities remain with their provider section`() = runBlocking {
+        val entity =
+            ProviderEntity(
+                ProviderId("provider"),
+                "fixture-album",
+                ProviderEntityType.ALBUM,
+                "Fixture Album",
+                originalUrl = "https://example.test/album/fixture-album",
+            )
+        val provider = FakeProvider("provider", ProviderResult.Success(SearchPage(emptyList(), entities = listOf(entity))))
+        val repository =
+            UnifiedSearchRepository(
+                ProviderRegistry(setOf(provider)),
+                FixedProviderSettings(listOf(provider.descriptor.id)),
+            )
+
+        val snapshot = repository.search("fixture")
+
+        assertEquals(listOf(entity), snapshot.sections.single().entities)
     }
 
     private class FakeProvider(

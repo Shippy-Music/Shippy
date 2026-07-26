@@ -49,6 +49,7 @@ import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
 import org.oxycblt.auxio.playback.PlaybackDecision
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.ui.FadingToolbarOffsetListener
 import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
@@ -82,7 +83,11 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
     override val playbackModel: PlaybackViewModel by activityViewModels()
     override val musicModel: MusicViewModel by activityViewModels()
     private val searchAdapter =
-        SearchAdapter(this) { item -> searchModel.playProviderTrack(item.track) }
+        SearchAdapter(
+            listener = this,
+            onProviderTrackClick = { item -> searchModel.playProviderTrack(item.track) },
+            onProviderEntityClick = { item -> openProviderEntity(item.entity) },
+        )
     private var getContentLauncher: ActivityResultLauncher<String>? = null
     private var pendingImportTarget: Playlist? = null
     private var imm: InputMethodManager? = null
@@ -177,10 +182,12 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
                 val item =
                     searchModel.searchResults.value.getOrElse(it) {
                         return@setFullWidthLookup false
-                    }
+                }
                 item is PlainDivider ||
                     item is PlainHeader ||
                     item is SearchTextHeader ||
+                    item is ProviderTrackItem ||
+                    item is ProviderEntityItem ||
                     item is ProviderSearchFailureItem
             }
         }
@@ -212,6 +219,22 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
         super.onDestroyBinding(binding)
         binding.searchNormalToolbar.setOnMenuItemClickListener(null)
         binding.searchRecycler.adapter = null
+    }
+
+    private fun openProviderEntity(entity: ProviderEntity) {
+        hideKeyboard()
+        findNavController()
+            .navigateSafe(
+                SearchFragmentDirections.openProviderEntity(
+                    providerId = entity.providerId.value,
+                    sourceItemId = entity.sourceItemId,
+                    entityType = entity.type.name,
+                    title = entity.title,
+                    subtitle = entity.subtitle,
+                    artwork = entity.artwork,
+                    originalUrl = entity.originalUrl,
+                )
+            )
     }
 
     override fun onRealClick(item: Music) {

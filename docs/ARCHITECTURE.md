@@ -309,19 +309,20 @@ checkpoint validation, ordered events, or strict-majority election rules.
 
 ```kotlin
 interface MusicProvider {
-    val id: ProviderId
-    val capabilities: Set<ProviderCapability>
+    val descriptor: ProviderDescriptor
     fun search(...)
-    fun album(...)
-    fun artist(...)
-    fun playlist(...)
-    fun related(...)
+    fun browse(entity, continuation): ProviderBrowsePage
     fun resolve(candidate, constraints): ResolvedStream
-    fun health(): ProviderHealth
+    fun probeHealth(): ProviderHealth
 }
 ```
 
-Actual signatures use coroutines/Flow and typed results/errors.
+Actual signatures are suspending and return typed `ProviderResult` values.
+`ProviderEntity` is metadata-only and carries an opaque provider token, type,
+display metadata, and optional original HTTPS URL. It never carries playable
+media. Search may return tracks and album/artist/playlist entities; browse turns
+one entity into a playable track page without creating a second catalogue or
+player authority.
 
 Provider rules:
 

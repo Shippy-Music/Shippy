@@ -68,6 +68,13 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   and a labelled On this device section.
 - Provider Search results resolve asynchronously before entering the synchronized
   player authority and can start real JioSaavn playback.
+- JioSaavn Search now also returns bounded album, artist, and playlist records.
+  Their opaque provider tokens open an internal Auxio-native detail surface,
+  respect the existing Search filters, and play or shuffle the returned tracks
+  through the same canonical queue authority. Artist top tracks use explicit,
+  bounded continuation with an honest Load more action. Recorded fixtures cover
+  category isolation, browse shapes, and continuation; the live category and
+  detail endpoints were inspected on 2026-07-26.
 - Mini/full player identity, artwork, queue, MediaSession, notification metadata,
   headset/media-button presence checks, and widgets consume canonical playback
   items; exact local artwork behavior is retained.
@@ -506,8 +513,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## In Progress
 
-- Completing provider/player action surfaces beyond the first Search-to-play
-  vertical slice.
+- Completing provider/player actions beyond typed Search, internal provider
+  collection detail, and canonical collection playback.
 - Completing ordered relay control/media fan-out and larger-session behavior
   beyond direct WebRTC plus practical TURN fallback.
 - Renewable active-session reconnect credentials beyond the current short-lived
@@ -545,6 +552,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   path must restore availability without weakening split-brain safety.
 - Room/Hilt generation, JioSaavn/YouTube Music JSON parsing, Last.fm lifecycle,
   and provider playback are compile/device-unverified until the owner build.
+- JioSaavn multi-type Search and provider-detail parsing use undocumented web
+  endpoints. Recorded fixtures and a 2026-07-26 live shape inspection reduce
+  drift risk, but Kotlin/Hilt/navigation wiring remains compile/device-unverified.
 - Dynamic provider preferences, Hilt ViewModel generation, and live health
   probe rendering are XML/static-checked only and remain compile/device-unverified.
 - WorkManager/Hilt worker generation, SAF storage, and foreground download
@@ -571,7 +581,7 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Finish remaining provider/player and exact audio-option gaps.
+1. Finish remaining provider actions and exact audio-option gaps.
 2. Add renewable active-session reconnect credentials.
 3. Implement bounded relay control/media fan-out and larger-session behavior.
 
@@ -584,8 +594,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider and Search-to-play paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
-| New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport/hosted-relay policies |
-| External provider shape | Live-inspected | JioSaavn search and LRCLIB exact-lyrics responses on 2026-07-25 |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider Search-to-play plus JioSaavn album/artist/playlist browse paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
+| New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/JioSaavn browse/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport/hosted-relay policies |
+| External provider shape | Live-inspected | JioSaavn song/category/detail search and LRCLIB exact-lyrics responses, latest 2026-07-26 |
 | Static structure | Parsed | Curated app Graphify AST refreshed after the Crew/player bridge; XML parsing and `git diff --check` used where applicable |
 | APK/device | Not verified | Owner handoff stage |

@@ -42,6 +42,8 @@ import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
 import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.playback.PlaybackStartResult
 import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
+import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Library
@@ -128,12 +130,14 @@ constructor(
                         providers = null,
                         localItems = localItems,
                         providersLoading = true,
+                        filters = searchSettings.filters,
                     )
                 _searchResults.value =
                     combineSearchResults(
                         providers = providerSearch.await(),
                         localItems = localItems,
                         providersLoading = false,
+                        filters = searchSettings.filters,
                     )
             }
     }
@@ -153,12 +157,30 @@ constructor(
         providers: ProviderSearchSnapshot?,
         localItems: List<Item>,
         providersLoading: Boolean,
+        filters: Set<MusicType>,
     ): List<Item> =
         buildList {
-            if (providersLoading) {
+            val providerTypesEnabled =
+                filters.isEmpty() ||
+                    filters.any {
+                        it == MusicType.SONGS ||
+                            it == MusicType.ALBUMS ||
+                            it == MusicType.ARTISTS ||
+                            it == MusicType.PLAYLISTS
+                    }
+            if (providersLoading && providerTypesEnabled) {
                 add(BasicHeader(R.string.lbl_searching_providers))
-            } else {
+            } else if (providerTypesEnabled) {
                 providers?.sections.orEmpty().forEach { section ->
+                    val entities =
+                        section.entities.filter { entity -> entity.allowedBy(filters) }
+                    val tracks =
+                        section.tracks
+                            .takeIf { filters.isEmpty() || MusicType.SONGS in filters }
+                            .orEmpty()
+                    if (section.failure == null && entities.isEmpty() && tracks.isEmpty()) {
+                        return@forEach
+                    }
                     if (isNotEmpty()) add(PlainDivider(null))
                     add(SearchTextHeader(section.provider.displayName))
                     val failure = section.failure
@@ -170,11 +192,28 @@ constructor(
                             )
                         )
                     } else {
-                        addAll(
-                            section.tracks.map { track ->
-                                ProviderTrackItem(section.provider.displayName, track)
+                        ProviderEntityType.entries.forEach { type ->
+                            val typedEntities = entities.filter { it.type == type }
+                            if (typedEntities.isNotEmpty()) {
+                                add(BasicHeader(type.headerLabel))
+                                addAll(
+                                    typedEntities.map { entity ->
+                                        ProviderEntityItem(
+                                            section.provider.displayName,
+                                            entity,
+                                        )
+                                    }
+                                )
                             }
-                        )
+                        }
+                        if (tracks.isNotEmpty()) {
+                            add(BasicHeader(R.string.lbl_songs))
+                            addAll(
+                                tracks.map { track ->
+                                    ProviderTrackItem(section.provider.displayName, track)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -185,6 +224,22 @@ constructor(
                 addAll(localItems)
             }
         }
+
+    private fun ProviderEntity.allowedBy(filters: Set<MusicType>) =
+        filters.isEmpty() ||
+            when (type) {
+                ProviderEntityType.ALBUM -> MusicType.ALBUMS in filters
+                ProviderEntityType.ARTIST -> MusicType.ARTISTS in filters
+                ProviderEntityType.PLAYLIST -> MusicType.PLAYLISTS in filters
+            }
+
+    private val ProviderEntityType.headerLabel
+        get() =
+            when (this) {
+                ProviderEntityType.ALBUM -> R.string.lbl_albums
+                ProviderEntityType.ARTIST -> R.string.lbl_artists
+                ProviderEntityType.PLAYLIST -> R.string.lbl_playlists
+            }
 
     private suspend fun searchImpl(library: Library, query: String): List<Item> {
         val filters = searchSettings.filters

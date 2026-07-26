@@ -33,6 +33,40 @@ enum class ProviderHealth {
     DISABLED,
 }
 
+enum class ProviderEntityType {
+    ALBUM,
+    ARTIST,
+    PLAYLIST,
+}
+
+/** Metadata-only provider browse target. [sourceItemId] is an opaque provider token, never media data. */
+data class ProviderEntity(
+    val providerId: ProviderId,
+    val sourceItemId: String,
+    val type: ProviderEntityType,
+    val title: String,
+    val subtitle: String? = null,
+    val artwork: String? = null,
+    val originalUrl: String? = null,
+) {
+    init {
+        require(sourceItemId.isNotBlank() && sourceItemId.length <= 512) {
+            "Provider entity source item ID must be a bounded nonblank token"
+        }
+        require(!sourceItemId.contains("://")) { "Provider entity source item ID cannot be a URL" }
+        require(title.isNotBlank() && title.length <= 512) { "Provider entity title must be bounded and nonblank" }
+        require(subtitle == null || (subtitle.isNotBlank() && subtitle.length <= 512)) {
+            "Provider entity subtitle must be bounded and nonblank when present"
+        }
+        require(artwork == null || (artwork.isNotBlank() && artwork.length <= 2_048)) {
+            "Provider entity artwork must be bounded and nonblank when present"
+        }
+        require(originalUrl == null || (originalUrl.startsWith("https://") && originalUrl.length <= 2_048)) {
+            "Provider entity original URL must be a bounded HTTPS URL when present"
+        }
+    }
+}
+
 data class ProviderDescriptor(
     val id: ProviderId,
     val displayName: String,
@@ -44,6 +78,13 @@ data class ProviderDescriptor(
 }
 
 data class SearchPage(
+    val tracks: List<Track>,
+    val continuation: String? = null,
+    val entities: List<ProviderEntity> = emptyList(),
+)
+
+data class ProviderBrowsePage(
+    val entity: ProviderEntity,
     val tracks: List<Track>,
     val continuation: String? = null,
 )
@@ -107,6 +148,16 @@ interface MusicProvider {
     suspend fun probeHealth(): ProviderHealth = health()
 
     suspend fun search(query: String, continuation: String? = null): ProviderResult<SearchPage>
+
+    suspend fun browse(
+        entity: ProviderEntity,
+        continuation: String? = null,
+    ): ProviderResult<ProviderBrowsePage> =
+        ProviderResult.Failure(
+            kind = ProviderFailureKind.UNSUPPORTED,
+            retryable = false,
+            message = "Provider browsing is unsupported",
+        )
 
     suspend fun resolve(
         candidate: TrackCandidate,

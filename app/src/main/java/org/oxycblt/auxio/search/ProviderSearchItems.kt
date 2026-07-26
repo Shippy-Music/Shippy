@@ -17,6 +17,8 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemHeaderBinding
 import org.oxycblt.auxio.databinding.ItemSongBinding
 import org.oxycblt.auxio.shippy.domain.Track
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
+import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 import org.oxycblt.auxio.util.inflater
 
 data class SearchTextHeader(val text: String)
@@ -24,6 +26,11 @@ data class SearchTextHeader(val text: String)
 data class ProviderTrackItem(
     val providerName: String,
     val track: Track,
+)
+
+data class ProviderEntityItem(
+    val providerName: String,
+    val entity: ProviderEntity,
 )
 
 data class ProviderSearchFailureItem(
@@ -85,6 +92,54 @@ class ProviderTrackViewHolder private constructor(
 
         fun from(parent: View) =
             ProviderTrackViewHolder(ItemSongBinding.inflate(parent.context.inflater))
+    }
+}
+
+class ProviderEntityViewHolder private constructor(
+    private val binding: ItemSongBinding,
+) : RecyclerView.ViewHolder(binding.root) {
+    fun bind(
+        item: ProviderEntityItem,
+        onClick: (ProviderEntityItem) -> Unit,
+    ) {
+        val entity = item.entity
+        val type =
+            binding.root.context.getString(
+                when (entity.type) {
+                    ProviderEntityType.ALBUM -> R.string.lbl_album
+                    ProviderEntityType.ARTIST -> R.string.lbl_artist
+                    ProviderEntityType.PLAYLIST -> R.string.lbl_playlist
+                }
+            )
+        binding.songName.text = entity.title
+        binding.songInfo.text =
+            buildList {
+                    add(type)
+                    entity.subtitle?.takeIf(String::isNotBlank)?.let(::add)
+                }
+                .joinToString(" • ")
+        binding.songAlbumCover.bindArtwork(entity.artwork, entity.title)
+        binding.root.contentDescription =
+            buildString {
+                append(entity.title)
+                append(", ")
+                append(type)
+                entity.subtitle?.takeIf(String::isNotBlank)?.let {
+                    append(", ")
+                    append(it)
+                }
+                append(", ")
+                append(item.providerName)
+            }
+        binding.root.setOnClickListener { onClick(item) }
+        binding.songMenu.isVisible = false
+    }
+
+    companion object {
+        const val VIEW_TYPE = 10_104
+
+        fun from(parent: View) =
+            ProviderEntityViewHolder(ItemSongBinding.inflate(parent.context.inflater))
     }
 }
 

@@ -67,6 +67,7 @@ constructor(
         contextId: String? = null,
         contributorId: String? = null,
         pushPullEnabled: Boolean = false,
+        shuffled: Boolean = false,
     ): PlaybackStartResult {
         val plan = queuePlaybackPlan(queueItemFactory, tracks, selectedIndex, contextId, contributorId)
         val policy =
@@ -93,7 +94,7 @@ constructor(
                 selectedItemId = plan.selectedItemId,
                 queue = queue,
                 parent = null,
-                shuffled = false,
+                shuffled = shuffled,
             )
         )
         return PlaybackStartResult.Started(plan.selectedItemId)

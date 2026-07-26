@@ -16,6 +16,8 @@
     <string name="lbl_observing">Monitoring music library</string>
     <!-- As in to retry loading music -->
     <string name="lbl_retry">Retry</string>
+    <string name="lbl_load_more">Load more</string>
+    <string name="lbl_loading">Loading…</string>
 
     <string name="lbl_songs">Songs</string>
     <string name="lbl_song">Song</string>
@@ -314,6 +316,7 @@
     <string name="lng_local_indexing">Indexing local music…</string>
     <string name="lng_shippy_playlist">Playlist</string>
     <string name="lng_collection_empty">No tracks here yet.</string>
+    <string name="lng_provider_catalog_unavailable">This collection is unavailable right now.</string>
     <string name="lng_collection_metadata_pending">Track details will appear when Shippy can resolve their metadata.</string>
     <string name="lng_collection_deleted">This playlist was deleted.</string>
     <string name="lng_delete_shippy_playlist">Delete %1$s? Its saved track relationships will be removed.</string>
