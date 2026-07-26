@@ -284,12 +284,17 @@ temporarily by the active Crew.
 
 ## Stage 8 — Hosted Relay
 
-- [ ] Define the smallest self-hostable relay responsibilities.
+- [x] Define the smallest self-hostable relay responsibilities.
+  - The first deployment is a signaling-only, opaque, in-memory WebSocket
+    rendezvous. TURN, ordered control fan-out, media fan-out, and witness leases
+    stay separate required layers.
 - [ ] Implement authenticated signaling/control fan-out.
+  - [x] Implement bounded opaque host/join signaling routes with endpoint-owned
+        end-to-end encryption/authentication and explicit route closure.
 - [ ] Implement optional media fan-out with bounded memory and no permanent media.
 - [ ] Add configuration and health check in Shippy settings.
 - [ ] Support relay-assisted reconnection and larger groups.
-- [ ] Package documented local/container deployment without unrelated services.
+- [x] Package documented local/container deployment without unrelated services.
 
 **Validation:**
 

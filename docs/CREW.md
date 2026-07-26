@@ -356,6 +356,15 @@ Relay mode may provide:
 The relay is configurable/self-hostable. It is not a permanent music library and
 must not retain Crew media after the session/cache window.
 
+The first implemented relay slice is intentionally signaling-only. A bounded
+binary WebSocket endpoint registers one opaque host rendezvous and isolated
+joiner routes, then forwards only opaque end-to-end-encrypted signaling frames.
+It never receives the invitation bearer secret, persists no session state, and
+closes a route instead of buffering through backpressure. This foundation is not
+TURN, control fan-out, media fan-out, or the completed larger-session relay.
+Those remain explicit later layers rather than being implied by the signaling
+service.
+
 ### Group scaling
 
 Small groups may use direct connections. Avoid an unbounded full media mesh.

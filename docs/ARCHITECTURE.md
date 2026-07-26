@@ -538,6 +538,14 @@ The 2026-07-25 focused spike selected:
 - A separate authenticated signaling boundary for LAN rendezvous and hosted
   relay WebSocket exchange.
 
+`relay/` now contains the first self-hostable boundary: a Node WebSocket service
+with a versioned bounded binary envelope, one opaque host registration per
+session locator/invitation pair, isolated random join routes, heartbeat/rate/
+capacity limits, and no persistence or payload logging. Android peers retain
+end-to-end signaling confidentiality and final fingerprint-bound Crew join
+authentication; the relay only routes ciphertext. It is a signaling foundation,
+not TURN, control fan-out, media fan-out, or a membership authority.
+
 The stripped artifact keeps the current WebRTC data-channel/ICE APIs while
 removing unneeded software video codecs. Its published minimum SDK is 21
 (Shippy is 24), and the inspected AAR is about 13.8 MB before APK ABI splitting

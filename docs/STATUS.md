@@ -416,6 +416,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   choices, persists swap-safe priority, and runs explicit bounded metadata-only
   JioSaavn/YouTube Music health probes with scoped Available, Limited, and
   Unavailable presentation.
+- A self-hostable Crew signaling relay foundation now provides a bounded binary
+  WebSocket rendezvous, isolated opaque host/join routes, explicit route closure,
+  rate/capacity/backpressure limits, health reporting, bounded shutdown, and a
+  minimal non-root container. It retains/logs no identifiers or payloads and is
+  explicitly not TURN, control fan-out, or media fan-out.
 
 ## In Progress
 
