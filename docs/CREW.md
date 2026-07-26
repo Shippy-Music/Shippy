@@ -297,6 +297,12 @@ supplier.
 - User Download creates a separate permanent download job and ownership record.
 - Crash cleanup removes orphaned Crew cache after restart.
 
+Before the permanent job is enqueued, the exact verified Crew file is copied
+atomically into bounded app-private staging. The existing WorkManager transfer,
+SAF verification, publication gate, and Downloads relationship remain the only
+permanent-download authority. Paused/retryable work retains the stage;
+successful publication, cancellation, and final failure remove it.
+
 ## 11. Playback Synchronization
 
 ### Clock
@@ -371,6 +377,14 @@ short-lived invitation secret, exact invite identity/lifetime, configured relay
 endpoint, and relay-generated route ID. Strict sequence numbers reject replay
 and reordering. The first encrypted hello is still only a claim; the existing
 WebRTC DTLS-fingerprint-bound join proof authenticates the actual Crew member.
+
+Production hosting registers that route before exposing a relay-bearing invite.
+If registration fails, Shippy closes it and creates a fresh LAN-only invite
+rather than sharing a locator that cannot work. A relay-capable join races LAN
+rendezvous and hosted signaling; the first authenticated signaling peer owns the
+existing WebRTC join path and every losing route is closed. The current remote
+path supplies STUN candidates but no anonymous TURN credentials, so this is an
+honest direct-P2P attempt rather than a claim that every NAT can be traversed.
 
 ### Group scaling
 

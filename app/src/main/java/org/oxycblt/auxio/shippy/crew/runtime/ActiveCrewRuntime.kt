@@ -85,6 +85,7 @@ class ActiveCrewPresentation internal constructor(
     val localMemberId: CrewMemberId,
     val crewState: CrewState,
     val inviteLink: String?,
+    val connectivity: CrewConnectivityPresentation,
 ) {
     override fun toString() =
         "ActiveCrewPresentation(role=$role, sessionId=redacted, localMemberId=redacted, " +
@@ -398,6 +399,7 @@ constructor(
         val localMemberId: CrewMemberId
         val state: StateFlow<CrewState>
         val inviteLink: String?
+        val connectivity: CrewConnectivityPresentation
         val reactions: SharedFlow<ActiveCrewReaction>
         val peerMediaBlocked: StateFlow<Boolean>
         val allowedReactions: List<String>
@@ -408,7 +410,7 @@ constructor(
         suspend fun sendReaction(emoji: String): CrewReactionSendResult
 
         fun presentation(crewState: CrewState) =
-            ActiveCrewPresentation(role, sessionId, localMemberId, crewState, inviteLink)
+            ActiveCrewPresentation(role, sessionId, localMemberId, crewState, inviteLink, connectivity)
 
         class Host(private val session: CrewLanHostSession) : OwnedSession {
             override val role = ActiveCrewMode.HOST
@@ -416,6 +418,7 @@ constructor(
             override val localMemberId = session.localMemberId
             override val state = session.state
             override val inviteLink = session.inviteLink
+            override val connectivity = session.connectivity
             override val reactions = session.reactions
             override val peerMediaBlocked = session.peerMediaBlocked
             override val allowedReactions = session.allowedReactions
@@ -432,6 +435,7 @@ constructor(
             override val localMemberId = session.localMemberId
             override val state = session.state
             override val inviteLink: String? = null
+            override val connectivity = session.connectivity
             override val reactions = session.reactions
             override val peerMediaBlocked = session.peerMediaBlocked
             override val allowedReactions = session.allowedReactions

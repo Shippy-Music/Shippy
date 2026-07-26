@@ -14,6 +14,9 @@ import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.combine
@@ -40,8 +43,12 @@ import org.oxycblt.auxio.shippy.crew.lan.CrewLanRendezvous
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalConnectFailure
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalConnectResult
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingClient
+import org.oxycblt.auxio.shippy.crew.lan.CrewSignalPeer
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntime
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
+import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayJoin
+import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayJoinResult
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHttpClient
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
@@ -52,6 +59,7 @@ import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewWebRtcRuntime
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
 import org.oxycblt.auxio.shippy.persistence.crew.CrewRejoinLeaseStore
+import okhttp3.OkHttpClient
 
 private const val CREW_JOIN_PROTOCOL_V1 = 1
 private const val CREW_LAN_DISCOVERY_TIMEOUT_MS = 10_000L
@@ -76,6 +84,8 @@ sealed interface CrewLanJoinLaunchFailure {
 
     data class SignalingFailed(val reason: CrewLanSignalConnectFailure) : CrewLanJoinLaunchFailure
 
+    data object RemoteSignalingFailed : CrewLanJoinLaunchFailure
+
     data class JoinRejected(val reason: CrewJoinFailure) : CrewLanJoinLaunchFailure
 
     data object Initialization : CrewLanJoinLaunchFailure
@@ -90,6 +100,7 @@ sealed interface CrewLanJoinLaunchFailure {
 class CrewLanJoinedSession internal constructor(
     val sessionId: CrewSessionId,
     val localMemberId: CrewMemberId,
+    val connectivity: CrewConnectivityPresentation,
     private val engine: CrewSessionEngine,
     val joinState: StateFlow<CrewJoinState>,
     private val coordinator: CrewJoinCoordinator,
@@ -157,6 +168,7 @@ constructor(
     @ApplicationContext private val context: Context,
     private val lanDiscovery: CrewLanDiscovery,
     private val profileSettings: CrewProfileSettings,
+    @CrewRelayHttpClient private val relayClient: OkHttpClient,
     private val checkpoints: CrewCheckpointRepository,
     private val leases: CrewRejoinLeaseStore,
     private val mediaRuntimeFactory: CrewActiveMediaRuntimeFactory,
@@ -181,39 +193,45 @@ constructor(
             runCatching { CrewMember(localMemberId, profileSettings.displayName) }.getOrElse {
                 return CrewLanJoinLaunchResult.Failed(CrewLanJoinLaunchFailure.Initialization)
             }
-        val discovery =
-            runCatching { lanDiscovery.discover(invite) }.getOrElse {
-                return CrewLanJoinLaunchResult.Failed(CrewLanJoinLaunchFailure.Initialization)
-            }
-        val discoveryResult = awaitRendezvous(discovery, invite)
-        if (discoveryResult !is RendezvousAwaitResult.Found) {
-            runCatching { discovery.close() }
-            return CrewLanJoinLaunchResult.Failed(discoveryResult.toFailure())
-        }
-
-        val signaling =
-            runCatching {
-                    CrewLanSignalingClient.connect(
-                        rendezvous = discoveryResult.rendezvous,
-                        invite = invite,
-                        localMemberId = localMemberId,
-                        localDisplayName = localMember.displayName,
-                        nowEpochMs = nowEpochMs(),
-                    )
-                }
-                .getOrElse {
+        val selected =
+            if (invite.relayLocator == null) {
+                val discovery =
+                    runCatching { lanDiscovery.discover(invite) }.getOrElse {
+                        return CrewLanJoinLaunchResult.Failed(
+                            CrewLanJoinLaunchFailure.Initialization
+                        )
+                    }
+                val rendezvous = awaitRendezvous(discovery, invite)
+                if (rendezvous !is RendezvousAwaitResult.Found) {
                     runCatching { discovery.close() }
-                    return CrewLanJoinLaunchResult.Failed(CrewLanJoinLaunchFailure.Initialization)
+                    return CrewLanJoinLaunchResult.Failed(rendezvous.toFailure())
                 }
-        runCatching { discovery.close() }
-        val signalPeer =
-            when (signaling) {
-                is CrewLanSignalConnectResult.Connected -> signaling.peer
-                is CrewLanSignalConnectResult.Failed ->
-                    return CrewLanJoinLaunchResult.Failed(
-                        CrewLanJoinLaunchFailure.SignalingFailed(signaling.reason),
-                    )
+                val signaling =
+                    try {
+                        CrewLanSignalingClient.connect(
+                            rendezvous.rendezvous,
+                            invite,
+                            localMemberId,
+                            localMember.displayName,
+                            nowEpochMs(),
+                        )
+                    } finally {
+                        runCatching { discovery.close() }
+                    }
+                when (signaling) {
+                    is CrewLanSignalConnectResult.Connected ->
+                        SignalingSelection(signaling.peer, CrewConnectivityPresentation.NEARBY)
+                    is CrewLanSignalConnectResult.Failed ->
+                        return CrewLanJoinLaunchResult.Failed(
+                            CrewLanJoinLaunchFailure.SignalingFailed(signaling.reason),
+                        )
+                }
+            } else {
+                val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull()
+                selectSignalingPeer(discovery, invite, localMemberId, localMember.displayName)
+                    ?: return CrewLanJoinLaunchResult.Failed(CrewLanJoinLaunchFailure.RemoteSignalingFailed)
             }
+        val signalPeer = selected.peer
 
         var engine: CrewSessionEngine? = null
         var mediaRuntime: CrewActiveMediaRuntime? = null
@@ -251,7 +269,7 @@ constructor(
                                         invite = invite,
                                         localMemberId = localMemberId,
                                         role = CrewDirectPeerRole.INITIATOR,
-                                        iceServers = emptyList(),
+                                        iceServers = DEFAULT_CREW_REMOTE_ICE_SERVERS,
                                     ),
                                 )
                             },
@@ -306,6 +324,7 @@ constructor(
                     CrewLanJoinedSession(
                         sessionId = activeSessionId,
                         localMemberId = localMemberId,
+                        connectivity = selected.connectivity,
                         engine = activeEngine,
                         joinState = activeCoordinator.state,
                         coordinator = activeCoordinator,
@@ -320,6 +339,107 @@ constructor(
             CrewJoinState.Bootstrapping -> error("Join coordinator emitted a non-terminal join state")
         }
     }
+
+    private suspend fun selectSignalingPeer(
+        discovery: CrewLanDiscoverySession?,
+        invite: CrewInvite,
+        localMemberId: CrewMemberId,
+        localDisplayName: String,
+    ): SignalingSelection? {
+        return supervisorScope {
+            val outcomes = Channel<SignalingSelection?>(2)
+            suspend fun publish(selection: SignalingSelection?) {
+                try {
+                    outcomes.send(selection)
+                } catch (error: CancellationException) {
+                    selection?.peer?.close()
+                    throw error
+                }
+            }
+            val lan =
+                discovery?.let { activeDiscovery ->
+                    launch {
+                        val selection =
+                            try {
+                                val rendezvous =
+                                    awaitRendezvous(activeDiscovery, invite)
+                                        as? RendezvousAwaitResult.Found
+                                val result =
+                                    rendezvous?.let {
+                                        CrewLanSignalingClient.connect(
+                                            it.rendezvous,
+                                            invite,
+                                            localMemberId,
+                                            localDisplayName,
+                                            nowEpochMs(),
+                                        )
+                                    }
+                                (result as? CrewLanSignalConnectResult.Connected)?.peer?.let {
+                                    SignalingSelection(
+                                        it,
+                                        CrewConnectivityPresentation.NEARBY_AND_REMOTE,
+                                    )
+                                }
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                null
+                            } finally {
+                                runCatching { activeDiscovery.close() }
+                            }
+                        publish(selection)
+                    }
+                }
+            val relay =
+                launch {
+                    val selection =
+                        try {
+                            val result =
+                                CrewHostedRelayJoin.connect(
+                                    relayClient,
+                                    invite,
+                                    localMemberId,
+                                    localDisplayName,
+                                    nowEpochMs,
+                                )
+                            (result as? CrewHostedRelayJoinResult.Connected)?.peer?.let {
+                                SignalingSelection(
+                                    it,
+                                    CrewConnectivityPresentation.NEARBY_AND_REMOTE,
+                                )
+                            }
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            null
+                        }
+                    publish(selection)
+                }
+            var winner: SignalingSelection? = null
+            var received = 0
+            val expectedOutcomes = if (lan == null) 1 else 2
+            while (received < expectedOutcomes && winner == null) {
+                val candidate = outcomes.receive()
+                received++
+                if (candidate != null) winner = candidate
+            }
+            lan?.cancel()
+            relay.cancel()
+            lan?.join()
+            relay.join()
+            while (true) {
+                val simultaneous = outcomes.tryReceive().getOrNull() ?: break
+                simultaneous?.peer?.close()
+            }
+            outcomes.close()
+            winner
+        }
+    }
+
+    private data class SignalingSelection(
+        val peer: CrewSignalPeer,
+        val connectivity: CrewConnectivityPresentation,
+    )
 
     private suspend fun awaitRendezvous(
         discovery: CrewLanDiscoverySession,

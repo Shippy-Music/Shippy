@@ -50,6 +50,7 @@ constructor(
     @Assisted workerParams: WorkerParameters,
     private val jobs: DownloadJobRepository,
     private val storage: SafDownloadStorage,
+    private val crewTemporaryStaging: CrewTemporaryDownloadStaging,
     private val transferEngine: DownloadTransferEngine,
     private val queueItemFactory: QueueItemFactory,
     private val resolutionCoordinator: PlaybackResolutionCoordinator,
@@ -72,6 +73,9 @@ constructor(
                         stored?.job?.state == DownloadState.CANCELLED
                 ) {
                     cleanupPending(stored)
+                    if (stored.job.state == DownloadState.CANCELLED) {
+                        crewTemporaryStaging.cleanup(jobId)
+                    }
                 }
             }
             throw cancelled
@@ -84,6 +88,12 @@ constructor(
         if (stored.job.state.isTerminal()) {
             if (stored.job.state == DownloadState.AVAILABLE && stored.pendingDocument != null) {
                 jobs.setPendingDocument(jobId, null, now())
+            }
+            if (
+                stored.job.state == DownloadState.FAILED_FINAL ||
+                    stored.job.state == DownloadState.CANCELLED
+            ) {
+                crewTemporaryStaging.cleanup(jobId)
             }
             return Result.success()
         }
@@ -307,6 +317,7 @@ constructor(
                 current.track.id,
                 jobs.hasAvailableForTrack(current.track.id),
             )
+            crewTemporaryStaging.cleanup(current.job.id)
             Result.success(
                 workDataOf(
                     KEY_ARTIFACT_URI to current.job.artifact.contentUri,
@@ -341,7 +352,10 @@ constructor(
         failure: DownloadFailure,
         retryable: Boolean,
     ) {
-        jobs.apply(jobId, DownloadEvent.Fail(failure, retryable), now())
+        val transition = jobs.apply(jobId, DownloadEvent.Fail(failure, retryable), now())
+        if (!retryable && transition is DownloadTransition.Applied) {
+            crewTemporaryStaging.cleanup(jobId)
+        }
     }
 
     private fun createForegroundInfo(

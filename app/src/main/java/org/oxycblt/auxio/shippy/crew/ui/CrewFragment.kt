@@ -38,6 +38,7 @@ import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewMode
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewPresentation
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeFailure
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
+import org.oxycblt.auxio.shippy.crew.runtime.CrewConnectivityPresentation
 import org.oxycblt.auxio.shippy.crew.runtime.CrewJoinFailure
 import org.oxycblt.auxio.shippy.crew.runtime.CrewLanHostLaunchFailure
 import org.oxycblt.auxio.shippy.crew.runtime.CrewLanJoinLaunchFailure
@@ -124,13 +125,7 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
 
     private fun renderActive(presentation: ActiveCrewPresentation, ending: Boolean) {
         val binding = requireBinding()
-        binding.crewRole.setText(
-            if (presentation.role == ActiveCrewMode.HOST) {
-                R.string.lng_hosting_crew
-            } else {
-                R.string.lng_joined_crew
-            },
-        )
+        binding.crewRole.setText(roleCopy(presentation))
         binding.crewMemberCount.text = resources.getQuantityString(
             R.plurals.plr_crew_members,
             presentation.crewState.members.size,
@@ -159,6 +154,23 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         binding.crewEndingStatus.isVisible = ending
         binding.crewEndingProgress.isVisible = ending
     }
+
+    private fun roleCopy(presentation: ActiveCrewPresentation) =
+        when (presentation.role) {
+            ActiveCrewMode.HOST ->
+                when (presentation.connectivity) {
+                    CrewConnectivityPresentation.NEARBY -> R.string.lng_hosting_crew
+                    CrewConnectivityPresentation.NEARBY_AND_REMOTE -> R.string.lng_hosting_crew_remote
+                    CrewConnectivityPresentation.NEARBY_RELAY_UNAVAILABLE ->
+                        R.string.lng_hosting_crew_relay_unavailable
+                }
+            ActiveCrewMode.JOIN ->
+                if (presentation.connectivity == CrewConnectivityPresentation.NEARBY_AND_REMOTE) {
+                    R.string.lng_joined_crew_remote
+                } else {
+                    R.string.lng_joined_crew
+                }
+        }
 
     private fun scanOptions() = ScanOptions().apply {
         setDesiredBarcodeFormats(ScanOptions.QR_CODE)
@@ -310,6 +322,8 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
                     CrewLanSignalConnectFailure.PROTOCOL_ERROR ->
                         R.string.lng_crew_incompatible
                 }
+            CrewLanJoinLaunchFailure.RemoteSignalingFailed ->
+                R.string.lng_could_not_connect_crew
             is CrewLanJoinLaunchFailure.JoinRejected ->
                 when (failure.reason) {
                     CrewJoinFailure.ProtocolMismatch -> R.string.lng_crew_incompatible

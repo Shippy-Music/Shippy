@@ -158,13 +158,16 @@ internal fun downloadPresentation(
     download: PersistedDownload?,
     downloadableProviderIds: Set<ProviderId>,
 ): PlayerDownloadPresentation {
-    if (track.realm == TrackRealm.LOCAL) return PlayerDownloadPresentation.Hidden
     val candidate =
         track.candidates.firstOrNull {
             it.id == resolvedCandidateId &&
-                it.kind == CandidateKind.PROVIDER &&
-                it.providerId in downloadableProviderIds &&
-                it.availability != CandidateAvailability.UNAVAILABLE
+                it.availability != CandidateAvailability.UNAVAILABLE &&
+                (
+                    it.kind == CandidateKind.CREW_TEMPORARY ||
+                        (track.realm != TrackRealm.LOCAL &&
+                            it.kind == CandidateKind.PROVIDER &&
+                            it.providerId in downloadableProviderIds)
+                )
         } ?: return PlayerDownloadPresentation.Hidden
     val job = download?.job ?: return PlayerDownloadPresentation.Ready(candidate.id)
     return when (job.state) {

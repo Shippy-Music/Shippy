@@ -378,6 +378,13 @@ falls back to ordinary candidate resolution rather than blocking playback.
 Do not copy Bloomee’s in-memory task list, SSL-ignore behavior, path
 concatenation, rename bugs, or stale filename records.
 
+An explicit Download of active Crew temporary media still enters this same state
+machine. Before Room/WorkManager ownership, Shippy atomically snapshots the
+exact verified `file://` object into a bounded private no-backup staging
+directory. This prevents session cleanup from racing a deferred worker. The
+stage survives pause/retry and is deleted after verified publication,
+cancellation, or final failure; it never becomes a second library record.
+
 ## 10. Lyrics
 
 Lyrics are an ordered source chain behind one repository:
@@ -560,6 +567,14 @@ route ID. An encrypted hello supplies only a provisional member/display-name
 claim; the existing DTLS-fingerprint-bound WebRTC join proof remains the final
 membership authority. Host registration readiness is explicit so production
 launchers cannot advertise a remote invite before the relay accepts it.
+
+The production host owns both LAN and hosted signaling collectors while
+retaining one admission coordinator, WebRTC runtime, and session/media engine.
+Failed relay registration is closed and replaced by a newly generated LAN-only
+bootstrap. A relay-bearing join races LAN and hosted signaling, closes the
+loser, and hands only one peer to the existing join coordinator. The direct
+WebRTC attempt uses public STUN; TURN credentials, transport migration, and full
+relay fallback remain explicit later work.
 
 The stripped artifact keeps the current WebRTC data-channel/ICE APIs while
 removing unneeded software video codecs. Its published minimum SDK is 21

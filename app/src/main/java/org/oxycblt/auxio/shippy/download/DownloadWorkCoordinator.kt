@@ -24,8 +24,11 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.guava.await
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
 import org.oxycblt.auxio.shippy.domain.Track
@@ -39,6 +42,7 @@ constructor(
     @ApplicationContext context: Context,
     private val jobs: DownloadJobRepository,
     private val storage: SafDownloadStorage,
+    private val crewTemporaryStaging: CrewTemporaryDownloadStaging,
     private val relationships: LibraryRelationshipRepository,
     private val publicationGate: DownloadPublicationGate,
 ) {
@@ -82,9 +86,24 @@ constructor(
                 return@withLock existing.job.id
             }
             val jobId = DownloadJobId(UUID.randomUUID().toString())
-            jobs.create(jobId, track, candidateId, nowEpochMs)
-            enqueue(jobId, track, candidateId, ExistingWorkPolicy.REPLACE)
-            jobId
+            val persistedTrack = crewTemporaryStaging.stage(track, candidateId, jobId)
+            var created = false
+            try {
+                jobs.create(jobId, persistedTrack, candidateId, nowEpochMs)
+                created = true
+                enqueue(jobId, persistedTrack, candidateId, ExistingWorkPolicy.REPLACE)
+                jobId
+            } catch (error: CancellationException) {
+                withContext(NonCancellable) {
+                    if (created) jobs.delete(jobId)
+                    crewTemporaryStaging.cleanup(jobId)
+                }
+                throw error
+            } catch (error: Exception) {
+                if (created) jobs.delete(jobId)
+                crewTemporaryStaging.cleanup(jobId)
+                throw error
+            }
         }
 
     suspend fun pause(
@@ -141,6 +160,7 @@ constructor(
         workManager.cancelUniqueWork(workName(jobId)).result.await()
         jobs.get(jobId)?.pendingDocument?.let { storage.delete(it.contentUri) }
         jobs.setPendingDocument(jobId, null, nowEpochMs)
+        crewTemporaryStaging.cleanup(jobId)
     }
 
     suspend fun remove(

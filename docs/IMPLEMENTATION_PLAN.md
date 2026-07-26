@@ -218,7 +218,10 @@ code/test level, ready for later device verification.
     fingerprint-bound member ID.
 - [x] Orchestrate direct offer/answer, ICE generations, and fingerprint-bound
       peer authentication behind the signaling boundary.
-- [ ] Implement remote signaling and direct P2P candidate negotiation.
+- [x] Implement remote signaling and direct P2P candidate negotiation.
+  - A relay-bearing invite races LAN and hosted WebSocket signaling, then uses
+    the existing fingerprint-authenticated WebRTC driver with public STUN
+    candidates. TURN fallback remains separate work.
 - [ ] Implement reconnection and network-change handling.
 - [x] Separate durable control, transient reaction, clock, and media channels.
 - [x] Implement bounded durable-control serialization and multi-frame
@@ -230,7 +233,7 @@ code/test level, ready for later device verification.
       containing the exact local member.
 - [x] Expose LAN start/join, QR render/scan, pasted-link fallback, and clear
       connection states in UI.
-- [ ] Expose equivalent remote/relay connection states when those paths exist.
+- [x] Expose equivalent remote/relay connection states when those paths exist.
 
 **Validation:**
 
@@ -270,7 +273,9 @@ Crew with relay fallback hooks.
         changes with cancellation and one bounded retry timer.
 - [x] Bridge verified peer media into Media3 playback without a permanent
       library record.
-- [ ] Implement explicit Download from temporary media.
+- [x] Implement explicit Download from temporary media.
+  - Exact verified Crew media is atomically staged in app-private storage before
+    the existing durable WorkManager/SAF pipeline owns it.
 - [x] Implement prompt when required peer media is blocked by the toggle.
 
 **Validation:**
@@ -298,6 +303,8 @@ temporarily by the active Crew.
   - [x] Add validated native edit/replace/clear configuration for the exact HTTPS
         relay endpoint.
   - [ ] Add bounded live health/registration feedback.
+    - [x] Surface per-host registration success/fallback truth in the active
+          Crew presentation.
 - [ ] Support relay-assisted reconnection and larger groups.
 - [x] Package documented local/container deployment without unrelated services.
 

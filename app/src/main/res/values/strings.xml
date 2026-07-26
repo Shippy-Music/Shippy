@@ -256,6 +256,9 @@
     <string name="lbl_ending_crew">Ending Crew</string>
     <string name="lng_hosting_crew">You are hosting this Crew.</string>
     <string name="lng_joined_crew">You joined this Crew.</string>
+    <string name="lng_hosting_crew_remote">You are hosting this Crew nearby and remotely.</string>
+    <string name="lng_hosting_crew_relay_unavailable">You are hosting this Crew nearby. Remote relay is unavailable.</string>
+    <string name="lng_joined_crew_remote">You joined this Crew nearby or remotely.</string>
     <plurals name="plr_crew_members">
         <item quantity="one">%d member</item>
         <item quantity="other">%d members</item>

@@ -429,10 +429,22 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   protocol. Each route performs invite-secret-derived directional AES-GCM,
   exchanges an encrypted member/display-name claim, and still relies on the
   existing WebRTC fingerprint-bound join proof as final membership authority.
-  Host multiplexing and join lifecycle are implemented but not yet launcher-wired.
+  Host multiplexing and join lifecycle are implemented.
 - Settings now stores only a validated optional HTTPS relay endpoint through the
   typed Crew contract and provides native edit/replace/clear UI. Invalid or
   corrupt persisted values are treated as unconfigured.
+- A configured Crew host now registers hosted signaling before sharing its
+  invite, routes LAN and hosted peers through the same admission coordinator,
+  and falls back to a fresh LAN-only invite when registration fails.
+- A relay-capable join now races scoped LAN rendezvous and hosted signaling,
+  closes the losing route, and feeds only the winner into the existing single
+  WebRTC/join/session/media runtime. Remote attempts use the official WebRTC
+  sample STUN endpoint; no anonymous TURN service or NAT-fallback claim is
+  invented.
+- Explicit Download now retains verified active-Crew temporary media through the
+  existing durable SAF pipeline. Exact temporary bytes are first snapshotted
+  into bounded app-private staging so Crew teardown cannot remove them before
+  WorkManager runs; terminal publication/cancel/final failure removes the stage.
 
 ## In Progress
 
@@ -440,7 +452,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Hosted signaling and remaining transport lifecycle.
+- Reconnection, transport migration, and TURN/relay fallback beyond hosted
+  signaling.
 - Transport migration after a reconnect.
 - Extending the first exact-Local rolling window to adaptive provider-aware
   preparation and supplier failover.
@@ -488,14 +501,18 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   artwork path.
 - Final device behavior is deliberately unverified until the owner performs the
   build/test handoff.
-- The hosted-relay Android adapter is static-checked only. Its OkHttp 5.3.0 API,
-  relay registration/route lifecycle, and encrypted signaling interoperability
-  still require a real Gradle/Android and relay integration pass.
+- The hosted-relay Android adapter and launcher wiring are static-checked only.
+  OkHttp 5.3.0/Hilt generation, LAN-vs-relay cancellation, route lifecycle,
+  encrypted signaling interoperability, and NAT traversal still require a real
+  Gradle/Android and relay integration pass.
+- Crew temporary-download staging and its WorkManager/SAF handoff have focused
+  tests authored but not run. Process death, Crew teardown during transfer,
+  destination revocation, and cleanup require owner device verification.
 
 ## Next Concrete Actions
 
 1. Finish the remaining player/audio/widget action surfaces.
-2. Wire secure rejoin, remote hosted signaling, and transport migration.
+2. Wire secure rejoin, transport migration, and practical TURN/relay fallback.
 3. Extend Push & Pull from the exact-Local top-down path to adaptive supplier
    failover and hybrid download-folder indexing before relay hardening.
 

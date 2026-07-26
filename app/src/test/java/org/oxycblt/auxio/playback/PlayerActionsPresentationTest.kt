@@ -33,6 +33,25 @@ class PlayerActionsPresentationTest {
     }
 
     @Test
+    fun `local tracks show download for the resolved available Crew temporary candidate`() {
+        val track = localTrack().copy(
+            candidates = localTrack().candidates + TrackCandidate(
+                id = CandidateId("crew:candidate"),
+                trackId = TrackId("local:track"),
+                kind = CandidateKind.CREW_TEMPORARY,
+                sourceId = "crew-temporary",
+                sourceItemId = "song",
+                availability = CandidateAvailability.AVAILABLE,
+                locator = "file:/private/crew-media",
+            )
+        )
+        assertTrue(
+            downloadPresentation(track, CandidateId("crew:candidate"), null, emptySet()) is
+                PlayerDownloadPresentation.Ready
+        )
+    }
+
+    @Test
     fun `provider tracks with a resolvable candidate show download`() {
         assertTrue(
             downloadPresentation(
