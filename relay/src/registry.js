@@ -32,7 +32,7 @@ const sessionKey = ({ sessionLocator, inviteId }) => {
 export class RelayRegistry {
   constructor({
     maxSessions = 256,
-    maxJoinsPerSession = 16,
+    maxJoinsPerSession = 7,
     randomRoute = newRouteId,
     randomToken = randomBytes,
     hostPresenceMs = 30_000,

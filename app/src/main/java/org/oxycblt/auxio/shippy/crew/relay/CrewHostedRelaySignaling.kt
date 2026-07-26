@@ -46,7 +46,8 @@ import org.oxycblt.auxio.shippy.crew.signaling.CrewSignalDecodeResult
 import org.oxycblt.auxio.shippy.crew.signaling.CrewSignalMessage
 import org.oxycblt.auxio.shippy.crew.signaling.CrewSignalMessageCodec
 
-private const val RELAY_MAX_ROUTES = 16
+/** Matches the product cap of one coordinator plus seven joined members. */
+private const val RELAY_MAX_ROUTES = 7
 private const val RELAY_HANDSHAKE_TIMEOUT_MS = 8_000L
 private const val RELAY_INCOMING_CAPACITY = 64
 private const val RELAY_MAX_QUEUED_BYTES = 1024L * 1024L

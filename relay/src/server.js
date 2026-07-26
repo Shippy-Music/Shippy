@@ -65,7 +65,7 @@ export function loadConfig(env = process.env) {
   return Object.freeze({
     port: intEnv(env, "PORT", 8080),
     maxSessions: intEnv(env, "CREW_RELAY_MAX_SESSIONS", 256),
-    maxJoins: intEnv(env, "CREW_RELAY_MAX_JOINS", 16),
+    maxJoins: intEnv(env, "CREW_RELAY_MAX_JOINS", 7),
     hostPresenceMs: boundedIntEnv(
       env,
       "CREW_RELAY_HOST_PRESENCE_MS",
