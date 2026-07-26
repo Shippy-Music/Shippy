@@ -36,6 +36,7 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleTracker
+import org.oxycblt.auxio.shippy.history.RecentListeningTracker
 import org.oxycblt.auxio.shippy.crew.playback.CrewPlaybackBridge
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
 import org.oxycblt.auxio.widgets.WidgetComponent
@@ -54,6 +55,7 @@ private constructor(
     widgetComponentFactory: WidgetComponent.Factory,
     systemReceiverFactory: SystemPlaybackReceiver.Factory,
     private val lastFmScrobbleTracker: LastFmScrobbleTracker,
+    private val recentListeningTracker: RecentListeningTracker,
     private val sleepTimerController: SleepTimerController,
     private val crewPlaybackBridge: CrewPlaybackBridge,
 ) : PlaybackStateManager.Listener {
@@ -67,6 +69,7 @@ private constructor(
         private val widgetComponentFactory: WidgetComponent.Factory,
         private val systemReceiverFactory: SystemPlaybackReceiver.Factory,
         private val lastFmScrobbleTracker: LastFmScrobbleTracker,
+        private val recentListeningTracker: RecentListeningTracker,
         private val sleepTimerController: SleepTimerController,
         private val crewPlaybackBridge: CrewPlaybackBridge,
     ) {
@@ -81,6 +84,7 @@ private constructor(
                 widgetComponentFactory,
                 systemReceiverFactory,
                 lastFmScrobbleTracker,
+                recentListeningTracker,
                 sleepTimerController,
                 crewPlaybackBridge,
             )
@@ -133,6 +137,7 @@ private constructor(
         systemReceiver.attach()
         playbackManager.addListener(this)
         lastFmScrobbleTracker.attach(playbackManager)
+        recentListeningTracker.attach(playbackManager)
         sleepTimerController.attach(playbackManager)
         crewPlaybackBridge.attach()
         updateAutoStopTimer(playbackManager.progression.isPlaying)
@@ -192,6 +197,7 @@ private constructor(
         waitJob.cancel()
         playbackManager.removeListener(this)
         lastFmScrobbleTracker.release(playbackManager)
+        recentListeningTracker.release(playbackManager)
         sleepTimerController.release(playbackManager)
         crewPlaybackBridge.release()
         systemReceiver.release()
