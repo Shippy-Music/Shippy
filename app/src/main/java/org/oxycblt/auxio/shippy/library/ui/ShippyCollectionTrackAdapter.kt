@@ -21,11 +21,37 @@ internal class ShippyCollectionTrackAdapter(
     private val onClick: (ShippyCollectionTrackRow) -> Unit,
     private val onDownloadAction: (ShippyCollectionTrackRow) -> Unit,
 ) : ListAdapter<ShippyCollectionTrackRow, ShippyCollectionTrackAdapter.ViewHolder>(DIFF) {
+    private var dragRows: MutableList<ShippyCollectionTrackRow>? = null
+    private var dragStartRows: List<ShippyCollectionTrackRow>? = null
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         ViewHolder(ItemSongBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) =
         holder.bind(getItem(position), onClick, onDownloadAction)
+
+    fun beginDrag() {
+        if (dragRows == null) {
+            dragStartRows = currentList
+            dragRows = currentList.toMutableList()
+        }
+    }
+
+    fun move(fromPosition: Int, toPosition: Int): Boolean {
+        val rows = dragRows ?: return false
+        if (fromPosition !in rows.indices || toPosition !in rows.indices) return false
+        rows.add(toPosition, rows.removeAt(fromPosition))
+        submitList(rows.toList())
+        return true
+    }
+
+    fun finishDrag(): List<ShippyCollectionTrackRow>? {
+        val rows = dragRows?.toList()
+        val changed = rows != null && rows != dragStartRows
+        dragRows = null
+        dragStartRows = null
+        return rows?.takeIf { changed }
+    }
 
     internal class ViewHolder(private val binding: ItemSongBinding) : RecyclerView.ViewHolder(binding.root) {
         fun bind(

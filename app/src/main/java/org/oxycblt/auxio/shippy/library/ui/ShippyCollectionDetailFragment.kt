@@ -23,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
@@ -54,6 +55,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     private lateinit var count: TextView
     private lateinit var progress: ProgressBar
     private lateinit var message: TextView
+    private lateinit var tracks: RecyclerView
     private val tracksAdapter =
         ShippyCollectionTrackAdapter(
             onClick = { row -> model.play(collectionId, currentState?.rows.orEmpty(), row) },
@@ -61,6 +63,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         )
     private var currentState: ShippyCollectionDetailState? = null
     private var playlistMenuInflated = false
+    private var trackDragHelper: ItemTouchHelper? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -70,7 +73,9 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         count = view.findViewById(R.id.shippy_collection_count)
         progress = view.findViewById(R.id.shippy_collection_progress)
         message = view.findViewById(R.id.shippy_collection_message)
-        view.findViewById<RecyclerView>(R.id.shippy_collection_tracks).adapter = tracksAdapter
+        tracks = view.findViewById<RecyclerView>(R.id.shippy_collection_tracks).also {
+            it.adapter = tracksAdapter
+        }
 
         toolbar.setNavigationOnClickListener { findNavController().navigateUp() }
         toolbar.setOnMenuItemClickListener { item ->
@@ -123,6 +128,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         message.isGone = state.rows.isNotEmpty() && state.unresolvedTrackCount == 0
         if (state is ShippyCollectionDetailState.Playlist) {
             ensurePlaylistMenu(state)
+            ensureTrackReordering()
         }
     }
 
@@ -133,6 +139,20 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         }
         toolbar.menu.findItem(R.id.action_shippy_pin)?.title =
             getString(if (state.playlist.isPinned) R.string.lbl_unpin else R.string.lbl_pin)
+    }
+
+    private fun ensureTrackReordering() {
+        if (trackDragHelper != null) return
+        trackDragHelper =
+            ItemTouchHelper(
+                    ShippyCollectionTrackDragCallback(tracksAdapter, onDragFinished@{ rows ->
+                        val playlist =
+                            currentState as? ShippyCollectionDetailState.Playlist
+                                ?: return@onDragFinished
+                        model.reorderPlaylistTracks(playlist.playlist.id, playlist.trackIds, rows)
+                    })
+                )
+                .also { it.attachToRecyclerView(tracks) }
     }
 
     private fun onDownloadAction(row: ShippyCollectionTrackRow) {

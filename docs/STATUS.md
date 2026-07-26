@@ -400,6 +400,12 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   notification/lock-screen controls, audio-focus/noisy handling, headset and
   Bluetooth commands, and responsive home-screen widgets remain connected to
   Shippy's canonical player state.
+- User-playlist detail now supports long-press track reordering. One complete,
+  duplicate-free order is persisted after the drag finishes, unresolved track
+  slots remain intact, and permanent system collections cannot enter the path.
+- Now Playing keeps provider/source diagnostics, original links, and technical
+  metadata behind Song Information while direct Save and Download remain
+  unduplicated primary actions.
 
 ## In Progress
 

@@ -56,7 +56,13 @@ class CollectionDetailPresentationTest {
                 isPinned = true,
             )
 
-        val state = ShippyCollectionDetailState.Playlist(playlist, emptyList(), unresolvedTrackCount = 2)
+        val state =
+            ShippyCollectionDetailState.Playlist(
+                playlist = playlist,
+                trackIds = emptyList(),
+                rows = emptyList(),
+                unresolvedTrackCount = 2,
+            )
 
         assertEquals("Road trip", state.title)
         assertTrue(state.playlist.isPinned)

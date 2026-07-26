@@ -52,7 +52,7 @@ subsequent task names an actual module.
 - [x] Preserve Auxio's expand/collapse Now Playing and predictive/back hierarchy.
 - [x] Rebuild player action hierarchy without duplicate save/download actions.
 - [x] Place lyrics below the main player content.
-- [ ] Move technical/provider actions to Song Information.
+- [x] Move technical/provider actions to Song Information.
 - [ ] Establish reusable track rows, collection rows, controls, dialogs, sheets,
       and empty/error/loading states.
 - [x] Preserve real Auxio local playback through the entire shell.
@@ -73,6 +73,8 @@ through Auxio’s existing playback stack.
 - [ ] Preserve user playlist creation, edit, pin, sort, and deletion.
   - [x] Create Room-backed Shippy playlists from Library while retaining device
         playlist import as a separate action.
+  - [x] Reorder resolved tracks in user playlists through long-press drag while
+        retaining unresolved track slots and rejecting system collections.
 - [x] Support Local tracks inside user playlists and queue.
   - Relationship-backed collection playback now creates a duplicate-safe
     canonical queue in visible playlist order, selects the exact tapped

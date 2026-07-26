@@ -78,7 +78,12 @@ constructor(
                                 trackIds.resolveRows(
                                     tracks.toTrackDownloads(storedDownloads, downloadableProviderIds()),
                                 )
-                            ShippyCollectionDetailState.Playlist(it, rows.rows, rows.unresolvedCount)
+                            ShippyCollectionDetailState.Playlist(
+                                playlist = it,
+                                trackIds = trackIds,
+                                rows = rows.rows,
+                                unresolvedTrackCount = rows.unresolvedCount,
+                            )
                         }
                             ?: ShippyCollectionDetailState.Missing
                     }
@@ -145,6 +150,17 @@ constructor(
         if (playlistId.isSystem) return
         viewModelScope.launch { repository.deletePlaylist(playlistId) }
     }
+
+    fun reorderPlaylistTracks(
+        playlistId: LibraryCollectionId,
+        trackIds: List<TrackId>,
+        reorderedRows: List<ShippyCollectionTrackRow>,
+    ) {
+        if (playlistId.isSystem) return
+        val reorderedTrackIds = reorderPlaylistTrackIds(trackIds, reorderedRows.map { it.track.id })
+        if (reorderedTrackIds == trackIds) return
+        viewModelScope.launch { repository.replacePlaylistTracks(playlistId, reorderedTrackIds) }
+    }
 }
 
 internal sealed interface ShippyCollectionDetailState {
@@ -160,6 +176,7 @@ internal sealed interface ShippyCollectionDetailState {
 
     data class Playlist(
         val playlist: LibraryCollection.Playlist,
+        val trackIds: List<TrackId>,
         override val rows: List<ShippyCollectionTrackRow>,
         override val unresolvedTrackCount: Int,
     ) : ShippyCollectionDetailState {
