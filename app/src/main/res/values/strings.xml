@@ -251,6 +251,7 @@
     <string name="lng_search_library">Search your library…</string>
     <string name="lng_no_current_music">Play something and it will stay close at hand.</string>
     <string name="lng_crew_empty">Share one queue and keep playback in sync on a nearby or remote device.</string>
+    <string name="lng_crew_active">Crew active</string>
     <string name="lbl_starting_crew">Starting Crew</string>
     <string name="lbl_joining_crew">Joining Crew</string>
     <string name="lbl_ending_crew">Ending Crew</string>

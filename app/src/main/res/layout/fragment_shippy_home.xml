@@ -32,6 +32,71 @@
             android:orientation="vertical"
             android:paddingHorizontal="@dimen/spacing_medium">
 
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/home_crew"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_large"
+                android:clickable="true"
+                android:focusable="true"
+                android:visibility="gone"
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow"
+                app:cardElevation="0dp"
+                tools:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:minHeight="@dimen/size_touchable_large"
+                    android:orientation="horizontal"
+                    android:padding="@dimen/spacing_small">
+
+                    <ImageView
+                        android:layout_width="@dimen/size_touchable_large"
+                        android:layout_height="@dimen/size_touchable_large"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_person_24"
+                        app:tint="?attr/colorOnSurface" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_medium"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/lbl_crew"
+                            android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+                        <TextView
+                            android:id="@+id/home_crew_status"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodyMedium"
+                            android:textColor="?attr/colorOnSurfaceVariant"
+                            tools:text="Starting Crew" />
+
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/home_crew_members"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="@dimen/spacing_medium"
+                        android:textAppearance="?attr/textAppearanceBodyMedium"
+                        android:textColor="?attr/colorOnSurfaceVariant"
+                        tools:text="2 members" />
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -129,22 +194,15 @@
                 android:textColor="?attr/colorOnSurfaceVariant"
                 tools:text="120 songs · 14 albums · 30 artists" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/home_open_library"
-                style="@style/Widget.Auxio.Button.TextButton"
-                android:layout_width="wrap_content"
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/home_library_shortcuts"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_small"
-                android:text="@string/lbl_open_library"
-                app:icon="@drawable/ic_library_24" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/home_open_search"
-                style="@style/Widget.Auxio.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/lbl_find_music"
-                app:icon="@drawable/ic_search_24" />
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                tools:itemCount="4"
+                tools:listitem="@layout/item_library_collection" />
 
         </LinearLayout>
 

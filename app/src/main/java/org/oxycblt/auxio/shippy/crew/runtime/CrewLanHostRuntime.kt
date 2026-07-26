@@ -45,6 +45,7 @@ import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayHost
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayRegistrationState
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHttpClient
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayIceServerProvider
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
@@ -193,6 +194,7 @@ constructor(
     private val profileSettings: CrewProfileSettings,
     private val crewSettings: CrewSettings,
     @CrewRelayHttpClient private val relayClient: OkHttpClient,
+    private val relayIceServerProvider: CrewRelayIceServerProvider,
     private val checkpoints: CrewCheckpointRepository,
     private val leases: CrewRejoinLeaseStore,
     private val mediaRuntimeFactory: CrewActiveMediaRuntimeFactory,
@@ -335,6 +337,7 @@ constructor(
                 }
                 .getOrElse { return fail(CrewLanHostLaunchFailure.Initialization) }
         val activeSignaling = checkNotNull(signaling)
+        val iceServers = relayIceServerProvider.resolve(bootstrap.invite)
         admission =
             runCatching {
                     CrewHostAdmissionCoordinator(
@@ -350,7 +353,7 @@ constructor(
                                         invite = bootstrap.invite,
                                         localMemberId = localMemberId,
                                         role = CrewDirectPeerRole.RESPONDER,
-                                        iceServers = DEFAULT_CREW_REMOTE_ICE_SERVERS,
+                                        iceServers = iceServers,
                                     ),
                                 )
                             },

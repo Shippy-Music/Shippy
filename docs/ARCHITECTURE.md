@@ -253,6 +253,10 @@ Transition strategy:
 6. Add download/provider/Crew candidates without creating a second player.
 
 MediaSession, widgets, and Android Auto continue to invoke the same manager.
+Android Auto retains Auxio's `MediaBrowserServiceCompat` browse/search tree for
+the distinct Local realm. Selecting those rows enters the canonical Shippy
+player, while the live car queue and transport commands consume the same
+`ResolvedQueueItem`/`PlaybackStateManager` state as every other system surface.
 
 ## 7. Persistence
 
@@ -565,7 +569,11 @@ session locator/invitation pair, isolated random join routes, heartbeat/rate/
 capacity limits, and no persistence or payload logging. Android peers retain
 end-to-end signaling confidentiality and final fingerprint-bound Crew join
 authentication; the relay only routes ciphertext. It is a signaling foundation,
-not TURN, control fan-out, media fan-out, or a membership authority.
+not a TURN server, control fan-out, media fan-out, or a membership authority.
+When the operator configures a separate coturn service and shared REST secret,
+the same HTTP process may mint bounded short-lived coturn credentials for the
+exact opaque host registration currently held in memory. It never receives the
+invitation bearer secret and does not proxy media.
 
 The Android adapter mirrors that envelope through one bounded OkHttp WebSocket.
 Every random route derives directional AES-256-GCM keys and nonce prefixes from
@@ -580,8 +588,10 @@ retaining one admission coordinator, WebRTC runtime, and session/media engine.
 Failed relay registration is closed and replaced by a newly generated LAN-only
 bootstrap. A relay-bearing join races LAN and hosted signaling, closes the
 loser, and hands only one peer to the existing join coordinator. The direct
-WebRTC attempt uses public STUN; TURN credentials, transport migration, and full
-relay fallback remain explicit later work.
+WebRTC attempt always retains public STUN and may append strictly validated,
+short-lived TURN credentials derived from the configured relay origin.
+Joined-session reconnect refreshes those credentials on each dial. Transport
+migration and full ordered relay fan-out remain explicit later work.
 
 Relay Settings stores only a validated HTTPS endpoint. Its health probe derives
 the configured origin's public `/healthz`, performs one cancellable bounded GET
@@ -727,8 +737,8 @@ guidance says it becomes required when targeting SDK 37. The existing adapter
 must add that release-time permission flow when the target SDK is raised.
 
 The selected dependency and Android wrapper are code/static-inspected, not
-device-proven. Hosted signaling, network migration, TURN, and multi-phone
-behavior remain explicit implementation and device-verification work. The LAN
+device-proven. Hosted signaling, network migration, coturn allocation, and
+multi-phone behavior remain explicit device-verification work. The LAN
 socket path has focused loopback tests authored but not run on this machine. QR
 is invitation/authentication, never the transport itself.
 

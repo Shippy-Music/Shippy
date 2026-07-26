@@ -51,6 +51,7 @@ import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayJoin
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayJoinResult
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHttpClient
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayIceServerProvider
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
@@ -198,6 +199,7 @@ constructor(
     private val lanDiscovery: CrewLanDiscovery,
     private val profileSettings: CrewProfileSettings,
     @CrewRelayHttpClient private val relayClient: OkHttpClient,
+    private val relayIceServerProvider: CrewRelayIceServerProvider,
     private val checkpoints: CrewCheckpointRepository,
     private val leases: CrewRejoinLeaseStore,
     private val mediaRuntimeFactory: CrewActiveMediaRuntimeFactory,
@@ -287,6 +289,7 @@ constructor(
             return fail(CrewLanJoinLaunchFailure.Initialization)
         }
         val activeWebRtc = checkNotNull(webRtc)
+        val iceServers = relayIceServerProvider.resolve(invite)
         coordinator =
             runCatching {
                     CrewJoinCoordinator(
@@ -302,7 +305,7 @@ constructor(
                                         invite = invite,
                                         localMemberId = localMemberId,
                                         role = CrewDirectPeerRole.INITIATOR,
-                                        iceServers = DEFAULT_CREW_REMOTE_ICE_SERVERS,
+                                        iceServers = iceServers,
                                     ),
                                 )
                             },
@@ -418,6 +421,7 @@ constructor(
         }
         val handle =
             runCatching {
+                    val iceServers = relayIceServerProvider.resolve(invite)
                     CrewDirectPeerConnectionHandle(
                         CrewDirectPeerConnection(
                             peerFactory = webRtcRuntime,
@@ -425,11 +429,12 @@ constructor(
                             invite = invite,
                             localMemberId = localMember.id,
                             role = CrewDirectPeerRole.INITIATOR,
-                            iceServers = DEFAULT_CREW_REMOTE_ICE_SERVERS,
+                            iceServers = iceServers,
                         )
                     )
                 }
                 .getOrElse {
+                    if (it is CancellationException) throw it
                     signalingPeer.close()
                     return CrewReconnectDialResult.Retryable
                 }

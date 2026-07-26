@@ -16,4 +16,9 @@
         android:id="@+id/action_sleep_timer"
         android:title="@string/lbl_sleep_timer"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/action_open_lyrics"
+        android:title="@string/lbl_lyrics"
+        android:visible="false"
+        app:showAsAction="never" />
 </menu>

@@ -7,6 +7,7 @@ package org.oxycblt.auxio.shippy.crew.relay
 
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
@@ -33,6 +34,7 @@ constructor(
 
         return suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
+            call.timeout().timeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(
                 object : Callback {
@@ -76,6 +78,7 @@ constructor(
 
     private companion object {
         const val MAX_RESPONSE_BYTES = 4 * 1024
+        const val REQUEST_TIMEOUT_SECONDS = 8L
     }
 }
 

@@ -125,6 +125,10 @@ export class RelayRegistry {
     this.members.delete(connection);
   }
 
+  hasSession(registration) {
+    return this.sessions.has(sessionKey(registration));
+  }
+
   closeRoute(session, route, reason) {
     if (!session.routes.delete(routeKey(route.id))) return;
     this.members.delete(route.join);

@@ -166,7 +166,9 @@ code/test level, ready for later device verification.
       audio-focus, and becoming-noisy paths on the canonical Shippy player.
 - [x] Retain Auxio's responsive home-screen widgets on the same canonical
       playback state and command receiver.
-- [ ] Android Auto after MediaSession stability.
+- [x] Retain Auxio's Android Auto media-browser service and Local browse/search
+      tree while routing playback and queue controls through Shippy's canonical
+      MediaSession/player authority.
 
 **Validation:**
 
@@ -227,8 +229,8 @@ code/test level, ready for later device verification.
       peer authentication behind the signaling boundary.
 - [x] Implement remote signaling and direct P2P candidate negotiation.
   - A relay-bearing invite races LAN and hosted WebSocket signaling, then uses
-    the existing fingerprint-authenticated WebRTC driver with public STUN
-    candidates. TURN fallback remains separate work.
+    the existing fingerprint-authenticated WebRTC driver with public STUN and
+    optional short-lived coturn REST credentials from the configured relay.
 - [x] Implement reconnection and network-change handling.
   - A joined member retains one session engine, re-races LAN/hosted signaling
     only after coordinator transport detachment, reauthenticates a replacement
@@ -318,6 +320,8 @@ temporarily by the active Crew.
     - [x] Surface per-host registration success/fallback truth in the active
           Crew presentation.
 - [ ] Support relay-assisted reconnection and larger groups.
+  - [x] Retrieve and refresh bounded short-lived coturn REST credentials for
+        direct WebRTC attempts without sending the invitation bearer secret.
 - [x] Package documented local/container deployment without unrelated services.
 
 **Validation:**

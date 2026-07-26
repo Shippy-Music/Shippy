@@ -4,6 +4,12 @@ This is the smallest self-hostable hosted **signaling-only** foundation for Crew
 
 The binary WebSocket endpoint is `GET /v1/crew` (upgrade) and liveness is `GET /healthz`. The server accepts only a versioned bounded binary envelope: a host registers opaque `sessionLocator` and `inviteId`; a joiner registers the same opaque values; the server generates a 128-bit route ID and forwards bounded opaque `DATA` only along that exact live route. Shippy endpoints authenticate and encrypt/sign their own signaling payloads. The QR invitation bearer secret and reusable device credentials must never be sent to this service.
 
+## Optional TURN credentials
+
+This relay can mint short-lived coturn REST credentials, but it never relays media itself. Enable it only with both `CREW_RELAY_TURN_URLS` (up to four comma-separated `turn:`/`turns:` URLs) and a random 16–256-byte `CREW_RELAY_TURN_SECRET`. `CREW_RELAY_TURN_TTL_SECONDS` defaults to 600 and is clamped to 60–3600 seconds.
+
+`POST /v1/ice` accepts bounded JSON containing `protocolVersion: 1`, `sessionLocator`, and `inviteId`. It returns no-store ICE credentials only while that exact host registration is live; otherwise it returns 404. Invalid requests return 400 and unconfigured TURN returns 503. Do not include the QR invitation bearer secret: `inviteId` is only the existing opaque, bounded registration identifier.
+
 ## Run locally
 
 Requires Node 22+:

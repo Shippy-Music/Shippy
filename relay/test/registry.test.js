@@ -85,6 +85,24 @@ test("length-prefixed opaque session keys do not collide when identifiers contai
     connections: 2,
   });
 });
+test("hasSession confirms only an active exact host registration", () => {
+  const { registry } = fixture();
+  const host = {};
+  registry.register(host, registration(ROLE.HOST, "locator", "invite"));
+  assert.equal(
+    registry.hasSession({ sessionLocator: "locator", inviteId: "invite" }),
+    true,
+  );
+  assert.equal(
+    registry.hasSession({ sessionLocator: "locator", inviteId: "other" }),
+    false,
+  );
+  registry.close(host);
+  assert.equal(
+    registry.hasSession({ sessionLocator: "locator", inviteId: "invite" }),
+    false,
+  );
+});
 test("registration rolls back when delivery of REGISTERED or ROUTE_OPEN fails", () => {
   const host = {};
   const failedHostDelivery = new RelayRegistry({ deliver: () => false });

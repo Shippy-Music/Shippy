@@ -377,9 +377,11 @@ binary WebSocket endpoint registers one opaque host rendezvous and isolated
 joiner routes, then forwards only opaque end-to-end-encrypted signaling frames.
 It never receives the invitation bearer secret, persists no session state, and
 closes a route instead of buffering through backpressure. This foundation is not
-TURN, control fan-out, media fan-out, or the completed larger-session relay.
-Those remain explicit later layers rather than being implied by the signaling
-service.
+a TURN server, control fan-out, media fan-out, or the completed larger-session
+relay. When an operator explicitly configures coturn, the relay HTTP process may
+mint short-lived REST credentials only for the exact opaque host registration
+currently held in memory. It still never receives the invitation bearer secret
+or relays media itself.
 
 The matching Android adapter keeps each signaling route end-to-end encrypted.
 It derives independent host-to-join and join-to-host AES-GCM keys from the
@@ -392,9 +394,12 @@ Production hosting registers that route before exposing a relay-bearing invite.
 If registration fails, Shippy closes it and creates a fresh LAN-only invite
 rather than sharing a locator that cannot work. A relay-capable join races LAN
 rendezvous and hosted signaling; the first authenticated signaling peer owns the
-existing WebRTC join path and every losing route is closed. The current remote
-path supplies STUN candidates but no anonymous TURN credentials, so this is an
-honest direct-P2P attempt rather than a claim that every NAT can be traversed.
+existing WebRTC join path and every losing route is closed. The remote path
+always supplies STUN and may append short-lived credentials for the operator's
+configured coturn service. Initial host/join attempts resolve once; joined
+reconnect attempts refresh credentials on every bounded dial. Failed, invalid,
+expired, or unconfigured retrieval falls back to STUN rather than exposing
+network mechanics or weakening invitation authentication.
 
 ### Group scaling
 
@@ -548,8 +553,8 @@ The 2026-07-25 code/static spike selected Android NSD plus data-only WebRTC:
 - WebRTC data channels carry encrypted direct control and bounded binary media.
 - ICE attempts LAN/remote direct connectivity; configured STUN/TURN supports
   traversal and relay.
-- Hosted signaling and larger-session fan-out remain a separate self-hostable
-  relay responsibility.
+- Hosted signaling and optional coturn credential minting are self-hostable;
+  ordered larger-session control/media fan-out remains separate relay work.
 
 The Android dependency is
 `io.github.webrtc-sdk:android-prefixed-stripped:144.7559.09`. It is shadowed to
@@ -712,9 +717,10 @@ fetches and republishes its temporary availability, then redistributes it.
 
 This decision and the join/NSD adapters satisfy the architecture gate at
 source/API level only. Authenticated local signaling sockets are implemented and
-have loopback tests authored, but are not compiled or device-proven. NAT, TURN,
-migration, hosted relay, and multi-phone runtime proof remain implementation
-work and owner device acceptance.
+have loopback tests authored, but are not compiled or device-proven. Hosted
+signaling, optional coturn REST credentials, and joined-session network-change
+redial are implemented at source level; real NAT traversal, coturn allocation,
+and multi-phone runtime proof remain owner device acceptance.
 
 QR is an invitation/authentication mechanism. Signaling, ICE/STUN/TURN, LAN
 discovery, and relay remain necessary and are not collapsed into “QR contains

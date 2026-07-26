@@ -1,4 +1,5 @@
 import http from "node:http";
+import { createHmac, randomBytes } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import {
   decode,
@@ -8,10 +9,52 @@ import {
   TYPE,
 } from "./protocol.js";
 import { RelayRegistry } from "./registry.js";
+import { LIMITS } from "./protocol.js";
+
+const ICE_BODY_BYTES = 2 * 1024;
+const TURN_TTL_DEFAULT = 600;
+const TURN_TTL_MIN = 60;
+const TURN_TTL_MAX = 3600;
+const TURN_URLS_MAX = 4;
+const TURN_URL_BYTES_MAX = 512;
+const TURN_SECRET_BYTES_MIN = 16;
+const TURN_SECRET_BYTES_MAX = 256;
+const TURN_URL_PATTERN =
+  /^(turn|turns):[A-Za-z0-9.-]+(?::([0-9]{1,5}))?(?:\?transport=(udp|tcp))?$/;
 
 const intEnv = (env, name, fallback) => {
   const value = Number.parseInt(env[name] ?? "", 10);
   return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+};
+
+const boundedIntEnv = (env, name, fallback, min, max) => {
+  const value = intEnv(env, name, fallback);
+  return Math.min(max, Math.max(min, value));
+};
+
+const turnUrls = (value) => {
+  const urls = (value ?? "")
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean);
+  if (!urls.length || urls.length > TURN_URLS_MAX) return [];
+  return urls.every((url) => {
+    if (Buffer.byteLength(url) > TURN_URL_BYTES_MAX) return false;
+    const match = TURN_URL_PATTERN.exec(url);
+    if (!match) return false;
+    const port = match[2];
+    return !port || (Number(port) >= 1 && Number(port) <= 65535);
+  })
+    ? urls
+    : [];
+};
+
+const turnSecret = (value) => {
+  const secret = value ?? "";
+  const size = Buffer.byteLength(secret);
+  return size >= TURN_SECRET_BYTES_MIN && size <= TURN_SECRET_BYTES_MAX
+    ? secret
+    : "";
 };
 
 export function loadConfig(env = process.env) {
@@ -29,10 +72,77 @@ export function loadConfig(env = process.env) {
     heartbeatMs: intEnv(env, "CREW_RELAY_HEARTBEAT_MS", 30_000),
     shutdownMs: intEnv(env, "CREW_RELAY_SHUTDOWN_MS", 1_000),
     rate: intEnv(env, "CREW_RELAY_MESSAGES_PER_MINUTE", 240),
+    turnUrls: turnUrls(env.CREW_RELAY_TURN_URLS),
+    turnSecret: turnSecret(env.CREW_RELAY_TURN_SECRET),
+    turnTtlSeconds: boundedIntEnv(
+      env,
+      "CREW_RELAY_TURN_TTL_SECONDS",
+      TURN_TTL_DEFAULT,
+      TURN_TTL_MIN,
+      TURN_TTL_MAX,
+    ),
     allowedOrigins,
     allowAnyOrigin: env.CREW_RELAY_ALLOW_ANY_ORIGIN === "true",
   });
 }
+
+export function issueTurnCredential(
+  config,
+  { now = Date.now, random = randomBytes } = {},
+) {
+  const expiresAtEpochMs =
+    (Math.floor(now() / 1000) + config.turnTtlSeconds) * 1000;
+  const username = `${expiresAtEpochMs / 1000}:${random(18).toString("base64url")}`;
+  const credential = createHmac("sha1", config.turnSecret)
+    .update(username)
+    .digest("base64");
+  return { username, credential, expiresAtEpochMs };
+}
+
+const validIceRegistration = (body) => {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  if (body.protocolVersion !== 1) return null;
+  for (const [name, limit] of [
+    ["sessionLocator", LIMITS.locator],
+    ["inviteId", LIMITS.invite],
+  ]) {
+    if (typeof body[name] !== "string") return null;
+    const size = Buffer.byteLength(body[name]);
+    if (size < 1 || size > limit) return null;
+  }
+  return {
+    sessionLocator: body.sessionLocator,
+    inviteId: body.inviteId,
+  };
+};
+
+const readJsonBody = (req) =>
+  new Promise((resolve) => {
+    const declaredLength = req.headers["content-length"];
+    const contentLength = Number(declaredLength);
+    if (
+      declaredLength !== undefined &&
+      (!/^\d+$/.test(declaredLength) || contentLength > ICE_BODY_BYTES)
+    ) {
+      req.resume();
+      return resolve(null);
+    }
+    let size = 0;
+    const chunks = [];
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size <= ICE_BODY_BYTES) chunks.push(chunk);
+    });
+    req.on("end", () => {
+      if (size > ICE_BODY_BYTES) return resolve(null);
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch {
+        resolve(null);
+      }
+    });
+    req.on("error", () => resolve(null));
+  });
 
 const log = (event, detail = {}) =>
   process.stdout.write(
@@ -74,6 +184,41 @@ export function createRelayServer(config = loadConfig()) {
         "cache-control": "no-store",
       });
       res.end(JSON.stringify({ ok: true, ...counts }));
+      return;
+    }
+    if (req.method === "POST" && new URL(req.url, "http://relay").pathname === "/v1/ice") {
+      if (!config.turnUrls.length || !config.turnSecret) {
+        req.resume();
+        res.writeHead(503, { "cache-control": "no-store" }).end();
+        return;
+      }
+      if (!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"] ?? "")) {
+        req.resume();
+        res.writeHead(400, { "cache-control": "no-store" }).end();
+        return;
+      }
+      readJsonBody(req).then((body) => {
+        const registration = validIceRegistration(body);
+        if (!registration) {
+          res.writeHead(400, { "cache-control": "no-store" }).end();
+          return;
+        }
+        if (!registry.hasSession(registration)) {
+          res.writeHead(404, { "cache-control": "no-store" }).end();
+          return;
+        }
+        const { username, credential, expiresAtEpochMs } = issueTurnCredential(config);
+        res.writeHead(200, {
+          "content-type": "application/json",
+          "cache-control": "no-store",
+        });
+        res.end(
+          JSON.stringify({
+            iceServers: [{ urls: config.turnUrls, username, credential }],
+            expiresAtEpochMs,
+          }),
+        );
+      });
       return;
     }
     res.writeHead(404).end();

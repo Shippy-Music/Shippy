@@ -44,7 +44,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   primary navigation; full-player expansion fades navigation away.
 - Top-level destination state restoration and Library-only Auxio FAB behavior
   implemented.
-- Home now reflects real current playback and real local-library statistics.
+- Home now reflects canonical Local/provider playback, real local-library
+  statistics, a truthful active-Crew card, permanent Liked/Downloads/Local
+  shortcuts, and pinned Shippy playlists without duplicating primary navigation.
 - Search is a top-level destination; the mature Auxio local library is retained
   under Library.
 - JioSaavn media URL/response utilities and LRC parser ported with focused tests.
@@ -485,14 +487,29 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   Android default-network changes wake a pending retry, stale/wrong-coordinator
   results are closed, and the UI shows reconnecting or expired without exposing
   addresses or secrets.
+- Android Auto remains connected through Auxio's exported
+  `MediaBrowserServiceCompat`, automotive descriptor, Local browse/search tree,
+  and the same canonical Shippy MediaSession queue and controls used by the app,
+  notification, headset, and widgets. Provider browsing is not invented as a
+  second catalogue surface; device/head-unit verification remains deferred.
+- Compact player configurations now expose a restrained Lyrics dialog backed by
+  the same cancellable cached LRCLIB/Musixmatch-broker state as the full portrait
+  player. It renders loading, synchronized current line, full/plain lyrics,
+  instrumental, unavailable, retryable failure, and Retry without creating a
+  second lyrics authority.
+- The self-hosted relay can now optionally mint short-lived coturn REST
+  credentials only for an exact active opaque host registration. Android
+  requests them without the invitation secret, bounds and validates the
+  response, keeps public STUN, and refreshes TURN credentials on joined-session
+  reconnect attempts. TURN remains a transport service operated beside the
+  signaling relay; the relay itself still does not retain or proxy media.
 
 ## In Progress
 
-- Adding an expandable lyrics surface for compact player configurations and the
-  optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- TURN and full relay transport fallback beyond hosted signaling.
+- Completing ordered relay control/media fan-out and larger-session behavior
+  beyond direct WebRTC plus practical TURN fallback.
 - Renewable active-session reconnect credentials beyond the current short-lived
   invitation lease.
 
@@ -507,10 +524,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   exact verification before selecting the day-to-day development branch.
 - Bloomee provider logic is Dart/Flutter and must be ported/reimplemented, not
   assumed reusable as native Kotlin.
-- Crew transport, join authentication, NSD, encrypted LAN signaling, and direct
-  connection orchestration are source/API-inspected only. Loopback/simulation
-  tests are authored but not run; NAT traversal, TURN, reconnection, and
-  multi-phone behavior remain compile/device-unverified.
+- Crew transport, join authentication, NSD, encrypted LAN signaling, direct
+  connection orchestration, Android TURN retrieval, and reconnection are
+  source/API-inspected only. Loopback/simulation/parser tests are authored but
+  not run; NAT traversal and multi-phone behavior remain compile/device-unverified.
 - Crew control serialization, chunk reassembly/media transfer, Room checkpoint
   and Last.fm v7 generation, session-engine convergence, and persistence tests
   are authored/static-parsed only and remain uncompiled.
@@ -545,15 +562,18 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   OkHttp 5.3.0/Hilt generation, LAN-vs-relay cancellation, route lifecycle,
   encrypted signaling interoperability, and NAT traversal still require a real
   Gradle/Android and relay integration pass.
+- The optional coturn credential endpoint has passing Node unit/integration
+  coverage, but Android parsing/wiring remains uncompiled and real TURN
+  allocation needs owner-operated relay/device verification.
 - Crew temporary-download staging and its WorkManager/SAF handoff have focused
   tests authored but not run. Process death, Crew teardown during transfer,
   destination revocation, and cleanup require owner device verification.
 
 ## Next Concrete Actions
 
-1. Finish the remaining player/audio/Android Auto surfaces.
-2. Add renewable active-session reconnect credentials plus practical TURN.
-3. Implement bounded relay media/larger-session behavior.
+1. Finish remaining provider/player and exact audio-option gaps.
+2. Add renewable active-session reconnect credentials.
+3. Implement bounded relay control/media fan-out and larger-session behavior.
 
 ## Verification Ledger
 

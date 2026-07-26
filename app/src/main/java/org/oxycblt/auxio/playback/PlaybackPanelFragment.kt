@@ -142,6 +142,8 @@ class PlaybackPanelFragment :
         binding.playbackToolbar.apply {
             setNavigationOnClickListener { playbackModel.openMain() }
             setOnMenuItemClickListener(this@PlaybackPanelFragment)
+            menu.findItem(R.id.action_open_lyrics)?.isVisible =
+                binding.playbackLyricsContainer == null
         }
 
         binding.playbackPager?.apply {
@@ -301,6 +303,10 @@ class PlaybackPanelFragment :
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_open_lyrics) {
+            LyricsDialog.show(parentFragmentManager)
+            return true
+        }
         if (item.itemId == R.id.action_crew_react) {
             showReactionPicker()
             return true
