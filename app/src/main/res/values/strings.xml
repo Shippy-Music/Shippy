@@ -458,6 +458,11 @@
     <string name="set_audio">Audio</string>
     <string name="set_audio_desc">Configure sound and playback behavior</string>
     <string name="set_playback">Playback</string>
+    <string name="set_transition_mode">Track transition</string>
+    <string name="set_transition_gapless">Gapless</string>
+    <string name="set_transition_crossfade">Crossfade</string>
+    <string name="set_crossfade_duration">Crossfade duration</string>
+    <string name="set_crossfade_duration_desc">Applies only when Crossfade is selected. Disabled during Crew.</string>
     <string name="set_headset_autoplay">Headset autoplay</string>
     <string name="set_headset_autoplay_desc">Always start playing when a headset is connected (may not work on all devices)</string>
     <string name="set_rewind_prev">Rewind before skipping back</string>

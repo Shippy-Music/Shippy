@@ -27,6 +27,21 @@
             app:summary="@string/set_remember_pause_desc"
             app:title="@string/set_remember_pause" />
 
+        <org.oxycblt.auxio.settings.ui.IntListPreference
+            app:defaultValue="0"
+            app:entries="@array/entries_transition_mode"
+            app:entryValues="@array/values_transition_mode"
+            app:key="@string/set_key_transition_mode"
+            app:title="@string/set_transition_mode" />
+
+        <org.oxycblt.auxio.settings.ui.IntListPreference
+            app:defaultValue="5000"
+            app:entries="@array/entries_crossfade_duration"
+            app:entryValues="@array/values_crossfade_duration_ms"
+            app:key="@string/set_key_crossfade_duration_ms"
+            app:summary="@string/set_crossfade_duration_desc"
+            app:title="@string/set_crossfade_duration" />
+
     </PreferenceCategory>
 
     <PreferenceCategory android:title="@string/set_replay_gain">

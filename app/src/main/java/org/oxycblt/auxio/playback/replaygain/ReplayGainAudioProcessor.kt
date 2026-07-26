@@ -62,6 +62,14 @@ constructor(
         playbackSettings.registerListener(this)
     }
 
+    /**
+     * A private crossfade standby has no state-manager ownership. Provider/temporary media uses
+     * neutral gain until promotion, where [attach] restores ordinary manager-driven behavior.
+     */
+    fun prepareNeutral() {
+        volume = 1f
+    }
+
     /** Remove this instance from the components required for it to function correctly. */
     fun release() {
         playbackManager.removeListener(this)

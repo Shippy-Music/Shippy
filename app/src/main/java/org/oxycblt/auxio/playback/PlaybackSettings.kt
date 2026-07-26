@@ -60,6 +60,10 @@ interface PlaybackSettings : Settings<PlaybackSettings.Listener> {
     val rememberPause: Boolean
     /** Whether to always exit when task is removed, even if playing. */
     val exitOnTaskRemoval: Boolean
+    /** Native gapless playback or the opt-in bounded two-player crossfade. */
+    val transitionMode: TransitionMode
+    /** Duration of a crossfade when [transitionMode] is [TransitionMode.CROSSFADE]. */
+    val crossfadeDurationMs: Long
 
     interface Listener {
         /** Called when one of the ReplayGain configurations have changed. */
@@ -70,6 +74,9 @@ interface PlaybackSettings : Settings<PlaybackSettings.Listener> {
 
         /** Called when [pauseOnRepeat] has changed. */
         fun onPauseOnRepeatChanged() {}
+
+        /** Called when crossfade mode or duration changes. */
+        fun onTransitionSettingsChanged() {}
     }
 }
 
@@ -137,6 +144,24 @@ class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Cont
     override val exitOnTaskRemoval: Boolean
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_task_exit), false)
 
+    override val transitionMode: TransitionMode
+        get() =
+            TransitionMode.fromIntCode(
+                sharedPreferences.getInt(
+                    getString(R.string.set_key_transition_mode),
+                    TransitionMode.GAPLESS.intCode,
+                )
+            ) ?: TransitionMode.GAPLESS
+
+    override val crossfadeDurationMs: Long
+        get() =
+            PlaybackTransition.boundedDurationMs(
+                sharedPreferences.getLong(
+                    getString(R.string.set_key_crossfade_duration_ms),
+                    PlaybackTransition.DEFAULT_CROSSFADE_DURATION_MS,
+                )
+            )
+
     override fun migrate() {
         // MusicMode was converted to PlaySong in 3.2.0
         fun Int.migrateMusicMode() =
@@ -200,6 +225,11 @@ class PlaybackSettingsImpl @Inject constructor(@ApplicationContext context: Cont
             getString(R.string.set_key_repeat_pause) -> {
                 L.d("Dispatching pause on repeat change")
                 listener.onPauseOnRepeatChanged()
+            }
+            getString(R.string.set_key_transition_mode),
+            getString(R.string.set_key_crossfade_duration_ms) -> {
+                L.d("Dispatching playback transition change")
+                listener.onTransitionSettingsChanged()
             }
         }
     }

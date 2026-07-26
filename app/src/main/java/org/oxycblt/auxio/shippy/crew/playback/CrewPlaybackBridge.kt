@@ -23,6 +23,7 @@ import org.oxycblt.auxio.playback.state.PlaybackCommandFactoryImpl
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.playback.service.PlaybackTransitionGuard
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
@@ -66,6 +67,7 @@ constructor(
     private val crewSettings: CrewSettings,
     private val temporaryMediaIndex: CrewTemporaryMediaIndex,
     private val privateSources: CrewPrivateSourceRegistry,
+    private val transitionGuard: PlaybackTransitionGuard,
 ) : PlaybackStateManager.Listener {
     private var scope: CoroutineScope? = null
     private var stateJob: Job? = null
@@ -90,6 +92,7 @@ constructor(
         stateJob = newScope.launch {
             activeCrewRuntime.state.collectLatest { runtimeState ->
                 val active = runtimeState as? ActiveCrewRuntimeState.Active
+                transitionGuard.setCrewActive(active != null)
                 latestCrew = active?.presentation?.crewState
                 localCrewMemberId = active?.presentation?.localMemberId
                 if (active != null) {
@@ -127,6 +130,7 @@ constructor(
     fun release() {
         if (!attached) return
         attached = false
+        transitionGuard.setCrewActive(false)
         playbackManager.removeListener(this)
         reconcileJob?.cancel()
         stateJob?.cancel()
