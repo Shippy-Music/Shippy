@@ -80,6 +80,11 @@ sealed interface CrewHostedRelayRegistrationState {
     data object Closed : CrewHostedRelayRegistrationState
 }
 
+data class CrewRelayInviteCandidate(
+    val expectedMemberId: CrewMemberId?,
+    val invite: CrewInvite,
+)
+
 /** One host WebSocket multiplexes bounded opaque routes and exposes readiness before advertisement. */
 class CrewHostedRelayHost(
     private val client: OkHttpClient,
@@ -89,6 +94,9 @@ class CrewHostedRelayHost(
     private val localDisplayName: String,
     private val nowEpochMs: () -> Long = System::currentTimeMillis,
     private val maxRoutes: Int = RELAY_MAX_ROUTES,
+    private val inviteCandidates: () -> List<CrewRelayInviteCandidate> = {
+        listOf(CrewRelayInviteCandidate(null, invite))
+    },
 ) : Closeable {
     private val closed = AtomicBoolean(false)
     private val routes = ConcurrentHashMap<CrewRelayRouteId, PendingRoute>()
@@ -196,14 +204,13 @@ class CrewHostedRelayHost(
             rejectRoute(routeId)
             return
         }
-        val pending = PendingRoute(CrewRelayRouteCrypto(invite, routeId, CrewRelayRole.HOST))
+        val pending = PendingRoute()
         if (routes.putIfAbsent(routeId, pending) != null) {
             rejectRoute(routeId)
             return
         }
-        if (!send(CrewRelayFrame.Data(routeId, pending.crypto.encrypt(localHello())))) {
-            fail(CrewHostedRelayFailure.CONNECTION)
-        }
+        // Wait for the joiner's encrypted hello. A reconnect may use a private member lease
+        // after the public QR has expired, so the host cannot choose a route key yet.
     }
 
     private fun receive(frame: CrewRelayFrame.Data) {
@@ -212,24 +219,49 @@ class CrewHostedRelayHost(
                 rejectRoute(frame.routeId)
                 return
             }
-        val plain = pending.crypto.decrypt(frame.payload)
         val existing = pending.peer
         if (existing != null) {
-            existing.receive(plain)
+            existing.receive(checkNotNull(pending.crypto).decrypt(frame.payload))
             return
         }
-        val hello = CrewRelayHelloCodec.decode(plain)
+        val selected = selectRouteCandidate(frame.routeId, frame.payload) ?: run {
+            rejectRoute(frame.routeId)
+            return
+        }
+        val hello = selected.hello
+        pending.crypto = selected.crypto
         val peer =
             RelaySignalPeer(
                 sessionId,
-                CrewMemberId(hello.memberId, invite.protocolVersion),
+                CrewMemberId(hello.memberId, selected.invite.protocolVersion),
                 hello.displayName,
-                pending.crypto,
+                selected.crypto,
                 { encrypted -> send(CrewRelayFrame.Data(frame.routeId, encrypted)) },
                 { closeRoute(frame.routeId) },
             )
         pending.peer = peer
+        if (!send(CrewRelayFrame.Data(frame.routeId, selected.crypto.encrypt(localHello())))) {
+            closeRoute(frame.routeId)
+            return
+        }
         if (peersChannel.trySend(peer).isFailure) peer.close()
+    }
+
+    private fun selectRouteCandidate(
+        routeId: CrewRelayRouteId,
+        payload: ByteArray,
+    ): SelectedRouteCandidate? {
+        val candidates = inviteCandidates().take(RELAY_MAX_ROUTES + 1)
+        candidates.forEach { candidate ->
+            val crypto = CrewRelayRouteCrypto(candidate.invite, routeId, CrewRelayRole.HOST)
+            val hello = runCatching { CrewRelayHelloCodec.decode(crypto.decrypt(payload)) }.getOrNull()
+                ?: return@forEach
+            val member = CrewMemberId(hello.memberId, candidate.invite.protocolVersion)
+            if (candidate.expectedMemberId == null || candidate.expectedMemberId == member) {
+                return SelectedRouteCandidate(candidate.invite, crypto, hello)
+            }
+        }
+        return null
     }
 
     private fun localHello() = CrewRelayHelloCodec.encode(CrewRelayHello(localMemberId.value, localDisplayName))
@@ -321,9 +353,16 @@ class CrewHostedRelayHost(
         socket?.cancel()
     }
 
-    private class PendingRoute(val crypto: CrewRelayRouteCrypto) {
+    private class PendingRoute {
+        @Volatile var crypto: CrewRelayRouteCrypto? = null
         @Volatile var peer: RelaySignalPeer? = null
     }
+
+    private data class SelectedRouteCandidate(
+        val invite: CrewInvite,
+        val crypto: CrewRelayRouteCrypto,
+        val hello: CrewRelayHello,
+    )
 }
 
 object CrewHostedRelayJoin {

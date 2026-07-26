@@ -73,6 +73,7 @@ private const val SIGNAL_INCOMING_CAPACITY = 64
 private const val DEFAULT_MAX_SIGNAL_PEERS = 8
 private const val SIGNAL_CLOCK_SKEW_TOLERANCE_MS = 2 * 60 * 1000L
 private const val SIGNAL_MAX_INVITE_LIFETIME_MS = 15 * 60 * 1000L
+private const val SIGNAL_MAX_RECONNECT_CREDENTIAL_LIFETIME_MS = 8 * 60 * 60 * 1000L
 
 enum class CrewSignalConnectionState {
     CONNECTED,
@@ -143,6 +144,13 @@ class CrewLanSignalingHost(
     nowEpochMs: Long,
     private val maxPeers: Int = DEFAULT_MAX_SIGNAL_PEERS,
     private val nonceSource: CrewSignalNonceSource = SecureCrewSignalNonceSource,
+    private val inviteResolver: CrewLanSignalInviteResolver =
+        CrewLanSignalInviteResolver { protocol, locator, inviteId, _, now ->
+            invite.takeIf {
+                it.protocolVersion == protocol && it.sessionLocator == locator &&
+                    it.inviteId == inviteId && isActiveSignalInvite(it, now)
+            }
+        },
 ) : Closeable {
     private val closed = AtomicBoolean(false)
     private val inFlight = AtomicInteger(0)
@@ -185,7 +193,7 @@ class CrewLanSignalingHost(
                     val handshake =
                         serverHandshake(
                             socket,
-                            invite,
+                            inviteResolver,
                             sessionId,
                             localMemberId,
                             localDisplayName,
@@ -469,13 +477,12 @@ private class SignalSessionKeys(
 
 private fun serverHandshake(
     socket: Socket,
-    invite: CrewInvite,
+    inviteResolver: CrewLanSignalInviteResolver,
     sessionId: CrewSessionId,
     localMemberId: CrewMemberId,
     localDisplayName: String,
     nonceSource: CrewSignalNonceSource,
 ): SignalHandshakeResult {
-    requireActiveSignalInvite(invite, System.currentTimeMillis())
     socket.soTimeout = SIGNAL_HANDSHAKE_TIMEOUT_MS
     socket.tcpNoDelay = true
     socket.keepAlive = true
@@ -491,15 +498,18 @@ private fun serverHandshake(
     val remoteMemberId = input.readSignalMemberId()
     val remoteDisplayName = input.readSignalDisplayName()
     val clientNonce = input.readSignalBytes(SIGNAL_NONCE_BYTES)
+    val invite =
+        inviteResolver.resolve(
+            protocolVersion,
+            sessionLocator,
+            inviteId,
+            remoteMemberId,
+            System.currentTimeMillis(),
+        ) ?: throw SignalAuthenticationException()
     require(
         protocolVersion == invite.protocolVersion &&
             remoteMemberId.protocolVersion == invite.protocolVersion
-    ) {
-        "Crew signaling protocol does not match"
-    }
-    require(sessionLocator == invite.sessionLocator && inviteId == invite.inviteId) {
-        "Crew signaling invitation does not match"
-    }
+    ) { "Crew signaling protocol does not match" }
     val serverNonce = nonceSource.nextCheckedNonce()
     val transcript =
         SignalTranscript(
@@ -720,6 +730,17 @@ private fun DataInputStream.readSizedSignalString(): String {
     }
 }
 
+/** Resolves a public QR invitation or a member-bound private reconnect invitation. */
+fun interface CrewLanSignalInviteResolver {
+    fun resolve(
+        protocolVersion: ProtocolVersion,
+        sessionLocator: CrewSessionLocator,
+        inviteId: CrewInviteId,
+        memberId: CrewMemberId,
+        nowEpochMs: Long,
+    ): CrewInvite?
+}
+
 private fun DataOutputStream.writeSignalDisplayName(value: String) {
     requireValidSignalDisplayName(value)
     val bytes = value.toByteArray(Charsets.UTF_8)
@@ -777,7 +798,7 @@ private fun requireActiveSignalInvite(invite: CrewInvite, nowEpochMs: Long) {
 
 private fun isActiveSignalInvite(invite: CrewInvite, nowEpochMs: Long) =
     nowEpochMs >= 0 &&
-        invite.expiresAtEpochMs - invite.issuedAtEpochMs <= SIGNAL_MAX_INVITE_LIFETIME_MS &&
+        invite.expiresAtEpochMs - invite.issuedAtEpochMs <= SIGNAL_MAX_RECONNECT_CREDENTIAL_LIFETIME_MS &&
         invite.issuedAtEpochMs - nowEpochMs <= SIGNAL_CLOCK_SKEW_TOLERANCE_MS &&
         nowEpochMs < invite.expiresAtEpochMs
 

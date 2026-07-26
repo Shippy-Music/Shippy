@@ -131,6 +131,7 @@ class CrewHostAdmissionCoordinator(
     private val session: CrewSessionAdmissionPort,
     private val responders: CrewDirectResponderHandleFactory,
     private val eventIds: CrewAdmissionEventIdSource = SecureCrewAdmissionEventIdSource,
+    private val credentialIssuer: suspend (CrewMemberId) -> Unit = {},
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : Closeable {
     private data class ActiveHandle(
@@ -265,7 +266,16 @@ class CrewHostAdmissionCoordinator(
             }
         when (result) {
             is CrewAdmissionResult.Admitted,
-            is CrewAdmissionResult.AlreadyActive -> publishExact(memberId, active, CrewHostAdmissionState.Active(result))
+            is CrewAdmissionResult.AlreadyActive -> {
+                // Do not create a reconnect credential until the existing DTLS-fingerprint
+                // admission completed and the member is in the authoritative session.
+                runCatching { credentialIssuer(memberId) }
+                    .onFailure {
+                        failExact(memberId, active, CrewHostAdmissionFailure.Exception)
+                        return
+                    }
+                publishExact(memberId, active, CrewHostAdmissionState.Active(result))
+            }
             is CrewAdmissionResult.Rejected ->
                 failExact(memberId, active, CrewHostAdmissionFailure.AdmissionRejected(result.reason))
         }

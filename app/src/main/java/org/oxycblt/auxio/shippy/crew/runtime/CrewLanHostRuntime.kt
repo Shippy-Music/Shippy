@@ -40,9 +40,11 @@ import org.oxycblt.auxio.shippy.crew.lan.CrewLanDiscovery
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanFailureOperation
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanOperationState
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingHost
+import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalInviteResolver
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntime
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayHost
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayInviteCandidate
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayRegistrationState
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHttpClient
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayIceServerProvider
@@ -51,6 +53,7 @@ import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinCredentialRegistry
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewWebRtcRuntime
@@ -61,6 +64,7 @@ import okhttp3.OkHttpClient
 private const val CREW_PROTOCOL_V1 = 1
 private const val DEFAULT_ADVERTISEMENT_TIMEOUT_MS = 10_000L
 private const val CREW_TERMINAL_EVENT_WAIT_MS = 1_500L
+private const val CREW_REJOIN_CREDENTIAL_LIFETIME_MS = 4 * 60 * 60 * 1000L
 
 enum class CrewConnectivityPresentation {
     NEARBY,
@@ -218,6 +222,7 @@ constructor(
             runCatching { CrewHostBootstrapFactory().create(localMember, nowEpochMs(), crewSettings.relayLocator) }.getOrElse {
                 return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
             }
+        val credentialRegistry = CrewRejoinCredentialRegistry()
 
         val requestedRelay = bootstrap.invite.relayLocator != null
         var relayHost: CrewHostedRelayHost? = null
@@ -230,6 +235,21 @@ constructor(
                         bootstrap.initialState.sessionId,
                         localMemberId,
                         localMember.displayName,
+                        inviteCandidates = {
+                            buildList {
+                                if (nowEpochMs() in bootstrap.invite.issuedAtEpochMs until bootstrap.invite.expiresAtEpochMs) {
+                                    add(CrewRelayInviteCandidate(null, bootstrap.invite))
+                                }
+                                credentialRegistry.activeInviteCandidates(
+                                    bootstrap.initialState.sessionId,
+                                    bootstrap.invite.sessionLocator,
+                                    bootstrap.invite.inviteId,
+                                    nowEpochMs(),
+                                ).forEach { candidate ->
+                                    add(CrewRelayInviteCandidate(candidate.memberId, candidate.invite))
+                                }
+                            }.take(8)
+                        },
                     )
                 }.getOrNull()
             val registration =
@@ -332,6 +352,23 @@ constructor(
                         localMemberId = localMemberId,
                         localDisplayName = localMember.displayName,
                         nowEpochMs = nowEpochMs(),
+                        inviteResolver =
+                            CrewLanSignalInviteResolver { protocol, locator, inviteId, memberId, now ->
+                                bootstrap.invite.takeIf {
+                                    it.protocolVersion == protocol &&
+                                        it.sessionLocator == locator && it.inviteId == inviteId &&
+                                        now in it.issuedAtEpochMs until it.expiresAtEpochMs
+                                }
+                                    ?: credentialRegistry.activeInviteCandidates(
+                                        sessionId,
+                                        locator,
+                                        inviteId,
+                                        now,
+                                    ).firstOrNull { candidate ->
+                                        candidate.memberId == memberId &&
+                                            candidate.invite.protocolVersion == protocol
+                                    }?.invite
+                            },
                     )
                 }
                 .getOrElse { return fail(CrewLanHostLaunchFailure.Initialization) }
@@ -356,6 +393,22 @@ constructor(
                                     ),
                                 )
                             },
+                        credentialIssuer = { memberId ->
+                            val issuedAt = nowEpochMs()
+                            val lease =
+                                credentialRegistry.issueAfterAdmission(
+                                    sessionId = sessionId,
+                                    memberId = memberId,
+                                    sessionLocator = bootstrap.invite.sessionLocator,
+                                    relayLocator = bootstrap.invite.relayLocator,
+                                    rendezvousInviteId = bootstrap.invite.inviteId,
+                                    issuedAtEpochMs = issuedAt,
+                                    expiresAtEpochMs = issuedAt + CREW_REJOIN_CREDENTIAL_LIFETIME_MS,
+                                )
+                            check(activeEngine.sendRejoinCredential(memberId, lease)) {
+                                "Crew credential recipient is no longer attached"
+                            }
+                        },
                     )
                 }
                 .getOrElse { return fail(CrewLanHostLaunchFailure.Initialization) }

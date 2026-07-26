@@ -69,6 +69,7 @@ import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionPolicy
 import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionReducer
 import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionResult
 import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionState
+import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
@@ -126,6 +127,11 @@ enum class CrewAdmissionRejection {
     PEER_ID_MISMATCH,
     SESSION_FULL,
     SEQUENCER_REJECTED,
+}
+
+/** Receives only a validated, coordinator-authenticated transient rejoin lease. */
+fun interface CrewRejoinCredentialReceiver {
+    suspend fun accept(lease: CrewRejoinLease)
 }
 
 internal object CrewSessionCapacity {
@@ -207,6 +213,7 @@ class CrewSessionEngine(
     private val reducer: CrewReducer = CrewReducer(),
     reconnectPolicy: CrewReconnectPolicy = CrewReconnectPolicy(),
     private val mediaLifecycle: CrewAuthenticatedMediaLifecycle? = null,
+    private val rejoinCredentialReceiver: CrewRejoinCredentialReceiver = CrewRejoinCredentialReceiver { },
 ) : Closeable {
     private data class PeerSession(
         val transport: CrewPeerTransport,
@@ -480,6 +487,26 @@ class CrewSessionEngine(
             }
         }
     }
+
+    /** Coordinator-only, member-targeted delivery after ordinary authenticated admission. */
+    suspend fun sendRejoinCredential(
+        memberId: CrewMemberId,
+        lease: CrewRejoinLease,
+    ): Boolean =
+        stateMutex.withLock {
+            val current = mutableState.value
+            if (
+                current.coordinatorMemberId != localMemberId ||
+                    lease.sessionId != current.sessionId ||
+                    lease.protocolVersion != current.protocolVersion ||
+                    lease.memberId != memberId ||
+                    nowEpochMs() !in lease.issuedAtEpochMs until lease.expiresAtEpochMs
+            ) {
+                false
+            } else {
+                enqueueLocked(memberId, CrewControlMessage.RejoinCredentialIssued(lease))
+            }
+        }
 
     suspend fun gracefulLeave(
         transferRequestId: DurableEventId,
@@ -765,10 +792,30 @@ class CrewSessionEngine(
                     handleElectionVoteLocked(authenticatedMemberId, message.vote)
                 is CrewControlMessage.AvailabilityAnnounced ->
                     handleAvailabilityLocked(authenticatedMemberId, message.announcement)
+                is CrewControlMessage.RejoinCredentialIssued ->
+                    handleRejoinCredentialLocked(authenticatedMemberId, message.lease)
                 is CrewControlMessage.RequestRejected ->
                     handleRejectionLocked(authenticatedMemberId, message)
             }
         }
+    }
+
+    private suspend fun handleRejoinCredentialLocked(
+        authenticatedMemberId: CrewMemberId,
+        lease: CrewRejoinLease,
+    ) {
+        val current = mutableState.value
+        if (
+            authenticatedMemberId != current.coordinatorMemberId ||
+                lease.sessionId != current.sessionId ||
+                lease.protocolVersion != current.protocolVersion ||
+                lease.memberId != localMemberId ||
+                nowEpochMs() !in lease.issuedAtEpochMs until lease.expiresAtEpochMs
+        ) {
+            protocolRejected(authenticatedMemberId, "Rejected invalid Crew rejoin credential")
+            return
+        }
+        rejoinCredentialReceiver.accept(lease)
     }
 
     private suspend fun handleRequestLocked(

@@ -37,6 +37,7 @@ import org.oxycblt.auxio.shippy.crew.core.toCrewState
 import org.oxycblt.auxio.shippy.crew.invite.CrewInvite
 import org.oxycblt.auxio.shippy.crew.invite.CrewInviteCodec
 import org.oxycblt.auxio.shippy.crew.invite.CrewInviteDecodeResult
+import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinInviteFactory
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanDiscovery
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanDiscoverySession
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanFailureOperation
@@ -53,6 +54,7 @@ import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayJoinResult
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHttpClient
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayIceServerProvider
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
+import org.oxycblt.auxio.shippy.crew.session.CrewRejoinCredentialReceiver
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
@@ -332,6 +334,12 @@ constructor(
                                     localMemberId = localMemberId,
                                     checkpointRepository = checkpoints,
                                     mediaLifecycle = activeMediaRuntime,
+                                    rejoinCredentialReceiver =
+                                        CrewRejoinCredentialReceiver { lease ->
+                                            // The engine has already bound sender, session, protocol,
+                                            // local member, and time window before this Keystore write.
+                                            leases.save(lease)
+                                        },
                                 )
                                     .also { engine = it }
                                     .let(::CrewSessionEngineJoinPort)
@@ -361,12 +369,22 @@ constructor(
                         session = CrewSessionEngineReconnectPort(activeEngine),
                         dialer =
                             CrewJoinedSessionReconnectDialer { expectedCoordinator ->
-                                dialReconnect(
-                                    invite = invite,
-                                    localMember = localMember,
-                                    expectedCoordinator = expectedCoordinator,
-                                    webRtcRuntime = activeWebRtc,
-                                )
+                                val reconnectInvite =
+                                    reconnectInvite(
+                                        publicInvite = invite,
+                                        sessionId = activeSessionId,
+                                        localMemberId = localMemberId,
+                                    )
+                                if (reconnectInvite == null) {
+                                    CrewReconnectDialResult.Expired
+                                } else {
+                                    dialReconnect(
+                                        invite = reconnectInvite,
+                                        localMember = localMember,
+                                        expectedCoordinator = expectedCoordinator,
+                                        webRtcRuntime = activeWebRtc,
+                                    )
+                                }
                             },
                     )
                         .also {
@@ -468,6 +486,32 @@ constructor(
             CrewDirectPeerState.Authenticating ->
                 error("Reconnect wait returned a non-terminal direct state")
         }
+    }
+
+    /**
+     * Prefer a valid, member-bound lease once it has been issued over authenticated CONTROL.
+     * Initial QR joins still use the public invite and remain expiry-rejected. A network error
+     * never clears a lease; only an expired or mismatched lease is removed.
+     */
+    private suspend fun reconnectInvite(
+        publicInvite: CrewInvite,
+        sessionId: CrewSessionId,
+        localMemberId: CrewMemberId,
+    ): CrewInvite? {
+        val lease = leases.load()
+        if (lease != null) {
+            val matches =
+                lease.sessionId == sessionId && lease.memberId == localMemberId &&
+                    lease.protocolVersion == publicInvite.protocolVersion &&
+                    lease.sessionLocator == publicInvite.sessionLocator &&
+                    lease.rendezvousInviteId == publicInvite.inviteId
+            if (!matches || nowEpochMs() >= lease.expiresAtEpochMs) {
+                if (lease.sessionId == sessionId) runCatching { leases.clear(sessionId) }
+            } else {
+                return CrewRejoinInviteFactory.fromLease(lease)
+            }
+        }
+        return publicInvite.takeIf { nowEpochMs() < it.expiresAtEpochMs }
     }
 
     private suspend fun connectSignalingForReconnect(

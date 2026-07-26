@@ -40,6 +40,10 @@ import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityAnnouncement
 import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityEntry
 import org.oxycblt.auxio.shippy.crew.media.publicizeCrewQueueItem
 import org.oxycblt.auxio.shippy.crew.preparation.MAX_CREW_AVAILABILITY_ENTRIES
+import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
+import org.oxycblt.auxio.shippy.crew.invite.CrewInviteId
+import org.oxycblt.auxio.shippy.crew.invite.CrewRelayLocator
+import org.oxycblt.auxio.shippy.crew.invite.CrewSessionLocator
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSequenceRejection
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
@@ -103,6 +107,11 @@ sealed interface CrewControlMessage {
     /** Path-free, transient availability bound to one exact canonical Crew checkpoint. */
     data class AvailabilityAnnounced(
         val announcement: CrewAvailabilityAnnouncement,
+    ) : CrewControlMessage
+
+    /** Private, transient credential sent only to its already authenticated intended member. */
+    data class RejoinCredentialIssued(
+        val lease: CrewRejoinLease,
     ) : CrewControlMessage
 
     data class RequestRejected(
@@ -197,6 +206,10 @@ object CrewControlCodec {
                     output.writeByte(7)
                     output.writeAvailabilityAnnouncement(message.announcement)
                 }
+                is CrewControlMessage.RejoinCredentialIssued -> {
+                    output.writeByte(8)
+                    output.writeRejoinLease(message.lease)
+                }
             }
         }
         return bytes.toByteArray().also {
@@ -261,6 +274,7 @@ object CrewControlCodec {
                             CrewControlMessage.AvailabilityAnnounced(
                                 input.readAvailabilityAnnouncement()
                             )
+                        8 -> CrewControlMessage.RejoinCredentialIssued(input.readRejoinLease())
                         else -> return CrewControlDecodeResult.Rejected.UNSUPPORTED_FORMAT
                     }
                 if (input.available() != 0) {
@@ -738,6 +752,35 @@ private fun DataOutputStream.writeAction(action: CrewAction) {
         }
         CrewAction.SessionEnded -> writeByte(15)
     }
+}
+
+private fun DataOutputStream.writeRejoinLease(lease: CrewRejoinLease) {
+    writeSessionId(lease.sessionId)
+    writeProtocolVersion(lease.protocolVersion)
+    writeMemberId(lease.memberId)
+    writeSizedString(lease.sessionLocator.value, MAX_ID_BYTES)
+    writeBoolean(lease.relayLocator != null)
+    lease.relayLocator?.let { writeSizedString(it.value, MAX_LOCATOR_BYTES) }
+    writeSizedString(lease.rendezvousInviteId.value, MAX_ID_BYTES)
+    writeSizedString(lease.credentialId, MAX_ID_BYTES)
+    writeSizedString(lease.credentialSecret, MAX_ID_BYTES)
+    writeLong(lease.issuedAtEpochMs)
+    writeLong(lease.expiresAtEpochMs)
+}
+
+private fun DataInputStream.readRejoinLease(): CrewRejoinLease {
+    val sessionId = readSessionId()
+    val protocolVersion = readProtocolVersion()
+    val memberId = readMemberId()
+    val sessionLocator = CrewSessionLocator(readSizedString(MAX_ID_BYTES))
+    val relayLocator = if (readBoolean()) CrewRelayLocator(readSizedString(MAX_LOCATOR_BYTES)) else null
+    val inviteId = CrewInviteId(readSizedString(MAX_ID_BYTES))
+    val credentialId = readSizedString(MAX_ID_BYTES)
+    val credentialSecret = readSizedString(MAX_ID_BYTES)
+    return CrewRejoinLease(
+        sessionId, memberId, sessionLocator, relayLocator, inviteId, credentialId,
+        credentialSecret, readLong(), readLong(),
+    ).also { require(it.protocolVersion == protocolVersion) { "Crew credential protocol mismatch" } }
 }
 
 private fun DataInputStream.readAction(): CrewAction =

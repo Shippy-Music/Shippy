@@ -109,6 +109,44 @@ class CrewRejoinLeaseTest {
         assertFalse(target.verify(lease, 1_500L))
     }
 
+    @Test
+    fun `lease and registry derive the same redacted reconnect invite`() {
+        val registry = CrewRejoinCredentialRegistry(DeterministicRandom())
+        val lease = issueFixture(registry)
+
+        val clientInvite = CrewRejoinInviteFactory.fromLease(lease)
+        val candidate = registry.activeInviteCandidates(
+            lease.sessionId,
+            lease.sessionLocator,
+            lease.rendezvousInviteId,
+            1_500L,
+        ).single()
+
+        assertEquals(lease.memberId, candidate.memberId)
+        assertEquals(clientInvite, candidate.invite)
+        assertFalse(clientInvite.secret.value == lease.credentialSecret)
+        assertFalse(clientInvite.toString().contains(lease.credentialSecret))
+    }
+
+    @Test
+    fun `reissuing a member credential invalidates its prior credential`() {
+        val registry = CrewRejoinCredentialRegistry(DeterministicRandom())
+        val first = issueFixture(registry)
+        val replacement = issueFixture(registry)
+
+        assertFalse(registry.verify(first, 1_500L))
+        assertTrue(registry.verify(replacement, 1_500L))
+        assertEquals(
+            1,
+            registry.activeInviteCandidates(
+                replacement.sessionId,
+                replacement.sessionLocator,
+                replacement.rendezvousInviteId,
+                1_500L,
+            ).size,
+        )
+    }
+
     private fun issueFixture(registry: CrewRejoinCredentialRegistry) =
         registry.issueAfterAdmission(
             sessionId = CrewSessionId("session_id", ProtocolVersion(1)),
