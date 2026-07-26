@@ -84,10 +84,12 @@ through Auxio’s existing playback stack.
   - Retained Auxio's persisted SAF source/excluded-location selection,
     `LocationsDialog`, indexing listener, and forced rescan path.
 - [x] Add selected Download destination with persisted Android access.
-- [ ] Index pre-existing supported media in the Download destination in every
+- [x] Index pre-existing supported media in the Download destination in every
       Local location mode.
   - [x] Add the selected destination to Auxio's recursive SAF source query
         without filename adoption or removal of manual sources.
+  - [x] In MediaStore mode, append configured SAF sources through one ordered
+        filesystem view while exact Musikr paths remain duplicate-free.
 - [x] Add download relationship/state without isolating tracks from normal views.
 - [x] Make queue the canonical playback order for UI, MediaSession, and later
       Crew.

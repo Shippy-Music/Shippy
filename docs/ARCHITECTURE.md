@@ -220,6 +220,13 @@ Auxio already supports SAF and MediaStore selection, source/exclusion queries,
 persistable tree access, and reindex. Extend the Settings presentation rather
 than rebuilding the scanner.
 
+Shippy uses one filesystem factory for both indexing and change observation.
+SAF mode retains Auxio's SAF-only behavior. MediaStore mode keeps MediaStore as
+the primary source and appends configured SAF folders—including the selected
+download destination—through an ordered composite. Exact Musikr `Path`
+duplicates are emitted only once with MediaStore winning; no metadata-based file
+identity guess is introduced.
+
 ## 6. Playback Boundary
 
 Keep `PlaybackStateManager` as the sole app player/queue command authority while
