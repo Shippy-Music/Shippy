@@ -507,6 +507,9 @@ and a device test checklist. Do not claim full verification before that occurs.
 
 ## 17. Canonical Companion Documents
 
+- `docs/DEVICE_TEST_HANDOFF.md` - owner build commands and physical acceptance
+  matrix
+
 - `docs/UX.md` — screen behavior and interaction hierarchy
 - `docs/CREW.md` — Crew state, transport, sync, Push & Pull, and recovery
 - `docs/ARCHITECTURE.md` — code boundaries and foundation/donor mapping

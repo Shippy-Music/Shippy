@@ -566,7 +566,8 @@ The 2026-07-25 focused spike selected:
 
 `relay/` now contains the first self-hostable boundary: a Node WebSocket service
 with a versioned bounded binary envelope, one opaque host registration per
-session locator/invitation pair, isolated random join routes, heartbeat/rate/
+session locator/invitation pair, isolated random join routes, a one-time-rotated
+32-byte host resume credential verifier with bounded hostless presence, heartbeat/rate/
 capacity limits, and no persistence or payload logging. Android peers retain
 end-to-end signaling confidentiality and final fingerprint-bound Crew join
 authentication; the relay only routes ciphertext. It is a signaling foundation,
@@ -581,7 +582,8 @@ Every random route derives directional AES-256-GCM keys and nonce prefixes from
 the invitation secret, exact invitation identity/lifetime, relay endpoint, and
 route ID. An encrypted hello supplies only a provisional member/display-name
 claim; the existing DTLS-fingerprint-bound WebRTC join proof remains the final
-membership authority. Host registration readiness is explicit so production
+membership authority. It drops routes on host loss, keeps no raw resume token,
+and loses unreclaimed presence on relay restart. Host registration readiness is explicit so production
 launchers cannot advertise a remote invite before the relay accepts it.
 
 The production host owns both LAN and hosted signaling collectors while
@@ -592,7 +594,8 @@ loser, and hands only one peer to the existing join coordinator. The direct
 WebRTC attempt always retains public STUN and may append strictly validated,
 short-lived TURN credentials derived from the configured relay origin.
 Joined-session reconnect refreshes those credentials on each dial. Transport
-migration and full ordered relay fan-out remain explicit later work.
+migration and full ordered relay fan-out remain explicit later work; the relay
+does not proxy Crew control or temporary media.
 
 Relay Settings stores only a validated HTTPS endpoint. Its health probe derives
 the configured origin's public `/healthz`, performs one cancellable bounded GET
@@ -835,6 +838,18 @@ and modify it in place. Build Shippy with:
 
 Compose is not prohibited, but introducing it requires a measured reason. Do not
 convert the entire application merely for design fashion.
+
+Home continuation remains projection-only. `RecentListeningTracker` observes
+canonical queue selection beside the playback service and writes at most twenty
+metadata-only records to one bounded `AtomicFile`; it stores no candidate,
+locator, local path, stream URL, Crew identity, or credential. Home combines
+that history with verified recent Downloads, pinned Library projections, the
+active Crew, and a cache-first Last.fm overview. Row actions return through
+unified Search or `ShippyPlaybackController`; Home owns no playback state.
+
+The Quick Settings tile likewise observes `PlaybackStateManager` only while the
+tile is listening and sends an explicit media-button command to Auxio's existing
+`MediaButtonReceiver`. It does not bind another player or service.
 
 ## 13. Dependency Rules
 

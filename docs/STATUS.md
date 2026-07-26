@@ -1,8 +1,12 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-26
-**Current stage:** Stages 3–8 closure — Provider/player and Crew hardening
-**Overall state:** In progress
+**Current stage:** Functional first-pass source closure and owner handoff
+**Overall state:** Functional first-pass source complete; owner build/device
+verification pending
+
+**Progress snapshot:** source implementation ~95% · functional product ~90% ·
+UX intent ~95% · non-build verification ~90% · APK/device verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
@@ -11,6 +15,33 @@ This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Completed
+
+- Home now completes the product continuation hierarchy with bounded
+  metadata-only recent listening, verified recent Downloads, pinned Library
+  projections, active Crew state, and an account-scoped cache-first Last.fm
+  play-count/top-track section. Home rows reuse unified Search or the canonical
+  playback controller and create no second player state.
+- Android now registers a playback Quick Settings tile that observes the
+  canonical player only while active and dispatches play/pause through the
+  existing MediaSession receiver.
+- The app code graph now parses 476/476 curated app files into 9,594 nodes and
+  955,547 edges without clustering. Final Shippy placeholder/TODO scanning found
+  no source placeholder; the remaining two matches are inherited layout view
+  IDs. The owner build and physical acceptance matrix is documented.
+- Crew renewable rejoin is source-complete: a versioned, Keystore-only v2 lease
+  never persists the public invite secret; authenticated post-admission delivery,
+  exact member/session validation, bounded LAN/hosted-relay private-candidate
+  selection, reissue revocation, and QR-expiry redial are wired. Focused JVM
+  tests are authored; compile and multi-device recovery remain unverified.
+- Playback transitions now retain native gapless as the default and add an
+  opt-in bounded 1–12 second two-player equal-power crossfade. The standby
+  player has its own ReplayGain processor, cannot own MediaSession/audio focus,
+  and is cancelled for Crew, repeat-one, mutations, seeks, errors, or settings
+  changes. This is source/static-verified only.
+- The active Crew surface now renders authoritative current-track metadata and
+  artwork, playback mode, contributor, shared-queue preview, the canonical
+  queue entry action, real reaction sending/presentation, and the Push & Pull
+  fallback prompt. It does not create a second queue or playback authority.
 
 - Product owner confirmed Android-only direction.
 - Product owner confirmed actual Auxio/Kotlin foundation.
@@ -286,7 +317,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   manifest/chunk codec, per-chunk and whole-object integrity, media-channel adapter,
   exact QueueItem/candidate/target/supplier request identity, authenticated
   outbound request/cancel operations, reserved receiver windows, explicit-resume
-  transfer control, and API-24-compatible temporary session cache cleanup.
+  transfer control, and API-24-compatible temporary session cache cleanup. Each
+  transferable object is capped at 8 MiB with 44 KiB chunks; one supplier has at
+  most two active uploads and one per target, with no hidden pending upload queue.
   Verified completion can now publish a per-device `CREW_TEMPORARY` candidate
   overlay without contaminating canonical Crew state. Active runtime composition,
   supplier selection, prefetch integration, redistribution, and player preparation
@@ -518,15 +551,17 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   response, keeps public STUN, and refreshes TURN credentials on joined-session
   reconnect attempts. TURN remains a transport service operated beside the
   signaling relay; the relay itself still does not retain or proxy media.
+- Hosted relay registration now emits a 32-byte opaque in-memory host-resume
+  credential. Unexpected host loss closes routes but holds rendezvous presence
+  for a bounded default 30 seconds; valid resume rotates the token/verifier and
+  restores the same host registration. Hostless sessions reject new joins and
+  relay restart still loses all state. This is not relay control/media fan-out.
 
 ## In Progress
 
-- Completing exact audio options beyond typed Search, saved/playable/downloadable
-  provider collection detail, and canonical collection queue actions.
-- Completing ordered relay control/media fan-out and larger-session behavior
-  beyond direct WebRTC plus practical TURN fallback.
-- Renewable active-session reconnect credentials beyond the current short-lived
-  invitation lease.
+- No remaining functional first-pass source work is knowingly open.
+- Owner Gradle compilation and physical-device acceptance are the next gate.
+- Accessibility remains deliberately deferred until that gate passes.
 
 ## Not Started
 
@@ -592,9 +627,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Close exact audio-option gaps without faking unsupported Media3 behavior.
-2. Add renewable active-session reconnect credentials.
-3. Implement bounded relay control/media fan-out and larger-session behavior.
+1. Follow `DEVICE_TEST_HANDOFF.md` from Linux/WSL or CI.
+2. Return the first real compiler/runtime failure for a focused correction pass.
+3. After functional device acceptance, complete the deferred accessibility pass.
 
 ## Verification Ledger
 
@@ -605,8 +640,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox/saved-provider persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding/saved-provider routes, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider Search-to-play plus JioSaavn album/artist/playlist browse/save/download/queue paths, Last.fm secure scrobble foundation, local adapter, Crew reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, encrypted rejoin lease/orchestration seam, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
-| New tests | Authored, not run | Resolver, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/JioSaavn browse/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport/hosted-relay policies |
+| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Home continuation/Last.fm projections, Quick Settings tile, native-gapless/bounded-crossfade transitions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox/saved-provider persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding/saved-provider routes, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider Search-to-play plus JioSaavn album/artist/playlist browse/save/download/queue paths, Last.fm secure scrobble foundation, local adapter, Crew active UI/reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, renewable encrypted rejoin transport, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
+| New tests | Authored, not run | Resolver, recent-listening/Last.fm overview, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/JioSaavn browse/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, playback transition policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport/hosted-relay policies |
 | External provider shape | Live-inspected | JioSaavn song/category/detail search and LRCLIB exact-lyrics responses, latest 2026-07-26 |
-| Static structure | Parsed | Curated app Graphify AST refreshed after the Crew/player bridge; XML parsing and `git diff --check` used where applicable |
+| Relay service | Unit/integration tested | `npm test`: 19/19 passed, including host resume, opaque routing, bounded backpressure, health, and coturn credential minting |
+| Static structure | Parsed | Curated app Graphify AST refreshed at 476/476 files, 9,594 nodes, and 955,547 edges; XML parsing and `git diff --check` used where applicable |
 | APK/device | Not verified | Owner handoff stage |

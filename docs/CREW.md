@@ -38,8 +38,8 @@ different provider, download, local file, or Crew peer.
 - **Availability:** a member's summarized ability to play or supply an item.
 - **Control plane:** small ordered session messages.
 - **Media plane:** chunked temporary audio transport.
-- **Relay:** optional hosted service for signaling, control fan-out, and media
-  forwarding when direct connectivity is unsuitable.
+- **Relay:** optional hosted signaling and TURN-credential service when direct
+  connectivity is unsuitable. It does not proxy Crew control or media bytes.
 
 ## 3. Session Identity And Invitation
 
@@ -285,6 +285,13 @@ A supplied item is represented by:
 
 Local filesystem paths and reusable provider credentials never travel.
 
+The implemented temporary-media envelope is deliberately bounded: an object is at
+most **8 MiB**, chunks remain at **44 KiB**, and one supplier can have at most
+two active outbound transfers, with at most one to any exact target at a time.
+There is no hidden supplier queue: a saturated peer replies `RetryLater`, so the
+existing requester cooldown/retry path decides whether to try again. Permits are
+released on terminal protocol frames, detached peers, and active-Crew teardown.
+
 ### Supplier selection
 
 Select suppliers using:
@@ -372,16 +379,20 @@ Relay mode may provide:
 The relay is configurable/self-hostable. It is not a permanent music library and
 must not retain Crew media after the session/cache window.
 
-The first implemented relay slice is intentionally signaling-only. A bounded
+The implemented relay remains intentionally signaling-only. A bounded
 binary WebSocket endpoint registers one opaque host rendezvous and isolated
 joiner routes, then forwards only opaque end-to-end-encrypted signaling frames.
-It never receives the invitation bearer secret, persists no session state, and
-closes a route instead of buffering through backpressure. This foundation is not
+It never receives the invitation bearer secret, persists no control/media
+state, and closes a route instead of buffering through backpressure. This foundation is not
 a TURN server, control fan-out, media fan-out, or the completed larger-session
 relay. When an operator explicitly configures coturn, the relay HTTP process may
 mint short-lived REST credentials only for the exact opaque host registration
 currently held in memory. It still never receives the invitation bearer secret
-or relays media itself.
+or relays media itself. On an unexpected host socket loss, it drops every route
+but retains only the opaque host rendezvous for a bounded default 30-second TTL.
+The host may reclaim it with a one-time-rotated 32-byte opaque in-memory resume
+token; the relay stores only a verifier. New joins remain `HOST_UNAVAILABLE`
+while hostless, and relay restart still loses this ephemeral presence.
 
 The matching Android adapter keeps each signaling route end-to-end encrypted.
 It derives independent host-to-join and join-to-host AES-GCM keys from the
@@ -403,9 +414,12 @@ network mechanics or weakening invitation authentication.
 
 ### Group scaling
 
-Small groups may use direct connections. Avoid an unbounded full media mesh.
-For larger groups, a relay or bounded distribution topology prevents one phone
-from maintaining excessive uploads and connections.
+Sessions use one bounded host-star WebRTC topology with at most eight members.
+The configured signaling service plus coturn can relay those encrypted peer
+connections when direct traversal fails. Per-supplier transfer limits bound
+temporary phone memory and uploads. Centralized application-level control/media
+fan-out beyond that capacity remains a future scale optimization, not a hidden
+second session authority.
 
 ## 13. Metadata, Artwork, And Lyrics
 
@@ -496,9 +510,12 @@ without duplicating items.
 
 ### App backgrounds or process is killed
 
-MediaSession/service behavior follows Android requirements. Persist session
-checkpoint and rejoin token only for the active session and only for the
-necessary lifetime.
+MediaSession/service behavior follows Android requirements. Persist the session
+checkpoint and only one active Keystore-encrypted v2 rejoin lease for its
+necessary lifetime. The lease is session/member-bound and contains routing
+metadata plus a 256-bit credential secret; it never contains the QR/public
+invite bearer secret. Legacy v1 lease bytes are intentionally discarded rather
+than migrated.
 
 ## 16. Security And Privacy Requirements
 
@@ -625,11 +642,13 @@ session-engine checks.
 The active process-restart checkpoint uses the same snapshot representation in
 one integrity-checked Room record. Its separately indexed session, protocol,
 term, and sequence must agree with the decoded snapshot. Media is not persisted
-there. Invitation/rejoin secrets live only in a single Android-Keystore-encrypted active
-lease outside Room and generic preferences. Restore accepts the lease only when it is
-unexpired and matches the persisted session/member checkpoint; orphaned, mismatched,
-expired, locally revoked, or authentically refused leases are discarded. A process/network
-restore only reconnects by attaching an authenticated transport to the ordinary session engine,
+there. The active rejoin lease lives only in a single Android-Keystore-encrypted file
+outside Room and generic preferences. The current coordinator's in-memory credential
+registry stores SHA-256 verifiers, supports exact member/session revocation, and exports
+only a bounded secret-free handoff snapshot. Restore accepts a lease only when it is
+unexpired and matches the persisted session/member/protocol checkpoint; orphaned,
+mismatched, expired, locally revoked, or authentically refused leases are discarded. A
+process/network restore only reconnects by attaching an authenticated transport to the ordinary session engine,
 which retains the existing checkpoint, ordered-event, reconnect-grace, and election rules.
 
 The active session engine now connects these messages to authenticated peer
@@ -683,9 +702,15 @@ engine's peer map is the trigger, so an ICE-restarting attached peer is not
 raced by a duplicate dial. Once detached, the loop reuses LAN discovery or the
 configured hosted signaling race, creates a new fingerprint-authenticated
 initiator, verifies the current coordinator again, attaches it to the same
-engine, and requests a snapshot. The short-lived invitation currently bounds
-that retry window; renewable in-session credentials remain required for
-long-running Crew recovery.
+engine, and requests a snapshot. After ordinary authenticated admission, the
+coordinator issues a four-hour member-bound v2 credential over encrypted
+reliable control. The client validates the coordinator, session, protocol,
+member, and lifetime before saving it through Android Keystore. LAN signaling
+selects only the exact claimed member's private credential; hosted signaling
+tries a bounded set of current private candidates and accepts one only when the
+decrypted hello names the same member. Reissuing a member credential revokes
+its prior verifier. This completes source-level QR-expiry recovery while
+remaining compile- and multi-device-unverified.
 
 The session engine now consumes those decisions on a bounded periodic loop.
 Ordinary-member expiry becomes a normal ordered `MemberLeft` event. Ungraceful

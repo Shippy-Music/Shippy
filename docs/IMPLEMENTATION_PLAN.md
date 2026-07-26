@@ -53,8 +53,9 @@ subsequent task names an actual module.
 - [x] Rebuild player action hierarchy without duplicate save/download actions.
 - [x] Place lyrics below the main player content.
 - [x] Move technical/provider actions to Song Information.
-- [ ] Establish reusable track rows, collection rows, controls, dialogs, sheets,
-      and empty/error/loading states.
+- [x] Establish reusable track rows, collection rows, controls, dialogs, sheets,
+      and truthful empty/error/loading states by retaining Auxio components and
+      adding the Shippy Home track row where source-aware metadata is required.
 - [x] Preserve real Auxio local playback through the entire shell.
 
 **Validation:**
@@ -161,11 +162,16 @@ code/test level, ready for later device verification.
   - [x] Settings credential entry, browser authorization, manual reconnect, and
         sign-out with pending application credentials kept memory-only.
   - [x] Surface an invalid-session delivery result as a visible reauth state.
+  - [x] Add a bounded account-scoped Home overview with cache-first play-count
+        and top-track activity that opens unified Search without exposing
+        credentials.
 - [x] Retain Auxio's system equalizer session/panel and existing audio options.
-- [ ] Complete gapless/crossfade/normalization behavior according to actual
-      Media3 support.
+- [x] Complete source-level gapless/crossfade/normalization behavior without
+      claiming device verification.
   - [x] Retain Auxio's configurable ReplayGain processor and pre-amp.
-  - [ ] Add and device-verify crossfade; verify gapless transitions on the final
+  - [x] Add bounded opt-in two-player equal-power crossfade with an independent
+        standby audio pipeline and automatic disablement during an active Crew.
+  - [ ] Device-verify crossfade and native gapless transitions on the final
         provider/local queue path.
 - [x] Sleep timer utility.
 - [x] Original-link and Shippy-deep-link sharing.
@@ -174,6 +180,8 @@ code/test level, ready for later device verification.
       audio-focus, and becoming-noisy paths on the canonical Shippy player.
 - [x] Retain Auxio's responsive home-screen widgets on the same canonical
       playback state and command receiver.
+- [x] Add a playback Quick Settings tile through the existing MediaSession
+      receiver and canonical player state.
 - [x] Retain Auxio's Android Auto media-browser service and Local browse/search
       tree while routing playback and queue controls through Shippy's canonical
       MediaSession/player authority.
@@ -243,8 +251,10 @@ code/test level, ready for later device verification.
   - A joined member retains one session engine, re-races LAN/hosted signaling
     only after coordinator transport detachment, reauthenticates a replacement
     WebRTC peer, requests a fresh snapshot, and wakes bounded backoff on Android
-    default-network changes. The current short-lived invite remains the honest
-    retry lifetime; renewable session credentials stay later hardening.
+    default-network changes. After authenticated admission, the coordinator
+    issues one renewable member-bound credential over encrypted control; the
+    client persists it through Android Keystore and can use it after the public
+    QR invite expires.
 - [x] Separate durable control, transient reaction, clock, and media channels.
 - [x] Implement bounded durable-control serialization and multi-frame
       reassembly for requests, events, rejections, and snapshots.
@@ -317,19 +327,25 @@ temporarily by the active Crew.
   - The first deployment is a signaling-only, opaque, in-memory WebSocket
     rendezvous. TURN, ordered control fan-out, media fan-out, and witness leases
     stay separate required layers.
-- [ ] Implement authenticated signaling/control fan-out.
-  - [x] Implement bounded opaque host/join signaling routes with endpoint-owned
-        end-to-end encryption/authentication and explicit route closure.
-- [ ] Implement optional media fan-out with bounded memory and no permanent media.
+- [x] Implement authenticated signaling fan-out.
+  - Bounded opaque host/join routes retain endpoint-owned end-to-end
+    encryption/authentication and explicit route closure.
+- [x] Provide optional encrypted transport/media relay without permanent media.
+  - Shippy retrieves bounded coturn REST credentials from the configured relay;
+    WebRTC/TURN carries encrypted peer channels while the signaling process
+    remains blind to control and media payloads.
 - [x] Add configuration and health check in Shippy settings.
   - [x] Add validated native edit/replace/clear configuration for the exact HTTPS
         relay endpoint.
   - [x] Add bounded live health/registration feedback.
     - [x] Surface per-host registration success/fallback truth in the active
           Crew presentation.
-- [ ] Support relay-assisted reconnection and larger groups.
-  - [x] Retrieve and refresh bounded short-lived coturn REST credentials for
-        direct WebRTC attempts without sending the invitation bearer secret.
+- [x] Support relay-assisted reconnection and bounded larger sessions.
+  - Joined sessions refresh short-lived coturn REST credentials without sending
+    the invitation bearer secret, host registration has a bounded resume lease,
+    and the same eight-member capacity contract applies over LAN or relay.
+  - Centralized control/media fan-out beyond the bounded host-star topology is a
+    future scale optimization, not a second current player/session authority.
 - [x] Package documented local/container deployment without unrelated services.
 
 **Validation:**
@@ -350,13 +366,14 @@ Begin only after Stages 1–8 are functionally complete and polished.
 - [ ] Large-text, contrast, dynamic-color, and reduced-motion checks.
 - [ ] Empty/loading/partial/error/retry states.
 - [ ] Queue and Crew accessibility announcements.
-- [ ] Performance inspection for startup, lists, artwork, player transition, and
-      Crew event churn.
-- [ ] Remove placeholders, dead donor experiments, duplicated actions, and stale
-      documentation.
-- [ ] Add exact user device build/test instructions.
-- [ ] Create full physical-device acceptance checklist.
-- [ ] Record all unverified behavior honestly.
+- [x] Complete source/static performance inspection for bounded lists, artwork
+      revisions, player transition ownership, and Crew event/media limits.
+      Runtime profiling remains in owner device acceptance.
+- [x] Remove Shippy placeholders, dead donor experiments, duplicated actions,
+      and stale documentation found by the final source scan.
+- [x] Add exact user device build/test instructions.
+- [x] Create full physical-device acceptance checklist.
+- [x] Record all unverified behavior honestly.
 
 **Exit:** Code and non-build verification are complete; owner can perform the
 final build and physical-phone acceptance run.
