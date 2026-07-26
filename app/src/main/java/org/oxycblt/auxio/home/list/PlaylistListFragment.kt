@@ -25,6 +25,7 @@ import androidx.core.view.isInvisible
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.ConcatAdapter
+import androidx.recyclerview.widget.ItemTouchHelper
 import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
@@ -89,6 +90,7 @@ class PlaylistListFragment :
             devicePlaylistsHeaderAdapter,
             playlistAdapter,
         )
+    private var playlistDragHelper: ItemTouchHelper? = null
     private var localSongCount = 0
     private var devicePlaylistCount = 0
     private var isLocalIndexing = false
@@ -106,6 +108,17 @@ class PlaylistListFragment :
             popupProvider = this@PlaylistListFragment
             listener = this@PlaylistListFragment
         }
+        playlistDragHelper =
+            ItemTouchHelper(
+                    ShippyPlaylistDragCallback(shippyPlaylistAdapter) { reorderedPlaylists ->
+                        if (!collectionsModel.reorderUserPlaylists(reorderedPlaylists)) {
+                            shippyPlaylistAdapter.rejectPending(
+                                collectionsModel.state.value.userPlaylists
+                            )
+                        }
+                    }
+                )
+                .also { it.attachToRecyclerView(binding.homeRecycler) }
 
         binding.homeNoMusicPlaceholder.apply {
             setImageResource(R.drawable.ic_playlist_48)
@@ -128,6 +141,8 @@ class PlaylistListFragment :
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {
         super.onDestroyBinding(binding)
+        playlistDragHelper?.attachToRecyclerView(null)
+        playlistDragHelper = null
         binding.homeRecycler.apply {
             adapter = null
             popupProvider = null
@@ -182,7 +197,7 @@ class PlaylistListFragment :
         collectionState = state
         collectionsHeaderAdapter.setShown(true)
         shippyPlaylistsHeaderAdapter.setShown(state.userPlaylists.isNotEmpty())
-        shippyPlaylistAdapter.submitList(state.userPlaylists)
+        shippyPlaylistAdapter.update(state.userPlaylists)
         renderSystemCollections()
     }
 

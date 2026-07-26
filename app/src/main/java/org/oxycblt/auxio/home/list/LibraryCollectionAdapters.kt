@@ -20,6 +20,7 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemHeaderBinding
 import org.oxycblt.auxio.databinding.ItemLibraryCollectionBinding
 import org.oxycblt.auxio.shippy.domain.LibraryCollection
+import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 import org.oxycblt.auxio.shippy.library.LibrarySystemCollectionRow
 
@@ -187,15 +188,77 @@ internal class LibraryOnboardingAdapter(
  */
 internal class ShippyPlaylistProjectionAdapter(
     private val onClick: (LibraryCollection.Playlist) -> Unit,
-) :
-    ListAdapter<LibraryCollection.Playlist, ShippyPlaylistProjectionAdapter.ViewHolder>(DIFF) {
+) : RecyclerView.Adapter<ShippyPlaylistProjectionAdapter.ViewHolder>() {
+    private var rows = mutableListOf<LibraryCollection.Playlist>()
+    private var dragStartRows: List<LibraryCollection.Playlist>? = null
+    private var pendingOrder: List<LibraryCollectionId>? = null
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         ViewHolder(
             ItemLibraryCollectionBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         )
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) =
-        holder.bind(getItem(position), onClick)
+        holder.bind(rows[position], onClick)
+
+    override fun getItemCount() = rows.size
+
+    /** Applies repository state unless an incompatible concurrent emission invalidates a drag. */
+    fun update(playlists: List<LibraryCollection.Playlist>) {
+        val startRows = dragStartRows
+        if (startRows != null && !hasSamePlaylistGroups(startRows, playlists)) {
+            dragStartRows = null
+            pendingOrder = null
+            rows = playlists.toMutableList()
+            notifyDataSetChanged()
+            return
+        }
+        if (startRows != null) return
+
+        val emittedOrder = playlists.map(LibraryCollection.Playlist::id)
+        val pending = pendingOrder
+        if (pending != null && emittedOrder != pending) {
+            // A combined-state emission may still contain the pre-transaction order.
+            // Keep the optimistic complete order until Room publishes the exact write.
+            if (hasSamePlaylistGroups(rows, playlists)) return
+            pendingOrder = null
+        } else if (pending != null) {
+            pendingOrder = null
+        }
+        rows = playlists.toMutableList()
+        notifyDataSetChanged()
+    }
+
+    fun beginDrag() {
+        if (dragStartRows != null) return
+        dragStartRows = rows.toList()
+    }
+
+    fun move(fromPosition: Int, toPosition: Int): Boolean {
+        if (dragStartRows == null) return false
+        if (fromPosition !in rows.indices || toPosition !in rows.indices) return false
+        if (rows[fromPosition].isPinned != rows[toPosition].isPinned) return false
+        rows.add(toPosition, rows.removeAt(fromPosition))
+        notifyItemMoved(fromPosition, toPosition)
+        return true
+    }
+
+    fun finishDrag(): List<LibraryCollection.Playlist>? {
+        val finishedRows = rows.toList()
+        val changed = dragStartRows != null && finishedRows != dragStartRows
+        dragStartRows = null
+        if (changed) {
+            pendingOrder = finishedRows.map(LibraryCollection.Playlist::id)
+        }
+        return finishedRows.takeIf { changed }
+    }
+
+    fun rejectPending(playlists: List<LibraryCollection.Playlist>) {
+        dragStartRows = null
+        pendingOrder = null
+        rows = playlists.toMutableList()
+        notifyDataSetChanged()
+    }
 
     internal class ViewHolder(private val binding: ItemLibraryCollectionBinding) :
         RecyclerView.ViewHolder(binding.root) {
@@ -227,17 +290,12 @@ internal class ShippyPlaylistProjectionAdapter(
     }
 
     private companion object {
-        val DIFF =
-            object : DiffUtil.ItemCallback<LibraryCollection.Playlist>() {
-                override fun areItemsTheSame(
-                    oldItem: LibraryCollection.Playlist,
-                    newItem: LibraryCollection.Playlist,
-                ) = oldItem.id == newItem.id
+        fun hasSamePlaylistGroups(
+            first: List<LibraryCollection.Playlist>,
+            second: List<LibraryCollection.Playlist>,
+        ): Boolean =
+            first.associate { it.id to it.isPinned } == second.associate { it.id to it.isPinned } &&
+                first.size == second.size
 
-                override fun areContentsTheSame(
-                    oldItem: LibraryCollection.Playlist,
-                    newItem: LibraryCollection.Playlist,
-                ) = oldItem == newItem
-            }
     }
 }

@@ -454,6 +454,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   coordinator; authenticated coordinator fan-out preserves the original member,
   and queue/member/term/sequence changes prune transient summaries rather than
   persisting stale capability into checkpoints.
+- Library now uses the existing persisted playlist-position authority for
+  long-press Shippy playlist ordering. Dragging is limited to user playlists
+  within the same pinned group, and concurrent create/delete/pin changes reject
+  stale partial orders instead of corrupting the collection list.
 
 ## In Progress
 

@@ -66,6 +66,18 @@ constructor(private val repository: LibraryRelationshipRepository) : ViewModel()
         viewModelScope.launch { repository.createPlaylist(playlist) }
         return true
     }
+
+    /**
+     * Stores an adapter-produced playlist order only when it is still a complete, current
+     * projection. A concurrent create, delete, or pin change therefore rejects the drag instead
+     * of allowing a stale partial order to reach persistence.
+     */
+    fun reorderUserPlaylists(reorderedPlaylists: List<LibraryCollection.Playlist>): Boolean {
+        val playlistIds = reorderUserPlaylistIds(state.value.userPlaylists, reorderedPlaylists)
+            ?: return false
+        viewModelScope.launch { repository.replacePlaylistOrder(playlistIds) }
+        return true
+    }
 }
 
 internal fun newShippyPlaylistOrNull(
@@ -80,6 +92,32 @@ internal fun newShippyPlaylistOrNull(
         displayName = name,
         isPinned = false,
     )
+}
+
+/** Returns a complete safe order, or null when a drag no longer matches the current projection. */
+internal fun reorderUserPlaylistIds(
+    currentPlaylists: List<LibraryCollection.Playlist>,
+    reorderedPlaylists: List<LibraryCollection.Playlist>,
+): List<LibraryCollectionId>? {
+    val currentIds = currentPlaylists.map(LibraryCollection.Playlist::id)
+    val reorderedIds = reorderedPlaylists.map(LibraryCollection.Playlist::id)
+    if (
+        currentIds.size != currentIds.distinct().size ||
+            reorderedIds.size != reorderedIds.distinct().size ||
+            currentIds.toSet() != reorderedIds.toSet()
+    ) {
+        return null
+    }
+
+    val pinnedById = currentPlaylists.associate { it.id to it.isPinned }
+    if (reorderedPlaylists.any { pinnedById.getValue(it.id) != it.isPinned }) return null
+    if (reorderedIds.zipWithNext().any { (before, after) ->
+            !pinnedById.getValue(before) && pinnedById.getValue(after)
+        }) {
+        return null
+    }
+
+    return reorderedIds.takeIf { it != currentIds }
 }
 
 internal data class LibraryCollectionsState(
