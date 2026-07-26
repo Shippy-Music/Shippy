@@ -656,6 +656,15 @@ and broadcasts the next-term snapshot only after strict majority. A receiver
 may hold one early election snapshot until every vote in its attached
 certificate has arrived over those independently authenticated paths.
 
+Availability is a separate transient control message, not a durable reducer
+event. A member publishes only queue-item IDs and an availability enum tied to
+the exact session, protocol, coordinator term, and accepted sequence. Joiners
+send their own summary only to the coordinator. The coordinator authenticates
+the embedded publisher against that peer and fans it out; joiners accept a
+relayed publisher only from their authenticated current coordinator. Membership,
+queue, term, or sequence changes prune the summary, and no availability data is
+written into the active checkpoint.
+
 This decision and the join/NSD adapters satisfy the architecture gate at
 source/API level only. Authenticated local signaling sockets are implemented and
 have loopback tests authored, but are not compiled or device-proven. NAT, TURN,

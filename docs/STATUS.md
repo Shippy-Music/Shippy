@@ -449,6 +449,11 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   home-screen widget bitmaps through Auxio's existing Coil loader. Only
   credential-free HTTPS artwork is accepted, and revision guards prevent a late
   request from replacing newer playback metadata.
+- Active members can now publish bounded, path-free availability for exact
+  queue occurrences at one canonical Crew checkpoint. Joiners send only to the
+  coordinator; authenticated coordinator fan-out preserves the original member,
+  and queue/member/term/sequence changes prune transient summaries rather than
+  persisting stale capability into checkpoints.
 
 ## In Progress
 

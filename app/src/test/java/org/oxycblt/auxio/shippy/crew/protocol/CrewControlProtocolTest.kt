@@ -28,6 +28,10 @@ import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 import org.oxycblt.auxio.shippy.crew.core.toElectionCheckpoint
 import org.oxycblt.auxio.shippy.crew.core.toSnapshot
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityAnnouncement
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityEntry
+import org.oxycblt.auxio.shippy.crew.preparation.MAX_CREW_AVAILABILITY_ENTRIES
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSequenceRejection
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
@@ -154,6 +158,46 @@ class CrewControlProtocolTest {
                 )
             )
         }
+    }
+
+    @Test
+    fun `path free availability announcement round trips on its stable new wire code`() {
+        val announcement =
+            CrewAvailabilityAnnouncement(
+                sessionId = sessionId,
+                protocolVersion = protocol,
+                publishingMemberId = memberId,
+                knownTerm = CoordinatorTerm(2),
+                knownSequence = EventSequence(9),
+                entries =
+                    listOf(
+                        CrewAvailabilityEntry(QueueItemId("queue-one"), CrewAvailability.DOWNLOAD),
+                        CrewAvailabilityEntry(
+                            QueueItemId("queue-two"),
+                            CrewAvailability.FALLBACK_PROVIDER,
+                        ),
+                    ),
+            )
+
+        assertRoundTrip(CrewControlMessage.AvailabilityAnnounced(announcement))
+        val malformedCode = CrewControlCodec.encode(CrewControlMessage.AvailabilityAnnounced(announcement))
+        malformedCode[malformedCode.lastIndex] = 99.toByte()
+        assertEquals(CrewControlDecodeResult.Rejected.MALFORMED, CrewControlCodec.decode(malformedCode))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun `availability announcement enforces bounded unique queue entries`() {
+        CrewAvailabilityAnnouncement(
+            sessionId = sessionId,
+            protocolVersion = protocol,
+            publishingMemberId = memberId,
+            knownTerm = CoordinatorTerm(1),
+            knownSequence = EventSequence(1),
+            entries =
+                List(MAX_CREW_AVAILABILITY_ENTRIES + 1) { index ->
+                    CrewAvailabilityEntry(QueueItemId("queue-$index"), CrewAvailability.UNAVAILABLE)
+                },
+        )
     }
 
     @Test

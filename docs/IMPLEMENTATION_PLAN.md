@@ -186,6 +186,9 @@ code/test level, ready for later device verification.
 - [x] Implement coordinator terms, election, handoff, and stale-message rejection.
 - [x] Implement queue replacement from any member’s song/playlist selection.
 - [x] Implement availability summaries per member and queue item.
+  - Transient path-free announcements are checkpoint-bound, authenticated
+    through coordinator fan-out, bounded to the active queue, and never
+    persisted as durable Crew state.
 - [x] Implement monotonic session clock probes and scheduled playback decisions.
 - [x] Implement readiness, buffering, late join, and drift decision logic.
 - [ ] Complete membership lifecycle:

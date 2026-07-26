@@ -16,6 +16,8 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.EOFException
 import java.io.IOException
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
@@ -33,6 +35,10 @@ import org.oxycblt.auxio.shippy.crew.core.DurableCrewEvent
 import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityAnnouncement
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityEntry
+import org.oxycblt.auxio.shippy.crew.preparation.MAX_CREW_AVAILABILITY_ENTRIES
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSequenceRejection
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
@@ -92,6 +98,11 @@ sealed interface CrewControlMessage {
      * that lets every receiver independently authenticate and retain each vote.
      */
     data class ElectionVoteCast(val vote: CrewElectionVote) : CrewControlMessage
+
+    /** Path-free, transient availability bound to one exact canonical Crew checkpoint. */
+    data class AvailabilityAnnounced(
+        val announcement: CrewAvailabilityAnnouncement,
+    ) : CrewControlMessage
 
     data class RequestRejected(
         val sessionId: CrewSessionId,
@@ -181,6 +192,10 @@ object CrewControlCodec {
                     output.writeByte(6)
                     output.writeElectionVote(message.vote)
                 }
+                is CrewControlMessage.AvailabilityAnnounced -> {
+                    output.writeByte(7)
+                    output.writeAvailabilityAnnouncement(message.announcement)
+                }
             }
         }
         return bytes.toByteArray().also {
@@ -241,6 +256,10 @@ object CrewControlCodec {
                             )
                         }
                         6 -> CrewControlMessage.ElectionVoteCast(input.readElectionVote())
+                        7 ->
+                            CrewControlMessage.AvailabilityAnnounced(
+                                input.readAvailabilityAnnouncement()
+                            )
                         else -> return CrewControlDecodeResult.Rejected.UNSUPPORTED_FORMAT
                     }
                 if (input.available() != 0) {
@@ -622,6 +641,37 @@ private fun DataInputStream.readElectionCheckpoint() =
         memberIds = readBoundedList(MAX_MEMBERS) { readMemberId() },
     )
 
+private fun DataOutputStream.writeAvailabilityAnnouncement(
+    announcement: CrewAvailabilityAnnouncement,
+) {
+    writeSessionId(announcement.sessionId)
+    writeProtocolVersion(announcement.protocolVersion)
+    writeMemberId(announcement.publishingMemberId)
+    writeLong(announcement.knownTerm.value)
+    writeLong(announcement.knownSequence.value)
+    writeBoundedCount(announcement.entries.size, MAX_CREW_AVAILABILITY_ENTRIES)
+    announcement.entries.forEach { entry ->
+        writeSizedString(entry.queueItemId.value, MAX_ID_BYTES)
+        writeByte(entry.availability.wireCode())
+    }
+}
+
+private fun DataInputStream.readAvailabilityAnnouncement() =
+    CrewAvailabilityAnnouncement(
+        sessionId = readSessionId(),
+        protocolVersion = readProtocolVersion(),
+        publishingMemberId = readMemberId(),
+        knownTerm = CoordinatorTerm(readLong()),
+        knownSequence = EventSequence(readLong()),
+        entries =
+            readBoundedList(MAX_CREW_AVAILABILITY_ENTRIES) {
+                CrewAvailabilityEntry(
+                    queueItemId = QueueItemId(readSizedString(MAX_ID_BYTES)),
+                    availability = readCrewAvailability(),
+                )
+            },
+    )
+
 private fun DataOutputStream.writeAction(action: CrewAction) {
     when (action) {
         is CrewAction.MemberJoined -> {
@@ -879,7 +929,13 @@ private fun DataOutputStream.writeSizedString(
 private fun DataInputStream.readSizedString(maxBytes: Int = MAX_STRING_BYTES): String {
     val size = readInt()
     require(size in 0..maxBytes) { "Crew control string size is invalid" }
-    return ByteArray(size).also(::readFully).toString(Charsets.UTF_8)
+    val bytes = ByteArray(size).also(::readFully)
+    return Charsets.UTF_8
+        .newDecoder()
+        .onMalformedInput(CodingErrorAction.REPORT)
+        .onUnmappableCharacter(CodingErrorAction.REPORT)
+        .decode(ByteBuffer.wrap(bytes))
+        .toString()
 }
 
 private fun DataOutputStream.writeNullableString(
@@ -962,6 +1018,31 @@ private fun DataInputStream.readRepeatMode() =
         2 -> CrewRepeatMode.ALL
         3 -> CrewRepeatMode.ONE
         else -> throw IOException("Unknown Crew repeat mode")
+    }
+
+private fun CrewAvailability.wireCode() =
+    when (this) {
+        CrewAvailability.LOCAL_EXACT -> 1
+        CrewAvailability.TEMPORARY_CACHE -> 2
+        CrewAvailability.DOWNLOAD -> 3
+        CrewAvailability.PREFERRED_PROVIDER -> 4
+        CrewAvailability.FALLBACK_PROVIDER -> 5
+        CrewAvailability.PEER_ONLY -> 6
+        CrewAvailability.BLOCKED -> 7
+        CrewAvailability.UNAVAILABLE -> 8
+    }
+
+private fun DataInputStream.readCrewAvailability() =
+    when (readUnsignedByte()) {
+        1 -> CrewAvailability.LOCAL_EXACT
+        2 -> CrewAvailability.TEMPORARY_CACHE
+        3 -> CrewAvailability.DOWNLOAD
+        4 -> CrewAvailability.PREFERRED_PROVIDER
+        5 -> CrewAvailability.FALLBACK_PROVIDER
+        6 -> CrewAvailability.PEER_ONLY
+        7 -> CrewAvailability.BLOCKED
+        8 -> CrewAvailability.UNAVAILABLE
+        else -> throw IOException("Unknown Crew availability")
     }
 
 private fun CrewPlaybackMode.wireCode() =

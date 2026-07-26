@@ -37,6 +37,13 @@ import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityAnnouncement
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityEntry
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFrameResult
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFramer
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlMessage
+import org.oxycblt.auxio.shippy.crew.protocol.CrewControlReassembler
 import org.oxycblt.auxio.shippy.crew.media.CrewAuthenticatedMediaLifecycle
 import org.oxycblt.auxio.shippy.crew.media.CrewAuthenticatedMediaPeer
 import org.oxycblt.auxio.shippy.crew.media.CrewMediaFrameResult
@@ -60,6 +67,120 @@ class CrewSessionEngineTest {
     private val sessionId = CrewSessionId("crew", protocol)
     private val coordinatorId = CrewMemberId("coordinator", protocol)
     private val memberId = CrewMemberId("member", protocol)
+
+    @Test
+    fun `coordinator fans a member availability announcement to active peers`() = runBlocking {
+        val observerId = CrewMemberId("observer", protocol)
+        val item = queueItem("available")
+        val members =
+            listOf(
+                CrewMember(coordinatorId, "Coordinator"),
+                CrewMember(memberId, "Member"),
+                CrewMember(observerId, "Observer"),
+            )
+        val fixture = connectedEngines(state(queue = listOf(item), members = members), state(queue = listOf(item), members = members))
+        val observer = FakePeerTransport(observerId)
+        fixture.coordinator.attachPeer(observer)
+
+        assertTrue(fixture.member.publishLocalAvailability(mapOf(item.id to CrewAvailability.DOWNLOAD)))
+        val coordinatorSummary =
+            withTimeout(2_000) {
+                fixture.coordinator.availability
+                    .filter { it[item.id]?.availabilityFor(memberId) == CrewAvailability.DOWNLOAD }
+                    .first()
+            }
+        assertEquals(CrewAvailability.DOWNLOAD, coordinatorSummary.getValue(item.id).availabilityFor(memberId))
+        withTimeout(2_000) {
+            while (observer.sentFrames().isEmpty()) {
+                kotlinx.coroutines.delay(10)
+            }
+        }
+        val decoded =
+            CrewControlReassembler().accept(observer.sentFrames().single(), nowMonotonicMs = 0)
+        assertTrue(
+            decoded is CrewControlFrameResult.Complete &&
+                decoded.message is CrewControlMessage.AvailabilityAnnounced
+        )
+        fixture.close()
+    }
+
+    @Test
+    fun `joiner only trusts availability relayed by the current coordinator`() = runBlocking {
+        val item = queueItem("trusted")
+        val engine = CrewSessionEngine(state(queue = listOf(item)), memberId, FakeCheckpointRepository(), nowEpochMs = { 100 })
+        val rogueId = CrewMemberId("rogue", protocol)
+        val rogue = FakePeerTransport(rogueId)
+        engine.attachPeer(rogue)
+        val rejection =
+            async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeout(2_000) {
+                    engine.notices.filterIsInstance<CrewSessionNotice.ProtocolRejected>().first()
+                }
+            }
+        rogue.receiveControl(announcement(item, publishingMemberId = coordinatorId))
+
+        assertEquals(rogueId, rejection.await().memberId)
+        assertEquals(CrewAvailability.UNAVAILABLE, engine.availability.value.getValue(item.id).availabilityFor(coordinatorId))
+        assertEquals(CrewTransportState.CONNECTED, rogue.state.value)
+        engine.close()
+    }
+
+    @Test
+    fun `coordinator rejects a forged publisher and stale checkpoint without detaching`() = runBlocking {
+        val item = queueItem("forged")
+        val engine = CrewSessionEngine(state(queue = listOf(item)), coordinatorId, FakeCheckpointRepository(), nowEpochMs = { 100 })
+        val transport = FakePeerTransport(memberId)
+        engine.attachPeer(transport)
+        val forged =
+            async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeout(2_000) {
+                    engine.notices.filterIsInstance<CrewSessionNotice.ProtocolRejected>().first()
+                }
+            }
+        transport.receiveControl(announcement(item, publishingMemberId = coordinatorId))
+        assertEquals(memberId, forged.await().memberId)
+
+        val stale =
+            async(start = CoroutineStart.UNDISPATCHED) {
+                withTimeout(2_000) {
+                    engine.notices.filterIsInstance<CrewSessionNotice.ProtocolRejected>().first()
+                }
+            }
+        transport.receiveControl(
+            announcement(
+                item,
+                publishingMemberId = memberId,
+                knownSequence = EventSequence(99),
+            )
+        )
+        assertEquals(memberId, stale.await().memberId)
+        assertEquals(CrewAvailability.UNAVAILABLE, engine.availability.value.getValue(item.id).availabilityFor(memberId))
+        assertEquals(CrewTransportState.CONNECTED, transport.state.value)
+        engine.close()
+    }
+
+    @Test
+    fun `local availability is path free and pruned when the canonical queue changes`() = runBlocking {
+        val initial = queueItem("initial")
+        val replacement = queueItem("replacement")
+        val engine = CrewSessionEngine(state(queue = listOf(initial)), coordinatorId, FakeCheckpointRepository(), nowEpochMs = { 100 })
+
+        assertTrue(engine.publishLocalAvailability(mapOf(initial.id to CrewAvailability.LOCAL_EXACT)))
+        assertEquals(CrewAvailability.LOCAL_EXACT, engine.availability.value.getValue(initial.id).availabilityFor(coordinatorId))
+        val request =
+            CrewActionRequest(
+                id = DurableEventId("replace-availability"),
+                issuingMemberId = coordinatorId,
+                clientMonotonicTimestampMs = 1,
+                action = CrewAction.QueueReplaced(listOf(replacement)),
+            )
+        assertEquals(CrewSubmitResult.Submitted(request), engine.submit(request, 1))
+        withTimeout(2_000) {
+            engine.availability.filter { replacement.id in it && initial.id !in it }.first()
+        }
+        assertEquals(CrewAvailability.UNAVAILABLE, engine.availability.value.getValue(replacement.id).availabilityFor(coordinatorId))
+        engine.close()
+    }
 
     @Test
     fun `media routes with its authenticated peer identity`() = runBlocking {
@@ -387,6 +508,11 @@ class CrewSessionEngineTest {
     private fun state(
         queue: List<QueueItem> = emptyList(),
         sequence: Long = 0,
+        members: List<CrewMember> =
+            listOf(
+                CrewMember(coordinatorId, "Coordinator"),
+                CrewMember(memberId, "Member"),
+            ),
     ) =
         CrewState(
             sessionId = sessionId,
@@ -394,12 +520,24 @@ class CrewSessionEngineTest {
             term = CoordinatorTerm(1),
             lastSequence = EventSequence(sequence),
             coordinatorMemberId = coordinatorId,
-            members =
-                listOf(
-                    CrewMember(coordinatorId, "Coordinator"),
-                    CrewMember(memberId, "Member"),
-                ),
+            members = members,
             queue = queue,
+        )
+
+    private fun announcement(
+        item: QueueItem,
+        publishingMemberId: CrewMemberId,
+        knownSequence: EventSequence = EventSequence(0),
+    ) =
+        CrewControlMessage.AvailabilityAnnounced(
+            CrewAvailabilityAnnouncement(
+                sessionId = sessionId,
+                protocolVersion = protocol,
+                publishingMemberId = publishingMemberId,
+                knownTerm = CoordinatorTerm(1),
+                knownSequence = knownSequence,
+                entries = listOf(CrewAvailabilityEntry(item.id, CrewAvailability.DOWNLOAD)),
+            )
         )
 
     private fun engineWithMediaLifecycle(lifecycle: CrewAuthenticatedMediaLifecycle) =
@@ -472,7 +610,8 @@ class CrewSessionEngineTest {
         private val incomingFrames = Channel<CrewTransportFrame>(capacity = 256)
         private val mutableState = MutableStateFlow(CrewTransportState.CONNECTED)
         private val remainingBackpressure = AtomicInteger(backpressureAttempts)
-        lateinit var counterpart: FakePeerTransport
+        private val recordedSentFrames = mutableListOf<CrewTransportFrame>()
+        var counterpart: FakePeerTransport? = null
 
         override val state: StateFlow<CrewTransportState> = mutableState
         override val incoming: Flow<CrewTransportFrame> = incomingFrames.receiveAsFlow()
@@ -482,7 +621,11 @@ class CrewSessionEngineTest {
             if (remainingBackpressure.getAndUpdate { maxOf(0, it - 1) } > 0) {
                 return CrewSendResult.Backpressured(1, 2)
             }
-            return if (counterpart.incomingFrames.trySend(frame).isSuccess) {
+            synchronized(recordedSentFrames) {
+                recordedSentFrames += frame
+            }
+            val remote = counterpart
+            return if (remote == null || remote.incomingFrames.trySend(frame).isSuccess) {
                 CrewSendResult.Sent(0)
             } else {
                 CrewSendResult.NativeRejected
@@ -493,6 +636,14 @@ class CrewSessionEngineTest {
 
         fun receive(frame: CrewTransportFrame) {
             check(incomingFrames.trySend(frame).isSuccess)
+        }
+
+        fun receiveControl(message: CrewControlMessage) {
+            CrewControlFramer.encode(message).forEach(::receive)
+        }
+
+        fun sentFrames(): List<CrewTransportFrame> = synchronized(recordedSentFrames) {
+            recordedSentFrames.toList()
         }
 
         override fun bufferedBytes(

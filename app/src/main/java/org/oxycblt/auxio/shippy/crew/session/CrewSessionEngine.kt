@@ -54,6 +54,11 @@ import org.oxycblt.auxio.shippy.crew.protocol.CrewControlFramer
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlMessage
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlReassembler
 import org.oxycblt.auxio.shippy.crew.protocol.CrewSnapshotRequest
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityAnnouncement
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityEntry
+import org.oxycblt.auxio.shippy.crew.preparation.MemberItemAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.QueueItemAvailabilitySummary
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionCodec
 import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionDecodeResult
@@ -67,6 +72,7 @@ import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportState
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
 
 private const val MAX_SESSION_PEERS = 63
@@ -217,6 +223,11 @@ class CrewSessionEngine(
             null
         }
     private val mutableState = MutableStateFlow(initialState)
+    private var localAvailability: Map<QueueItemId, CrewAvailability> = emptyMap()
+    private val remoteAvailability =
+        mutableMapOf<CrewMemberId, CrewAvailabilityAnnouncement>()
+    private val mutableAvailability =
+        MutableStateFlow<Map<QueueItemId, QueueItemAvailabilitySummary>>(emptyMap())
     private val mutablePeerStates = MutableStateFlow<Map<CrewMemberId, CrewTransportState>>(emptyMap())
     private val mutableNotices =
         MutableSharedFlow<CrewSessionNotice>(
@@ -235,6 +246,9 @@ class CrewSessionEngine(
         )
 
     val state: StateFlow<CrewState> = mutableState.asStateFlow()
+    /** Path-free active-member availability, never included in a durable Crew checkpoint. */
+    val availability: StateFlow<Map<QueueItemId, QueueItemAvailabilitySummary>> =
+        mutableAvailability.asStateFlow()
     val peerStates: StateFlow<Map<CrewMemberId, CrewTransportState>> =
         mutablePeerStates.asStateFlow()
     val notices: SharedFlow<CrewSessionNotice> = mutableNotices.asSharedFlow()
@@ -248,6 +262,7 @@ class CrewSessionEngine(
         require(initialState.members.any { it.id == localMemberId }) {
             "Local Crew member must exist in the initial state"
         }
+        rebuildAvailabilityLocked()
     }
 
     suspend fun start() {
@@ -534,6 +549,50 @@ class CrewSessionEngine(
             decisions
         }
 
+    /**
+     * Publishes local, path-free capability for current queue entries. The payload is transient:
+     * it is never sequenced, reduced, or checkpointed.
+     */
+    suspend fun publishLocalAvailability(
+        availability: Map<QueueItemId, CrewAvailability>,
+    ): Boolean =
+        stateMutex.withLock {
+            if (closed.get()) return@withLock false
+            val current = mutableState.value
+            val currentQueueIds = current.queue.map { it.id }.toSet()
+            require(availability.keys.all { it in currentQueueIds }) {
+                "Availability must only describe current queue items"
+            }
+            val announcement =
+                CrewAvailabilityAnnouncement(
+                    sessionId = current.sessionId,
+                    protocolVersion = current.protocolVersion,
+                    publishingMemberId = localMemberId,
+                    knownTerm = current.term,
+                    knownSequence = current.lastSequence,
+                    entries =
+                        availability.entries
+                            .sortedBy { it.key.value }
+                            .map { (queueItemId, value) ->
+                                CrewAvailabilityEntry(queueItemId, value)
+                            },
+                )
+            if (runCatching { CrewControlCodec.encode(CrewControlMessage.AvailabilityAnnounced(announcement)) }.isFailure) {
+                return@withLock false
+            }
+            localAvailability = availability.toMap()
+            rebuildAvailabilityLocked()
+            if (current.coordinatorMemberId == localMemberId) {
+                broadcastAvailabilityLocked(announcement)
+                true
+            } else {
+                enqueueLocked(
+                    current.coordinatorMemberId,
+                    CrewControlMessage.AvailabilityAnnounced(announcement),
+                )
+            }
+        }
+
     private suspend fun collectInbound(peer: PeerSession) {
         try {
             peer.transport.incoming.collect { frame ->
@@ -689,6 +748,8 @@ class CrewSessionEngine(
                     handleSnapshotLocked(authenticatedMemberId, message)
                 is CrewControlMessage.ElectionVoteCast ->
                     handleElectionVoteLocked(authenticatedMemberId, message.vote)
+                is CrewControlMessage.AvailabilityAnnounced ->
+                    handleAvailabilityLocked(authenticatedMemberId, message.announcement)
                 is CrewControlMessage.RequestRejected ->
                     handleRejectionLocked(authenticatedMemberId, message)
             }
@@ -816,6 +877,52 @@ class CrewSessionEngine(
                 }
             }
         }
+    }
+
+    private fun handleAvailabilityLocked(
+        authenticatedMemberId: CrewMemberId,
+        announcement: CrewAvailabilityAnnouncement,
+    ) {
+        val current = mutableState.value
+        val activeMemberIds = current.members.map { it.id }.toSet()
+        val currentQueueIds = current.queue.map { it.id }.toSet()
+        if (
+            announcement.sessionId != current.sessionId ||
+                announcement.protocolVersion != current.protocolVersion ||
+                announcement.publishingMemberId !in activeMemberIds ||
+                announcement.knownTerm != current.term ||
+                announcement.knownSequence != current.lastSequence ||
+                announcement.entries.any { it.queueItemId !in currentQueueIds }
+        ) {
+            protocolRejected(authenticatedMemberId, "Crew availability announcement is stale or unauthorized")
+            return
+        }
+        if (current.coordinatorMemberId == localMemberId) {
+            if (announcement.publishingMemberId != authenticatedMemberId) {
+                protocolRejected(authenticatedMemberId, "Crew availability publisher is forged")
+                return
+            }
+            if (remoteAvailability[authenticatedMemberId] == announcement) {
+                return
+            }
+            remoteAvailability[authenticatedMemberId] = announcement
+            rebuildAvailabilityLocked()
+            broadcastAvailabilityLocked(announcement, exceptMemberId = authenticatedMemberId)
+            return
+        }
+        if (authenticatedMemberId != current.coordinatorMemberId) {
+            protocolRejected(authenticatedMemberId, "Crew availability relay is not the coordinator")
+            return
+        }
+        if (announcement.publishingMemberId == localMemberId) {
+            protocolRejected(authenticatedMemberId, "Crew availability relay cannot republish local truth")
+            return
+        }
+        if (remoteAvailability[announcement.publishingMemberId] == announcement) {
+            return
+        }
+        remoteAvailability[announcement.publishingMemberId] = announcement
+        rebuildAvailabilityLocked()
     }
 
     private fun applyReactionLocked(
@@ -1121,6 +1228,7 @@ class CrewSessionEngine(
 
     private fun installStateLocked(state: CrewState) {
         mutableState.value = state
+        pruneAvailabilityLocked()
         liveness.reconcile(state)
         electionVotes.resetUnless(state)
         sequencer =
@@ -1283,6 +1391,61 @@ class CrewSessionEngine(
         electionVotes.reset()
         livenessJob = null
         scope.cancel()
+    }
+
+    private fun broadcastAvailabilityLocked(
+        announcement: CrewAvailabilityAnnouncement,
+        exceptMemberId: CrewMemberId? = null,
+    ) {
+        mutableState.value.members
+            .map { it.id }
+            .filter { it != localMemberId && it != exceptMemberId }
+            .sortedBy(CrewMemberId::value)
+            .forEach { memberId ->
+                enqueueLocked(memberId, CrewControlMessage.AvailabilityAnnounced(announcement))
+            }
+    }
+
+    private fun pruneAvailabilityLocked() {
+        val current = mutableState.value
+        val currentQueueIds = current.queue.map { it.id }.toSet()
+        val activeMemberIds = current.members.map { it.id }.toSet()
+        localAvailability = localAvailability.filterKeys { it in currentQueueIds }
+        remoteAvailability.entries.removeIf { (memberId, announcement) ->
+            memberId !in activeMemberIds ||
+                announcement.sessionId != current.sessionId ||
+                announcement.protocolVersion != current.protocolVersion ||
+                announcement.publishingMemberId != memberId ||
+                announcement.knownTerm != current.term ||
+                announcement.knownSequence != current.lastSequence ||
+                announcement.entries.any { it.queueItemId !in currentQueueIds }
+        }
+        rebuildAvailabilityLocked()
+    }
+
+    private fun rebuildAvailabilityLocked() {
+        val current = mutableState.value
+        val activeMemberIds = current.members.map { it.id }.toSet()
+        val remoteByMember = remoteAvailability
+            .filterKeys { it in activeMemberIds }
+            .mapValues { (_, announcement) -> announcement.availabilityByQueueItem() }
+        mutableAvailability.value =
+            current.queue.associate { item ->
+                item.id to
+                    QueueItemAvailabilitySummary(
+                        queueItem = item,
+                        members =
+                            current.members.map { member ->
+                                val value =
+                                    if (member.id == localMemberId) {
+                                        localAvailability[item.id]
+                                    } else {
+                                        remoteByMember[member.id]?.get(item.id)
+                                    } ?: CrewAvailability.UNAVAILABLE
+                                MemberItemAvailability(member.id, item.id, value)
+                            },
+                    )
+            }
     }
 
     private fun broadcastReactionLocked(

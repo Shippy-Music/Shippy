@@ -508,6 +508,13 @@ each accepted state. Durable-control queue overflow or send timeout detaches the
 peer explicitly; it never silently drops a state event. Raw election votes from
 one payload are not treated as independently authenticated quorum evidence.
 
+Path-free member availability uses a bounded transient message beside durable
+control. The engine exposes one per-queue-item summary flow, routes joiner
+announcements only through the authenticated coordinator, rejects forged
+publisher identities without detaching a healthy peer, and prunes summaries
+whenever their exact queue/member/term/sequence checkpoint is no longer current.
+It never serializes those summaries into Room snapshots.
+
 Membership uses that same event authority. An authenticated pending peer is
 admitted only by the current coordinator, and receives a canonical snapshot
 after its `MemberJoined` event so provisional join state cannot become a second
