@@ -458,6 +458,12 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   long-press Shippy playlist ordering. Dragging is limited to user playlists
   within the same pinned group, and concurrent create/delete/pin changes reject
   stale partial orders instead of corrupting the collection list.
+- Crew media preparation now evaluates the current item plus the next two
+  against active temporary media, exact Local ownership, verified downloads,
+  enabled provider priority, and authenticated peer summaries. The existing
+  prefetch planner selects reachable suppliers, joiners wait for coordinator
+  redistribution when another joiner is unreachable, failed suppliers enter a
+  bounded cooldown, and obsolete transfers are cancelled.
 
 ## In Progress
 
@@ -468,8 +474,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Reconnection, transport migration, and TURN/relay fallback beyond hosted
   signaling.
 - Transport migration after a reconnect.
-- Extending the first exact-Local rolling window to adaptive provider-aware
-  preparation and supplier failover.
+- Removing the remaining canonical Local locator from shared Crew queue state
+  now that path-free availability and adaptive supplier selection are wired.
 
 ## Not Started
 
@@ -526,8 +532,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 1. Finish the remaining player/audio/widget action surfaces.
 2. Wire secure rejoin, transport migration, and practical TURN/relay fallback.
-3. Extend Push & Pull from the exact-Local top-down path to adaptive supplier
-   failover and hybrid download-folder indexing before relay hardening.
+3. Remove canonical Local locators from shared Crew state, then harden relay
+   media/reconnection behavior.
 
 ## Verification Ledger
 

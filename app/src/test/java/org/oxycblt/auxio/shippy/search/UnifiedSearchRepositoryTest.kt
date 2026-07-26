@@ -104,6 +104,8 @@ class UnifiedSearchRepositoryTest {
     }
 
     private class FixedProviderSettings(private val priority: List<ProviderId>) : ProviderSettings {
+        override fun registerListener(listener: ProviderSettings.Listener) = Unit
+        override fun unregisterListener(listener: ProviderSettings.Listener) = Unit
         override fun selection(available: Collection<ProviderId>) =
             ProviderSelection(priority.filter(available::contains))
 

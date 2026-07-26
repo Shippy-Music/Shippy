@@ -311,7 +311,7 @@ constructor(
         if (runCatching { activeEngine.start() }.isFailure) {
             return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
         }
-        if (runCatching { activeMediaRuntime.bind(activeEngine.state) }.isFailure) {
+        if (runCatching { activeMediaRuntime.bind(activeEngine.state, activeEngine.availability, activeEngine::publishLocalAvailability) }.isFailure) {
             return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
         }
 

@@ -734,12 +734,14 @@ candidate can be opened; provider URLs, paths, credentials, and arbitrary
 discovered devices cannot cross the seam. Both production LAN launchers create
 one runtime before their session engine, pass it as that engine's authenticated
 media lifecycle, and tear the engine down before media/cache cleanup. Rolling
-prefetch now binds to live engine state for the exact Local current item and
-next two queue items. The contributor first supplies the coordinator; remaining
-members request that occurrence from the coordinator after its verified
-temporary cache is ready. Requests are one-per-exact-key, retry on one bounded
-timer, cancel when the window changes, and stop at session teardown. This first
-path does not claim the final adaptive supplier policy for provider candidates.
+prefetch now binds to live engine state for the current item and next two queue
+items. Local evaluation combines temporary completion, exact owned Local media,
+verified Downloads, enabled provider priority, and authenticated path-free peer
+summaries. `CrewPrefetchPlanner` chooses capability-based suppliers, but the
+runtime requests only an attached peer: in the coordinator-centred topology the
+coordinator first fetches from another joiner, publishes temporary availability,
+and then redistributes. Reconciliation is serialized, obsolete requests are
+cancelled, and rejected/detached suppliers enter one bounded cooldown.
 
 Primary evidence:
 

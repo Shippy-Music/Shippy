@@ -18,7 +18,10 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.settings.Settings
 import org.oxycblt.auxio.shippy.domain.ProviderId
 
-interface ProviderSettings : Settings<Nothing> {
+interface ProviderSettings : Settings<ProviderSettings.Listener> {
+    interface Listener {
+        fun onProviderPriorityChanged()
+    }
     fun selection(available: Collection<ProviderId>): ProviderSelection
 
     fun setPriority(priority: List<ProviderId>)
@@ -57,6 +60,10 @@ constructor(
                 priority.joinToString(SEPARATOR) { it.value },
             )
         }
+    }
+
+    override fun onSettingChanged(key: String, listener: ProviderSettings.Listener) {
+        if (key == getString(R.string.set_key_provider_priority)) listener.onProviderPriorityChanged()
     }
 
     private companion object {

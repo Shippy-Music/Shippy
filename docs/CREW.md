@@ -665,6 +665,15 @@ relayed publisher only from their authenticated current coordinator. Membership,
 queue, term, or sequence changes prune the summary, and no availability data is
 written into the active checkpoint.
 
+The active media runtime derives only the current item plus the next two local
+summaries. It prefers active temporary bytes, an exact owned Local candidate,
+verified Downloads, and enabled provider priority before publishing `PEER_ONLY`
+or `UNAVAILABLE`. Prefetch consumes authenticated summaries through the pure
+supplier planner, requests only an attached peer, cancels obsolete work, and
+temporarily cools a failed supplier. In the coordinator-centred topology, a
+joiner does not attempt an unreachable joiner directly: the coordinator first
+fetches and republishes its temporary availability, then redistributes it.
+
 This decision and the join/NSD adapters satisfy the architecture gate at
 source/API level only. Authenticated local signaling sockets are implemented and
 have loopback tests authored, but are not compiled or device-proven. NAT, TURN,

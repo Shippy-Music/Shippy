@@ -24,6 +24,11 @@ import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.CrewSupplierSelector
+import org.oxycblt.auxio.shippy.crew.preparation.MemberItemAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.QueueItemAvailabilitySummary
+import org.oxycblt.auxio.shippy.crew.preparation.SupplierDecision
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
@@ -104,6 +109,88 @@ class CrewActiveMediaRuntimeTest {
     }
 
     @Test
+    fun `availability keeps peer only when push pull is disabled`() {
+        val local = member("local")
+        val item = localItem("remote", member("owner"))
+        assertEquals(
+            CrewAvailability.PEER_ONLY,
+            CrewLocalAvailabilityEvaluator.evaluate(
+                item,
+                local,
+                emptySet(),
+                emptySet(),
+                emptyList(),
+                listOf(CrewAvailability.LOCAL_EXACT),
+            ),
+        )
+    }
+
+    @Test
+    fun `availability only calls a local item exact for its contributor`() {
+        val owner = member("owner")
+        val item = localItem("owned", owner)
+        assertEquals(
+            CrewAvailability.LOCAL_EXACT,
+            CrewLocalAvailabilityEvaluator.evaluate(item, owner, emptySet(), emptySet(), emptyList(), emptyList()),
+        )
+        assertEquals(
+            CrewAvailability.UNAVAILABLE,
+            CrewLocalAvailabilityEvaluator.evaluate(item, member("other"), emptySet(), emptySet(), emptyList(), emptyList()),
+        )
+    }
+
+    @Test
+    fun `joiner waits for reachable coordinator redistribution`() {
+        val local = member("local")
+        val coordinator = member("coordinator")
+        val owner = member("owner")
+        val item = localItem("redistributed", owner)
+        fun summary(coordinatorAvailability: CrewAvailability) =
+            QueueItemAvailabilitySummary(
+                item,
+                listOf(
+                    MemberItemAvailability(
+                        local,
+                        item.id,
+                        CrewAvailability.PEER_ONLY,
+                    ),
+                    MemberItemAvailability(
+                        coordinator,
+                        item.id,
+                        coordinatorAvailability,
+                    ),
+                    MemberItemAvailability(owner, item.id, CrewAvailability.LOCAL_EXACT),
+                ),
+            )
+
+        val before =
+            reachableCrewAvailability(
+                mapOf(item.id to summary(CrewAvailability.PEER_ONLY)),
+                local,
+                setOf(coordinator),
+                emptySet(),
+            ).getValue(item.id)
+        assertEquals(
+            SupplierDecision.NoEligibleSupplier,
+            CrewSupplierSelector.select(before, local, pushPullEnabled = true),
+        )
+
+        val after =
+            reachableCrewAvailability(
+                mapOf(item.id to summary(CrewAvailability.TEMPORARY_CACHE)),
+                local,
+                setOf(coordinator),
+                emptySet(),
+            ).getValue(item.id)
+        assertEquals(
+            coordinator,
+            (CrewSupplierSelector.select(after, local, pushPullEnabled = true)
+                    as SupplierDecision.Selected)
+                .supplierMemberId,
+        )
+    }
+
+    @Test
     fun `exact available local candidate is selected`() {
         val fixture = Fixture(CandidateKind.LOCAL, "content://media/local", 7)
         assertTrue(fixture.select() is CrewActiveMediaSelector.Selection.Content)
@@ -141,15 +228,41 @@ class CrewActiveMediaRuntimeTest {
         assertNull(fixture.select(transfer = fixture.transfer.copy(sessionId = session("other"))))
         assertNull(fixture.select(transfer = fixture.transfer.copy(candidateId = CandidateId("other"))))
         assertNull(Fixture(CandidateKind.LOCAL, "content://media/local", CREW_MEDIA_MAX_OBJECT_BYTES + 1).select())
+        assertNull(
+            Fixture(
+                    CandidateKind.LOCAL,
+                    "content://media/local",
+                    7,
+                    ownsLocal = false,
+                )
+                .select()
+        )
         assertNull(Fixture(CandidateKind.CREW_PEER, "content://peer/audio", 7).select())
     }
 
-    private class Fixture(kind: CandidateKind, locator: String?, length: Long?) {
+    private class Fixture(
+        kind: CandidateKind,
+        locator: String?,
+        length: Long?,
+        ownsLocal: Boolean = true,
+    ) {
         val session = session("crew")
         val local = member("local")
         private val remote = member("remote")
         val candidate = TrackCandidate(CandidateId("candidate"), TrackId("track"), kind, "source", "item", CandidateAvailability.AVAILABLE, locator = locator, media = MediaDescriptor("audio/test", contentLength = length))
-        val item = QueueItem(QueueItemId("queue"), Track(TrackId("track"), TrackRealm.PROVIDER, "Track", listOf("Artist"), candidates = listOf(candidate)))
+        val item =
+            QueueItem(
+                QueueItemId("queue"),
+                Track(
+                    TrackId("track"),
+                    if (kind == CandidateKind.LOCAL) TrackRealm.LOCAL else TrackRealm.PROVIDER,
+                    "Track",
+                    listOf("Artist"),
+                    candidates = listOf(candidate),
+                ),
+                contributorId =
+                    if (kind == CandidateKind.LOCAL && ownsLocal) local.value else null,
+            )
         val index = CrewTemporaryMediaIndex()
         val transfer = CrewMediaTransferRef(session, CrewMediaRequestId("request"), item.id, candidate.id, remote, local)
         private val state = CrewState(session, ProtocolVersion(1), CoordinatorTerm(1), EventSequence(0), local, listOf(CrewMember(local, "Local"), CrewMember(remote, "Remote")), queue = listOf(item))

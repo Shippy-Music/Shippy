@@ -254,7 +254,7 @@ Crew with relay fallback hooks.
 - [x] Implement one active-Crew-scoped setting.
   - The persisted default-off preference exposes live changes to the future
     active runtime; media policy still scopes acceptance to its exact session.
-- [ ] Implement supplier availability without exposing library contents.
+- [x] Implement supplier availability without exposing library contents.
 - [ ] Implement media manifest, chunking, integrity, encryption, and backpressure.
   - [x] Bounded encrypted-channel wire frames, exact transfer identity,
         SHA-256 manifest/chunks, receiver reservation, and explicit-resume
@@ -269,11 +269,11 @@ Crew with relay fallback hooks.
         candidate overlay without mutating canonical Crew state.
   - [x] Connect the controller to authenticated peer lifecycle and end-to-end
         runtime request, supplier, index, and playback callbacks.
-- [ ] Implement adaptive supplier selection independent of coordinator.
+- [x] Implement adaptive supplier selection independent of coordinator.
 - [x] Implement bounded temporary Crew cache and crash/session cleanup.
 - [x] Allow exact Local temporary chunks to redistribute through the coordinator
       within the same active Crew.
-- [ ] Implement adaptive rolling prefetch, prioritization, and supplier failover.
+- [x] Implement adaptive rolling prefetch, prioritization, and supplier failover.
   - [x] Bind the exact Local current item plus next two items to live queue
         changes with cancellation and one bounded retry timer.
 - [x] Bridge verified peer media into Media3 playback without a permanent
