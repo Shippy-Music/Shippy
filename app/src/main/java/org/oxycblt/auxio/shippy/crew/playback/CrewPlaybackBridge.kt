@@ -44,6 +44,8 @@ import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderSettings
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
+import org.oxycblt.auxio.shippy.crew.media.CrewPrivateSourceRegistry
+import org.oxycblt.auxio.shippy.crew.media.publicizeCrewQueue
 
 private const val RECONCILE_DELAY_MS = 150L
 private const val SEEK_DRIFT_MS = 900L
@@ -63,6 +65,7 @@ constructor(
     private val providerSettings: ProviderSettings,
     private val crewSettings: CrewSettings,
     private val temporaryMediaIndex: CrewTemporaryMediaIndex,
+    private val privateSources: CrewPrivateSourceRegistry,
 ) : PlaybackStateManager.Listener {
     private var scope: CoroutineScope? = null
     private var stateJob: Job? = null
@@ -197,7 +200,8 @@ constructor(
                         crew.queue.size
                     )
                 for (item in crew.queue) {
-                    when (val result = resolutionCoordinator.prepare(item, policy)) {
+                    val projected = privateSources.overlay(crew.sessionId, localCrewMemberId ?: return, item)
+                    when (val result = resolutionCoordinator.prepare(projected, policy)) {
                         is PlaybackPreparation.Ready -> prepared += result.value
                         is PlaybackPreparation.Failed ->
                             return // Leave the working player intact for prefetch/retry.
@@ -331,7 +335,7 @@ private fun playerSnapshot(manager: PlaybackStateManager, nowMs: Long, localMemb
 
 internal fun crewDiff(crew: CrewState, player: PlayerCrewSnapshot): List<CrewAction> {
     val actions = mutableListOf<CrewAction>()
-    val queueChanged = canonicalQueueForCrew(crew.queue) != player.queue
+    val queueChanged = publicizeCrewQueue(canonicalQueueForCrew(crew.queue)) != publicizeCrewQueue(player.queue)
     if (queueChanged) actions += CrewAction.QueueReplaced(player.queue)
     if (player.currentItemId != null && player.currentItemId != crew.playback.currentQueueItemId) actions += CrewAction.CurrentItemChanged(player.currentItemId)
     if (player.shuffled != crew.shuffleEnabled) actions += CrewAction.ShuffleChanged(player.shuffled)

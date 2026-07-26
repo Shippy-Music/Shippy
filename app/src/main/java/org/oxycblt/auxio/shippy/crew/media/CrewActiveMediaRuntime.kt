@@ -71,6 +71,7 @@ class CrewActiveMediaRuntimeFactory @Inject constructor(
     private val temporaryIndex: CrewTemporaryMediaIndex,
     private val providerRegistry: ProviderRegistry,
     private val providerSettings: ProviderSettings,
+    private val privateSources: CrewPrivateSourceRegistry,
 ) {
     suspend fun create(
         sessionId: CrewSessionId,
@@ -103,6 +104,7 @@ class CrewActiveMediaRuntimeFactory @Inject constructor(
                     )
                     .map { it.descriptor.id }
             },
+            privateSources = privateSources,
         )
     }
 }
@@ -118,6 +120,7 @@ class CrewActiveMediaRuntime internal constructor(
     initialDownloads: Map<CrewActiveMediaSelector.DownloadKey, CrewActiveMediaSelector.DownloadSource>,
     private val observeDownloads: () -> kotlinx.coroutines.flow.Flow<List<PersistedDownload>>,
     private val enabledProviderIds: () -> List<ProviderId>,
+    private val privateSources: CrewPrivateSourceRegistry,
 ) : CrewAuthenticatedMediaLifecycle, AutoCloseable {
     private val policy = ActiveCrewPushPullPolicy()
     private val cache = CrewTemporaryMediaCache(File(context.cacheDir, "crew-media"))
@@ -194,6 +197,7 @@ class CrewActiveMediaRuntime internal constructor(
 
     init {
         cache.beginSession(sessionId)
+        privateSources.beginSession(sessionId)
         temporaryIndex.beginSession(sessionId)
         policy.activate(sessionId, settings.pushPullEnabled)
         settings.registerListener(settingsListener)
@@ -312,6 +316,7 @@ class CrewActiveMediaRuntime internal constructor(
         mutablePeerMediaBlocked.value = false
         runCatching { policy.deactivate(sessionId) }
         runCatching { temporaryIndex.endSession(sessionId) }
+        runCatching { privateSources.endSession(sessionId) }
         runCatching { cache.endSession(sessionId) }
         runCatching { scope.cancel() }
     }
@@ -320,7 +325,7 @@ class CrewActiveMediaRuntime internal constructor(
         reconcileMutex.withLock { reconcileLocalMediaLocked() }
 
     private suspend fun reconcileLocalMediaLocked() {
-        val state = latestState ?: return
+        val state = latestState?.withPrivateSources() ?: return
         if (closed || state.sessionId != sessionId) return
         val available =
             state.queue
@@ -485,16 +490,28 @@ class CrewActiveMediaRuntime internal constructor(
             }
     }
 
-    private fun authorize(transfer: CrewMediaTransferRef, requestingMemberId: CrewMemberId): CrewAuthorizedMediaSource? {
-        val selected = CrewActiveMediaSelector.select(
-            sessionId, localMemberId, stateProvider(), transfer, requestingMemberId,
-            temporaryIndex, availableDownloads,
-        ) ?: return null
+    private fun authorize(
+        transfer: CrewMediaTransferRef,
+        requestingMemberId: CrewMemberId,
+    ): CrewAuthorizedMediaSource? {
+        val selected =
+            CrewActiveMediaSelector.select(
+                sessionId,
+                localMemberId,
+                stateProvider().withPrivateSources(),
+                transfer,
+                requestingMemberId,
+                temporaryIndex,
+                availableDownloads,
+            ) ?: return null
         return when (selected) {
             is CrewActiveMediaSelector.Selection.Temporary -> FileSource(selected.entry)
             is CrewActiveMediaSelector.Selection.Content -> ContentSource(context.contentResolver, selected.uri, selected.lengthBytes, selected.mimeType)
         }
     }
+
+    private fun CrewState.withPrivateSources(): CrewState =
+        copy(queue = queue.map { privateSources.overlay(sessionId, localMemberId, it) })
 
     override fun toString() = "CrewActiveMediaRuntime(redacted)"
 

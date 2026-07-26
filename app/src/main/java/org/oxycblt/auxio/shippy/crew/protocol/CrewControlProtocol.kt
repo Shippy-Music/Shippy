@@ -38,6 +38,7 @@ import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
 import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityAnnouncement
 import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityEntry
+import org.oxycblt.auxio.shippy.crew.media.publicizeCrewQueueItem
 import org.oxycblt.auxio.shippy.crew.preparation.MAX_CREW_AVAILABILITY_ENTRIES
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSequenceRejection
@@ -767,10 +768,11 @@ private fun DataOutputStream.writeQueue(queue: List<QueueItem>) {
 private fun DataInputStream.readQueue() = readBoundedList(MAX_QUEUE_ITEMS) { readQueueItem() }
 
 private fun DataOutputStream.writeQueueItem(item: QueueItem) {
-    writeSizedString(item.id.value, MAX_ID_BYTES)
-    writeTrack(item.track)
-    writeNullableString(item.contextId, MAX_ID_BYTES)
-    writeNullableString(item.contributorId, MAX_ID_BYTES)
+    val publicItem = publicizeCrewQueueItem(item)
+    writeSizedString(publicItem.id.value, MAX_ID_BYTES)
+    writeTrack(publicItem.track)
+    writeNullableString(publicItem.contextId, MAX_ID_BYTES)
+    writeNullableString(publicItem.contributorId, MAX_ID_BYTES)
 }
 
 private fun DataInputStream.readQueueItem() =

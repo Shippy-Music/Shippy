@@ -11,6 +11,8 @@
 package org.oxycblt.auxio.shippy.crew.protocol
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
@@ -101,6 +103,83 @@ class CrewControlProtocolTest {
                 )
             assertRoundTrip(CrewControlMessage.Event(event))
         }
+    }
+
+    @Test
+    fun `wire encoding never carries private media locators`() {
+        val publicProvider = queueItem("private").track.candidates.single()
+        val privateTrack =
+            queueItem("private")
+                .track
+                .copy(
+                    realm = TrackRealm.LOCAL,
+                    artwork = "content://private/artwork",
+                    candidates =
+                        listOf(
+                            publicProvider.copy(
+                                locator = "https://stream.example/private-provider",
+                            ),
+                            publicProvider.copy(
+                                id = CandidateId("local-private"),
+                                kind = CandidateKind.LOCAL,
+                                sourceId = "local",
+                                locator = "content://private/local-audio",
+                                providerId = null,
+                            ),
+                            publicProvider.copy(
+                                id = CandidateId("download-private"),
+                                kind = CandidateKind.DOWNLOAD,
+                                sourceId = "download",
+                                locator = "content://private/download",
+                                providerId = null,
+                            ),
+                            publicProvider.copy(
+                                id = CandidateId("temporary-private"),
+                                kind = CandidateKind.CREW_TEMPORARY,
+                                sourceId = "crew",
+                                locator = "file:///private/crew-cache",
+                                providerId = null,
+                            ),
+                        ),
+                )
+        val message =
+            CrewControlMessage.Request(
+                CrewActionRequest(
+                    id = DurableEventId("private-request"),
+                    issuingMemberId = memberId,
+                    clientMonotonicTimestampMs = 1,
+                    action =
+                        CrewAction.QueueReplaced(
+                            listOf(
+                                QueueItem(
+                                    id = QueueItemId("private-item"),
+                                    track = privateTrack,
+                                    contributorId = memberId.value,
+                                )
+                            )
+                        ),
+                )
+            )
+
+        val encoded = CrewControlCodec.encode(message)
+        val decoded = CrewControlCodec.decode(encoded)
+
+        assertTrue(decoded is CrewControlDecodeResult.Accepted)
+        val accepted =
+            ((decoded as CrewControlDecodeResult.Accepted).message as CrewControlMessage.Request)
+                .request
+                .action as CrewAction.QueueReplaced
+        val publicTrack = accepted.items.single().track
+        assertNull(publicTrack.artwork)
+        assertEquals(
+            listOf(CandidateKind.PROVIDER, CandidateKind.LOCAL),
+            publicTrack.candidates.map { it.kind },
+        )
+        assertTrue(publicTrack.candidates.all { it.locator == null })
+        val wireText = encoded.toString(Charsets.ISO_8859_1)
+        assertFalse(wireText.contains("content://"))
+        assertFalse(wireText.contains("file:///"))
+        assertFalse(wireText.contains("stream.example"))
     }
 
     @Test
@@ -329,7 +408,7 @@ class CrewControlProtocolTest {
                                 sourceId = "jiosaavn",
                                 sourceItemId = "source-$suffix",
                                 availability = CandidateAvailability.RESOLVABLE,
-                                locator = "https://example.test/song/$suffix",
+                                locator = null,
                                 providerId = ProviderId("jiosaavn"),
                                 media =
                                     MediaDescriptor(

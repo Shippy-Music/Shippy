@@ -33,6 +33,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.shippy.crew.media.CrewPrivateSourceRegistry
 
 enum class ActiveCrewMode {
     HOST,
@@ -115,6 +116,7 @@ class ActiveCrewRuntime
 constructor(
     private val hostLauncher: CrewLanHostLauncher,
     private val joinLauncher: CrewLanJoinLauncher,
+    private val privateSources: CrewPrivateSourceRegistry,
 ) {
     private val lock = Any()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -177,7 +179,13 @@ constructor(
         }
         val result =
             try {
-                submission.session.submit(action)
+                submission.session.submit(
+                    privateSources.captureAndPublicize(
+                        submission.session.sessionId,
+                        submission.session.localMemberId,
+                        action,
+                    )
+                )
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -296,6 +304,7 @@ constructor(
         val nextPresentationJob =
             scope.launch(start = CoroutineStart.LAZY) {
                 session.state.collect { crewState ->
+                    privateSources.prune(session.sessionId, crewState.queue)
                     refreshPresentation(generation, session, crewState)
                 }
             }

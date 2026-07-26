@@ -19,6 +19,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
+import org.oxycblt.auxio.shippy.crew.media.publicizeCrewQueueItem
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
@@ -72,6 +73,29 @@ class CrewPlaybackBridgeTest {
         val snapshot = PlayerCrewSnapshot(listOf(item), item.id, true, 1_050, 150, true, CrewRepeatMode.ALL)
 
         assertTrue(crewDiff(crew, snapshot).isEmpty())
+    }
+
+    @Test
+    fun `private locator difference does not echo a queue replacement`() {
+        val privateItem = item("one", CandidateKind.LOCAL).copy(contributorId = "member")
+        val publicItem = publicizeCrewQueueItem(privateItem)
+        val crew =
+            state(
+                listOf(publicItem),
+                CrewPlaybackState(publicItem.id, CrewPlaybackMode.PAUSED, 0, 0),
+            )
+        val player =
+            PlayerCrewSnapshot(
+                queue = listOf(privateItem),
+                currentItemId = privateItem.id,
+                playing = false,
+                positionMs = 0,
+                sessionEpochMs = 0,
+                shuffled = false,
+                repeatMode = CrewRepeatMode.OFF,
+            )
+
+        assertTrue(crewDiff(crew, player).isEmpty())
     }
 
     @Test
