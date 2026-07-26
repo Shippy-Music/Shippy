@@ -133,6 +133,9 @@ through Auxio’s existing playback stack.
 - [x] Add typed JioSaavn album, artist, and playlist results with internal
       detail, direct track playback, collection playback, and shuffle through
       the canonical player.
+  - [x] Reuse canonical download state/actions on provider detail rows and route
+        whole-collection Play next/Add to queue through the single resolved
+        playback authority.
 
 **Validation:**
 

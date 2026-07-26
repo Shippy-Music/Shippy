@@ -16,12 +16,22 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
+import org.oxycblt.auxio.shippy.domain.ProviderId
+import org.oxycblt.auxio.shippy.download.DownloadWorkCoordinator
+import org.oxycblt.auxio.shippy.library.CollectionRowDownloadPresentation
+import org.oxycblt.auxio.shippy.library.ShippyCollectionTrackRow
+import org.oxycblt.auxio.shippy.library.collectionRowDownloadPresentation
+import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.playback.PlaybackStartResult
 import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
+import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderBrowsePage
 import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
@@ -30,6 +40,11 @@ import org.oxycblt.auxio.shippy.provider.ProviderResult
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 
+enum class ProviderCollectionQueueAction {
+    PLAY_NEXT,
+    ADD_TO_QUEUE,
+}
+
 sealed interface ProviderEntityDetailState {
     val entity: ProviderEntity
 
@@ -37,6 +52,7 @@ sealed interface ProviderEntityDetailState {
 
     data class Content(
         val page: ProviderBrowsePage,
+        val rows: List<ShippyCollectionTrackRow> = emptyList(),
         val loadingMore: Boolean = false,
         val pagingFailed: Boolean = false,
     ) : ProviderEntityDetailState {
@@ -57,22 +73,47 @@ class ProviderEntityDetailViewModel
 constructor(
     private val providers: ProviderRegistry,
     private val playback: ShippyPlaybackController,
+    private val downloads: DownloadJobRepository,
+    private val downloadCoordinator: DownloadWorkCoordinator,
 ) : ViewModel() {
-    private val _state = MutableStateFlow<ProviderEntityDetailState?>(null)
-    val state: StateFlow<ProviderEntityDetailState?> = _state
+    private val sourceState = MutableStateFlow<ProviderEntityDetailState?>(null)
+    val state: StateFlow<ProviderEntityDetailState?> =
+        combine(sourceState, downloads.observeAll()) { state, storedDownloads ->
+            when (state) {
+                is ProviderEntityDetailState.Content ->
+                    state.copy(
+                        rows =
+                            state.page.tracks.map { track ->
+                                ShippyCollectionTrackRow(
+                                    track = track,
+                                    download =
+                                        collectionRowDownloadPresentation(
+                                            track,
+                                            storedDownloads.latestFor(track.id),
+                                            downloadableProviderIds(),
+                                        ),
+                                )
+                            }
+                    )
+                else -> state
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private val _playbackFailure = MutableEvent<PlaybackPreparation.Failed>()
     val playbackFailure: Event<PlaybackPreparation.Failed> = _playbackFailure
+
+    private val _queueActionCompleted = MutableEvent<ProviderCollectionQueueAction>()
+    val queueActionCompleted: Event<ProviderCollectionQueueAction> = _queueActionCompleted
 
     private var loadJob: Job? = null
     private var playbackJob: Job? = null
     private var requestedEntity: ProviderEntity? = null
 
     fun load(entity: ProviderEntity, force: Boolean = false) {
-        if (!force && requestedEntity == entity && _state.value != null) return
+        if (!force && requestedEntity == entity && sourceState.value != null) return
         requestedEntity = entity
         loadJob?.cancel()
-        _state.value = ProviderEntityDetailState.Loading(entity)
+        sourceState.value = ProviderEntityDetailState.Loading(entity)
         loadJob =
             viewModelScope.launch {
                 val provider = providers.get(entity.providerId)
@@ -95,7 +136,7 @@ constructor(
                         }
                     }
                 if (requestedEntity != entity) return@launch
-                _state.value =
+                sourceState.value =
                     when (result) {
                         is ProviderResult.Success ->
                             ProviderEntityDetailState.Content(result.value)
@@ -110,12 +151,12 @@ constructor(
     }
 
     fun loadMore() {
-        val current = _state.value as? ProviderEntityDetailState.Content ?: return
+        val current = sourceState.value as? ProviderEntityDetailState.Content ?: return
         val continuation = current.page.continuation ?: return
         if (current.loadingMore) return
         val entity = requestedEntity ?: return
         loadJob?.cancel()
-        _state.value = current.copy(loadingMore = true, pagingFailed = false)
+        sourceState.value = current.copy(loadingMore = true, pagingFailed = false)
         loadJob =
             viewModelScope.launch {
                 val provider = providers.get(entity.providerId)
@@ -138,7 +179,7 @@ constructor(
                         }
                     }
                 if (requestedEntity != entity) return@launch
-                _state.value =
+                sourceState.value =
                     when (result) {
                         is ProviderResult.Success ->
                             ProviderEntityDetailState.Content(
@@ -166,7 +207,7 @@ constructor(
     }
 
     fun play(index: Int, shuffled: Boolean) {
-        val page = (_state.value as? ProviderEntityDetailState.Content)?.page ?: return
+        val page = (sourceState.value as? ProviderEntityDetailState.Content)?.page ?: return
         if (index !in page.tracks.indices) return
         playbackJob?.cancel()
         playbackJob =
@@ -176,10 +217,7 @@ constructor(
                         playback.playQueue(
                             tracks = page.tracks,
                             selectedIndex = index,
-                            contextId =
-                                "provider:${page.entity.providerId.value}:" +
-                                    "${page.entity.type.name.lowercase()}:" +
-                                    page.entity.sourceItemId,
+                            contextId = page.contextId(),
                             shuffled = shuffled,
                         )
                 ) {
@@ -188,4 +226,58 @@ constructor(
                 }
             }
     }
+
+    fun playNext() {
+        mutateQueue(ProviderCollectionQueueAction.PLAY_NEXT)
+    }
+
+    fun addToQueue() {
+        mutateQueue(ProviderCollectionQueueAction.ADD_TO_QUEUE)
+    }
+
+    private fun mutateQueue(action: ProviderCollectionQueueAction) {
+        val page = (sourceState.value as? ProviderEntityDetailState.Content)?.page ?: return
+        if (page.tracks.isEmpty()) return
+        playbackJob?.cancel()
+        playbackJob =
+            viewModelScope.launch {
+                val result =
+                    when (action) {
+                        ProviderCollectionQueueAction.PLAY_NEXT ->
+                            playback.playNext(page.tracks, contextId = page.contextId())
+                        ProviderCollectionQueueAction.ADD_TO_QUEUE ->
+                            playback.addToQueue(page.tracks, contextId = page.contextId())
+                    }
+                when (result) {
+                    is PlaybackStartResult.Started -> _queueActionCompleted.put(action)
+                    is PlaybackStartResult.Failed -> _playbackFailure.put(result.failure)
+                }
+            }
+    }
+
+    fun performDownloadAction(row: ShippyCollectionTrackRow) {
+        viewModelScope.launch {
+            when (val action = row.download) {
+                is CollectionRowDownloadPresentation.Ready ->
+                    downloadCoordinator.request(row.track, action.candidateId)
+                is CollectionRowDownloadPresentation.Paused -> downloadCoordinator.resume(action.jobId)
+                is CollectionRowDownloadPresentation.Retry -> downloadCoordinator.retry(action.jobId)
+                is CollectionRowDownloadPresentation.Available -> downloadCoordinator.remove(action.jobId)
+                CollectionRowDownloadPresentation.Hidden,
+                is CollectionRowDownloadPresentation.Working -> Unit
+            }
+        }
+    }
+
+    private fun downloadableProviderIds(): Set<ProviderId> =
+        providers
+            .supporting(ProviderCapability.DOWNLOAD)
+            .mapTo(mutableSetOf()) { it.descriptor.id }
+
+    private fun List<org.oxycblt.auxio.shippy.persistence.download.PersistedDownload>.latestFor(
+        trackId: org.oxycblt.auxio.shippy.domain.TrackId,
+    ) = asSequence().filter { it.track.id == trackId }.maxByOrNull { it.updatedAtEpochMs }
+
+    private fun ProviderBrowsePage.contextId() =
+        "provider:${entity.providerId.value}:${entity.type.name.lowercase()}:${entity.sourceItemId}"
 }

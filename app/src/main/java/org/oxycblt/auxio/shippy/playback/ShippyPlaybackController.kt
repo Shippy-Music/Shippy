@@ -69,6 +69,87 @@ constructor(
         pushPullEnabled: Boolean = false,
         shuffled: Boolean = false,
     ): PlaybackStartResult {
+        val prepared =
+            when (
+                val result =
+                    prepareQueue(
+                        tracks,
+                        selectedIndex,
+                        contextId,
+                        contributorId,
+                        pushPullEnabled,
+                    )
+            ) {
+                is PreparedPlaybackQueue.Ready -> result
+                is PreparedPlaybackQueue.Failed ->
+                    return PlaybackStartResult.Failed(result.failure)
+            }
+        playbackManager.play(
+            PlaybackCommandFactoryImpl.PlaybackCommandImpl(
+                selectedItemId = prepared.plan.selectedItemId,
+                queue = prepared.items,
+                parent = null,
+                shuffled = shuffled,
+            )
+        )
+        return PlaybackStartResult.Started(prepared.plan.selectedItemId)
+    }
+
+    /** Resolves atomically, then inserts source-aware tracks immediately after the current item. */
+    suspend fun playNext(
+        tracks: List<Track>,
+        contextId: String? = null,
+        contributorId: String? = null,
+        pushPullEnabled: Boolean = false,
+    ): PlaybackStartResult =
+        mutateQueue(tracks, contextId, contributorId, pushPullEnabled) {
+            playbackManager.playNextResolved(it)
+        }
+
+    /** Resolves atomically, then appends source-aware tracks to the canonical queue. */
+    suspend fun addToQueue(
+        tracks: List<Track>,
+        contextId: String? = null,
+        contributorId: String? = null,
+        pushPullEnabled: Boolean = false,
+    ): PlaybackStartResult =
+        mutateQueue(tracks, contextId, contributorId, pushPullEnabled) {
+            playbackManager.addResolvedToQueue(it)
+        }
+
+    private suspend fun mutateQueue(
+        tracks: List<Track>,
+        contextId: String?,
+        contributorId: String?,
+        pushPullEnabled: Boolean,
+        mutation: (List<ResolvedQueueItem>) -> Unit,
+    ): PlaybackStartResult {
+        val prepared =
+            when (
+                val result =
+                    prepareQueue(
+                        tracks,
+                        selectedIndex = 0,
+                        contextId = contextId,
+                        contributorId = contributorId,
+                        pushPullEnabled = pushPullEnabled,
+                    )
+            ) {
+                is PreparedPlaybackQueue.Ready -> result
+                is PreparedPlaybackQueue.Failed ->
+                    return PlaybackStartResult.Failed(result.failure)
+            }
+        mutation(prepared.items)
+        return PlaybackStartResult.Started(prepared.plan.selectedItemId)
+    }
+
+    private suspend fun prepareQueue(
+        tracks: List<Track>,
+        selectedIndex: Int,
+        contextId: String?,
+        contributorId: String?,
+        pushPullEnabled: Boolean,
+    ): PreparedPlaybackQueue {
         val plan = queuePlaybackPlan(queueItemFactory, tracks, selectedIndex, contextId, contributorId)
         val policy =
             ResolutionPolicy(
@@ -82,23 +163,25 @@ constructor(
                         .priority,
                 pushPullEnabled = pushPullEnabled,
             )
-        val queue = mutableListOf<ResolvedQueueItem>()
+        val items = mutableListOf<ResolvedQueueItem>()
         for (item in plan.items) {
             when (val preparation = resolutionCoordinator.prepare(item, policy)) {
-                is PlaybackPreparation.Ready -> queue += preparation.value
-                is PlaybackPreparation.Failed -> return PlaybackStartResult.Failed(preparation)
+                is PlaybackPreparation.Ready -> items += preparation.value
+                is PlaybackPreparation.Failed ->
+                    return PreparedPlaybackQueue.Failed(preparation)
             }
         }
-        playbackManager.play(
-            PlaybackCommandFactoryImpl.PlaybackCommandImpl(
-                selectedItemId = plan.selectedItemId,
-                queue = queue,
-                parent = null,
-                shuffled = shuffled,
-            )
-        )
-        return PlaybackStartResult.Started(plan.selectedItemId)
+        return PreparedPlaybackQueue.Ready(plan, items)
     }
+}
+
+private sealed interface PreparedPlaybackQueue {
+    data class Ready(
+        val plan: QueuePlaybackPlan,
+        val items: List<ResolvedQueueItem>,
+    ) : PreparedPlaybackQueue
+
+    data class Failed(val failure: PlaybackPreparation.Failed) : PreparedPlaybackQueue
 }
 
 internal data class QueuePlaybackPlan(
