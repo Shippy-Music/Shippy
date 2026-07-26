@@ -39,6 +39,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.CrewElectionVote
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewReducer
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshotResult
 import org.oxycblt.auxio.shippy.crew.core.CrewState
@@ -169,6 +170,8 @@ sealed interface CrewSessionNotice {
     data class EngineFailed(val reason: String) : CrewSessionNotice
 
     data class LocalLeft(val finalState: CrewState) : CrewSessionNotice
+
+    data class SessionEnded(val finalState: CrewState) : CrewSessionNotice
 }
 
 enum class CrewPeerDetachReason {
@@ -1240,7 +1243,10 @@ class CrewSessionEngine(
     }
 
     private suspend fun persistAcceptedStateLocked(state: CrewState) {
-        if (state.members.any { it.id == localMemberId }) {
+        if (state.playback.mode == CrewPlaybackMode.ENDED) {
+            checkpointRepository.clear(state.sessionId)
+            emit(CrewSessionNotice.SessionEnded(state))
+        } else if (state.members.any { it.id == localMemberId }) {
             checkpointRepository.save(state.toSnapshot(), nowEpochMs())
         } else {
             checkpointRepository.clear(state.sessionId)

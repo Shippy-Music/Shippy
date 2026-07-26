@@ -28,6 +28,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
@@ -63,6 +64,7 @@ import okhttp3.OkHttpClient
 
 private const val CREW_JOIN_PROTOCOL_V1 = 1
 private const val CREW_LAN_DISCOVERY_TIMEOUT_MS = 10_000L
+private const val CREW_JOIN_TERMINAL_EVENT_WAIT_MS = 1_500L
 
 sealed interface CrewLanJoinLaunchResult {
     data class Started(val session: CrewLanJoinedSession) : CrewLanJoinLaunchResult
@@ -95,7 +97,8 @@ sealed interface CrewLanJoinLaunchFailure {
 
 /**
  * A live LAN join. [close] is recovery-safe and retains the exact persisted checkpoint and lease.
- * [leave] is the explicit local teardown; it does not claim a graceful ordered Crew leave yet.
+ * [leave] requests an ordered departure (or terminal end when this is the sole member) before
+ * explicit local teardown.
  */
 class CrewLanJoinedSession internal constructor(
     val sessionId: CrewSessionId,
@@ -148,6 +151,25 @@ class CrewLanJoinedSession internal constructor(
             }
         }
         if (!shouldLeave) return
+        val before = state.value
+        if (before.members.size == 1 && before.members.single().id == localMemberId) {
+            runCatching { submit(CrewAction.SessionEnded) }
+        } else {
+            val now = (System.nanoTime() / 1_000_000L).coerceAtLeast(0L)
+            runCatching {
+                engine.gracefulLeave(
+                    DurableEventId(UUID.randomUUID().toString()),
+                    DurableEventId(UUID.randomUUID().toString()),
+                    now,
+                )
+            }
+        }
+        withTimeoutOrNull(CREW_JOIN_TERMINAL_EVENT_WAIT_MS) {
+            state.first { crew ->
+                crew.playback.mode == CrewPlaybackMode.ENDED ||
+                    crew.members.none { it.id == localMemberId }
+            }
+        }
         close()
         runCatching { checkpoints.clear(sessionId) }
         runCatching { leases.clear(sessionId) }

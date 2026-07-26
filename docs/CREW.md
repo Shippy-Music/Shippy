@@ -628,6 +628,15 @@ transfers to the deterministic lowest-ID connected successor; its self-leave
 request follows the transfer on the same ordered channel. The leaving device
 clears its exact checkpoint only after receiving the accepted leave event.
 
+Normal session termination also remains inside the ordered stream. The owner
+publishes `SessionEnded`; every member converges to terminal playback, clears
+its recoverable checkpoint, pauses its canonical player, and then releases
+transport and temporary-media resources. The session engine deliberately keeps
+outbound actors alive until its owning runtime tears down, so the terminal
+event cannot be cancelled immediately after it is queued. A joined member
+leaving an active multi-member Crew still uses ordered self-leave/handoff
+instead of ending the session for everyone.
+
 The LAN runtime now has explicit host and join ownership seams. The host turns a
 QR-authenticated signaling peer into one fingerprint-bound responder transport,
 rechecks the claimed member ID, attaches it to the active engine, and sequences

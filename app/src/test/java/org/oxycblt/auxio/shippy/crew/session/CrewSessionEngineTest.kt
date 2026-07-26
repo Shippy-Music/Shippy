@@ -31,6 +31,7 @@ import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
 import org.oxycblt.auxio.shippy.crew.core.CrewState
@@ -67,6 +68,58 @@ class CrewSessionEngineTest {
     private val sessionId = CrewSessionId("crew", protocol)
     private val coordinatorId = CrewMemberId("coordinator", protocol)
     private val memberId = CrewMemberId("member", protocol)
+
+    @Test
+    fun `terminal event clears checkpoint without cancelling its outbound delivery`() =
+        runBlocking {
+            val store = FakeCheckpointRepository()
+            store.latest = state().toSnapshot()
+            val engine =
+                CrewSessionEngine(
+                    state(),
+                    coordinatorId,
+                    store,
+                    nowEpochMs = { 100 },
+                )
+            val peer = FakePeerTransport(memberId)
+            engine.attachPeer(peer)
+            val ended =
+                async(start = CoroutineStart.UNDISPATCHED) {
+                    withTimeout(2_000) {
+                        engine.notices.filterIsInstance<CrewSessionNotice.SessionEnded>().first()
+                    }
+                }
+
+            val request =
+                CrewActionRequest(
+                    DurableEventId("end-session"),
+                    coordinatorId,
+                    1,
+                    CrewAction.SessionEnded,
+                )
+            assertEquals(CrewSubmitResult.Submitted(request), engine.submit(request, 1))
+            assertEquals(CrewPlaybackMode.ENDED, ended.await().finalState.playback.mode)
+            assertEquals(null, store.latest)
+            withTimeout(2_000) {
+                while (peer.sentFrames().isEmpty()) {
+                    kotlinx.coroutines.delay(10)
+                }
+            }
+            val reassembler = CrewControlReassembler()
+            val delivered =
+                peer.sentFrames()
+                    .mapNotNull { frame ->
+                        (
+                            reassembler.accept(frame, nowMonotonicMs = 0)
+                                as? CrewControlFrameResult.Complete
+                        )
+                            ?.message
+                    }
+                    .filterIsInstance<CrewControlMessage.Event>()
+                    .any { it.event.action == CrewAction.SessionEnded }
+            assertTrue(delivered)
+            engine.close()
+        }
 
     @Test
     fun `coordinator fans a member availability announcement to active peers`() = runBlocking {

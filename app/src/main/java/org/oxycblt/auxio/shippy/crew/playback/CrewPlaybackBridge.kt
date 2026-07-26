@@ -245,10 +245,13 @@ constructor(
             when (crew.playback.mode) {
                 CrewPlaybackMode.PLAYING -> if (!playbackManager.progression.isPlaying) playbackManager.playing(true)
                 CrewPlaybackMode.PAUSED -> if (playbackManager.progression.isPlaying) playbackManager.playing(false)
+                CrewPlaybackMode.ENDED ->
+                    if (playbackManager.progression.isPlaying) {
+                        playbackManager.playing(false)
+                    }
                 CrewPlaybackMode.IDLE,
                 CrewPlaybackMode.PREPARING,
-                CrewPlaybackMode.BUFFERING,
-                CrewPlaybackMode.ENDED ->
+                CrewPlaybackMode.BUFFERING ->
                     // newPlayback() starts ExoPlayer immediately. A queue event
                     // in PREPARING must not audibly race the later scheduled Play.
                     if (replacedQueue && playbackManager.progression.isPlaying) {

@@ -77,6 +77,9 @@ sealed interface CrewAction {
     data class RepeatChanged(val mode: CrewRepeatMode) : CrewAction
 
     data class CoordinatorTransferred(val newCoordinatorMemberId: CrewMemberId) : CrewAction
+
+    /** Irreversibly closes the active Crew after this ordered event converges. */
+    data object SessionEnded : CrewAction
 }
 
 sealed interface CrewEventResult {

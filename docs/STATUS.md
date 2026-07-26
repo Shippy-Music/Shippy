@@ -219,6 +219,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Graceful coordinator leave now transfers deterministically to the lowest-ID
   connected successor before its self-leave request. The departing member
   receives the accepted leave event and clears only its exact active checkpoint.
+- Explicit Crew end now publishes a versioned ordered terminal action before
+  teardown. Every converged member clears its recovery checkpoint, pauses the
+  canonical player, and lets the application owner release live transport and
+  temporary-media resources without cancelling queued terminal delivery.
 - Crew liveness now uses monotonic configurable reconnect grace and authenticated
   activity recovery. It exposes coordinator-only ordinary-member removal and
   strict-full-checkpoint-majority election eligibility with deterministic
@@ -291,9 +295,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   allocation, discovers only its advertised rendezvous, authenticates signaling
   and the fingerprint-bound initiator transport, bootstraps one engine from the
   coordinator snapshot, and saves the exact Keystore rejoin lease. Runtime
-  `close()` preserves recovery state; explicit `leave()` releases the live join
-  and clears only that session's checkpoint and lease. Ordered graceful leave
-  remains an active-session integration seam.
+  `close()` preserves recovery state; explicit `leave()` first requests ordered
+  self-departure (or terminal end when it is the sole member), then releases the
+  live join and clears only that session's checkpoint and lease.
 - One application-wide `ActiveCrewRuntime` now owns LAN host/join exclusivity,
   survives fragment/ViewModel lifetimes, publishes only UI-safe session
   presentation, rejects overlapping operations, and performs exact explicit

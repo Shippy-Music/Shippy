@@ -32,6 +32,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanAdvertisement
@@ -59,6 +60,7 @@ import okhttp3.OkHttpClient
 
 private const val CREW_PROTOCOL_V1 = 1
 private const val DEFAULT_ADVERTISEMENT_TIMEOUT_MS = 10_000L
+private const val CREW_TERMINAL_EVENT_WAIT_MS = 1_500L
 
 enum class CrewConnectivityPresentation {
     NEARBY,
@@ -90,8 +92,7 @@ sealed interface CrewLanHostLaunchFailure {
 /**
  * A single LAN host session. Closing a live session is intentionally recovery-safe: the exact
  * checkpoint and rejoin lease stay available for a future process-recovery runtime. [end] is the
- * explicit host-session end operation for the current coordinator-centred topology; it does not
- * claim a graceful coordinator handoff.
+ * explicit host-session end operation publishes one terminal ordered event before teardown.
  */
 class CrewLanHostSession internal constructor(
     val sessionId: CrewSessionId,
@@ -150,6 +151,10 @@ class CrewLanHostSession internal constructor(
             }
         }
         if (!shouldEnd) return
+        runCatching { submit(CrewAction.SessionEnded) }
+        withTimeoutOrNull(CREW_TERMINAL_EVENT_WAIT_MS) {
+            state.first { it.playback.mode == CrewPlaybackMode.ENDED }
+        }
         close()
         runCatching { checkpoints.clear(sessionId) }
         runCatching { leases.clear(sessionId) }

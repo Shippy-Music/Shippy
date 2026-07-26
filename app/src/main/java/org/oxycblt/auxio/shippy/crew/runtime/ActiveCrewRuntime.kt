@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
@@ -350,11 +351,27 @@ constructor(
     }
 
     private fun refreshPresentation(generation: Long, session: OwnedSession, crewState: CrewState) {
-        synchronized(lock) {
-            if (this.generation == generation && ownedSession === session) {
-                val active = mutableState.value as? ActiveCrewRuntimeState.Active ?: return
-                mutableState.value = active.copy(presentation = session.presentation(crewState))
+        val terminalRequest =
+            synchronized(lock) {
+                if (this.generation == generation && ownedSession === session) {
+                    val active =
+                        mutableState.value as? ActiveCrewRuntimeState.Active
+                            ?: return@synchronized null
+                    val presentation = session.presentation(crewState)
+                    if (crewState.playback.mode == CrewPlaybackMode.ENDED) {
+                        this.generation += 1
+                        mutableState.value = ActiveCrewRuntimeState.Ending(presentation)
+                        EndRequest(this.generation, session)
+                    } else {
+                        mutableState.value = active.copy(presentation = presentation)
+                        null
+                    }
+                } else {
+                    null
+                }
             }
+        terminalRequest?.let { request ->
+            launch(request.generation) { endOwnedSession(request) }
         }
     }
 

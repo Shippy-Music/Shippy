@@ -664,8 +664,9 @@ Discovery ends as soon as signaling owns the route, and the coordinator remains
 the only transport-frame collector. Success is published only after the exact
 Keystore rejoin lease is saved. Runtime `close()` preserves recovery state;
 explicit `leave()` releases the live join and clears only its exact checkpoint
-and lease. It does not yet claim the ordered graceful membership departure
-that the active-session manager must later route through the control plane.
+and lease after requesting the ordered graceful membership departure. A sole
+remaining member publishes the same ordered terminal event used by an explicit
+host end.
 Playback remains a separate seam; authenticated media is composed explicitly
 beside the engine rather than hidden in transport discovery.
 
@@ -675,8 +676,12 @@ end operation, retains the live session outside fragment/ViewModel lifetimes,
 and projects only role, stable IDs, canonical `CrewState`, and the host invite
 link into presentation state. UI never receives an engine, signaling peer,
 transport, invite secret, or runtime session object. Explicit end still uses
-the launcher's exact checkpoint/lease cleanup contract; graceful ordered
-membership departure remains a later control-plane integration.
+the launcher's exact checkpoint/lease cleanup contract after `SessionEnded`
+converges. A remote terminal state moves the owner through `Ending` and releases
+the same live resources. The session engine clears its checkpoint and emits the
+terminal notice without immediately cancelling outbound actors; the owning
+runtime performs teardown only after the ordered event has had a delivery
+window.
 The owner also exposes one suspend local-action gateway. It creates no competing
 state: the exact owned session constructs an issuer-bound request and delegates
 to `CrewSessionEngine`, while generation checks reject results from a session

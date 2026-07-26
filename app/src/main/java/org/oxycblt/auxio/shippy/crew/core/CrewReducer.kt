@@ -78,6 +78,9 @@ class CrewReducer {
         if (event.term.value < state.term.value) {
             return CrewEventResult.StaleTermRejected(state.term, event.term)
         }
+        if (state.playback.mode == CrewPlaybackMode.ENDED) {
+            return CrewEventResult.Rejected("Crew session has ended")
+        }
 
         return if (event.action is CrewAction.CoordinatorTransferred) {
             applyTransfer(state, event, event.action)
@@ -304,6 +307,10 @@ class CrewReducer {
                 is CrewAction.RepeatChanged -> StateUpdate.Accepted(state.copy(repeatMode = action.mode))
                 is CrewAction.CoordinatorTransferred ->
                     error("Coordinator transfer is handled before ordered actions")
+                CrewAction.SessionEnded ->
+                    StateUpdate.Accepted(
+                        state.copy(playback = CrewPlaybackState(mode = CrewPlaybackMode.ENDED))
+                    )
             }
 
         return when (updated) {

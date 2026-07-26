@@ -735,6 +735,7 @@ private fun DataOutputStream.writeAction(action: CrewAction) {
             writeByte(14)
             writeMemberId(action.newCoordinatorMemberId)
         }
+        CrewAction.SessionEnded -> writeByte(15)
     }
 }
 
@@ -754,6 +755,7 @@ private fun DataInputStream.readAction(): CrewAction =
         12 -> CrewAction.ShuffleChanged(readStrictBoolean())
         13 -> CrewAction.RepeatChanged(readRepeatMode())
         14 -> CrewAction.CoordinatorTransferred(readMemberId())
+        15 -> CrewAction.SessionEnded
         else -> throw IOException("Unknown Crew action")
     }
 

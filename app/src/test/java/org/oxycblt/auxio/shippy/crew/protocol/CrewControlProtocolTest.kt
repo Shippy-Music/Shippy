@@ -74,6 +74,7 @@ class CrewControlProtocolTest {
                 CrewAction.ShuffleChanged(true),
                 CrewAction.RepeatChanged(CrewRepeatMode.ONE),
                 CrewAction.CoordinatorTransferred(memberId),
+                CrewAction.SessionEnded,
             )
 
         actions.forEachIndexed { index, action ->

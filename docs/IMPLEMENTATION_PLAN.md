@@ -193,12 +193,14 @@ code/test level, ready for later device verification.
     persisted as durable Crew state.
 - [x] Implement monotonic session clock probes and scheduled playback decisions.
 - [x] Implement readiness, buffering, late join, and drift decision logic.
-- [ ] Complete membership lifecycle:
+- [x] Complete membership lifecycle:
   - [x] Authenticated coordinator admission and canonical post-join snapshot.
   - [x] Self-leave and deterministic graceful coordinator handoff.
   - [x] Monotonic reconnect grace and strict-majority election eligibility.
   - [x] Sequence expired-member removal and independently authenticated
         ungraceful election votes.
+  - [x] Publish an ordered terminal session event before explicit owner
+        teardown and clear recovery state on every converged member.
 - [x] Implement bounded persistent active-session checkpoint format, Room store,
       encrypted rejoin credential lease, and restore orchestration seam.
 - [x] Implement ephemeral reactions.

@@ -78,6 +78,24 @@ class CrewReducerTest {
     }
 
     @Test
+    fun `session end is ordered terminal state`() {
+        val initial = state(queue = listOf(queueItem("one")))
+        val ended = apply(initial, event(initial, 1, CrewAction.SessionEnded))
+
+        assertEquals(CrewPlaybackMode.ENDED, ended.playback.mode)
+        assertEquals(null, ended.playback.currentQueueItemId)
+        assertEquals(EventSequence(1), ended.lastSequence)
+
+        val result =
+            reducer.apply(
+                ended,
+                event(ended, 2, CrewAction.Play(0, 1_000)),
+                ended.coordinatorMemberId,
+            )
+        assertTrue(result is CrewEventResult.Rejected)
+    }
+
+    @Test
     fun `duplicate event is rejected without changing state`() {
         val initial = state()
         val event = event(initial, 1, CrewAction.QueueReplaced(listOf(queueItem("one"))))

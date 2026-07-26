@@ -47,8 +47,15 @@ data class CrewPlaybackState(
     init {
         require(positionAtEpochMs >= 0) { "Playback position cannot be negative" }
         require(sessionEpochMs >= 0) { "Session epoch cannot be negative" }
-        require(currentQueueItemId != null || mode == CrewPlaybackMode.IDLE) {
-            "Playback without a current queue item must be idle"
+        require(
+            currentQueueItemId != null ||
+                mode == CrewPlaybackMode.IDLE ||
+                mode == CrewPlaybackMode.ENDED
+        ) {
+            "Playback without a current queue item must be idle or ended"
+        }
+        require(mode != CrewPlaybackMode.ENDED || currentQueueItemId == null) {
+            "Ended playback cannot retain a current queue item"
         }
     }
 }
