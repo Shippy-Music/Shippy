@@ -457,6 +457,14 @@ split-brain-safe tradeoff; the relay path must restore two-member availability.
 Continue the Crew for others. Reconnecting member receives a snapshot, resolves
 the current item, and joins at live position.
 
+The joined runtime does not construct another session engine. Once the failed
+coordinator peer has detached, one owner re-races LAN and configured hosted
+signaling, repeats the invitation and DTLS-fingerprint authentication, attaches
+the authenticated replacement transport to the existing engine, and explicitly
+requests the current canonical snapshot. Bounded exponential retry is woken by
+Android default-network changes. Results for an old/wrong coordinator are
+closed rather than attached.
+
 ### Internet disappears
 
 LAN Crew continues. Provider-only unavailable tracks resolve from downloads,
@@ -664,6 +672,15 @@ current coordinator may sequence removal of an ordinary member. Coordinator
 loss produces an election opportunity only when connected survivors are a
 strict majority of the full checkpoint, with the lowest stable member ID as
 candidate. A two-member Crew still pauses safely after coordinator loss.
+
+A joined client now also owns a live replacement-transport loop. The existing
+engine's peer map is the trigger, so an ICE-restarting attached peer is not
+raced by a duplicate dial. Once detached, the loop reuses LAN discovery or the
+configured hosted signaling race, creates a new fingerprint-authenticated
+initiator, verifies the current coordinator again, attaches it to the same
+engine, and requests a snapshot. The short-lived invitation currently bounds
+that retry window; renewable in-session credentials remain required for
+long-running Crew recovery.
 
 The session engine now consumes those decisions on a bounded periodic loop.
 Ordinary-member expiry becomes a normal ordered `MemberLeft` event. Ungraceful

@@ -229,7 +229,12 @@ code/test level, ready for later device verification.
   - A relay-bearing invite races LAN and hosted WebSocket signaling, then uses
     the existing fingerprint-authenticated WebRTC driver with public STUN
     candidates. TURN fallback remains separate work.
-- [ ] Implement reconnection and network-change handling.
+- [x] Implement reconnection and network-change handling.
+  - A joined member retains one session engine, re-races LAN/hosted signaling
+    only after coordinator transport detachment, reauthenticates a replacement
+    WebRTC peer, requests a fresh snapshot, and wakes bounded backoff on Android
+    default-network changes. The current short-lived invite remains the honest
+    retry lifetime; renewable session credentials stay later hardening.
 - [x] Separate durable control, transient reaction, clock, and media channels.
 - [x] Implement bounded durable-control serialization and multi-frame
       reassembly for requests, events, rejections, and snapshots.

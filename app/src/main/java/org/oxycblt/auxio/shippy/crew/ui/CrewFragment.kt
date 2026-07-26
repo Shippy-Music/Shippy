@@ -39,6 +39,7 @@ import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewPresentation
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeFailure
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 import org.oxycblt.auxio.shippy.crew.runtime.CrewConnectivityPresentation
+import org.oxycblt.auxio.shippy.crew.runtime.CrewJoinReconnectState
 import org.oxycblt.auxio.shippy.crew.runtime.CrewJoinFailure
 import org.oxycblt.auxio.shippy.crew.runtime.CrewLanHostLaunchFailure
 import org.oxycblt.auxio.shippy.crew.runtime.CrewLanJoinLaunchFailure
@@ -165,10 +166,20 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
                         R.string.lng_hosting_crew_relay_unavailable
                 }
             ActiveCrewMode.JOIN ->
-                if (presentation.connectivity == CrewConnectivityPresentation.NEARBY_AND_REMOTE) {
-                    R.string.lng_joined_crew_remote
-                } else {
-                    R.string.lng_joined_crew
+                when (presentation.reconnectState) {
+                    CrewJoinReconnectState.Connected ->
+                        if (
+                            presentation.connectivity ==
+                                CrewConnectivityPresentation.NEARBY_AND_REMOTE
+                        ) {
+                            R.string.lng_joined_crew_remote
+                        } else {
+                            R.string.lng_joined_crew
+                        }
+                    is CrewJoinReconnectState.Reconnecting,
+                    is CrewJoinReconnectState.Waiting -> R.string.lng_reconnecting_crew
+                    CrewJoinReconnectState.Expired -> R.string.lng_reconnect_crew_expired
+                    CrewJoinReconnectState.Closed -> R.string.lng_crew_connection_closed
                 }
         }
 

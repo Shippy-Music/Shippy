@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerConnection
+import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerState
 import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerRole
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.DurableEventId
@@ -64,6 +65,7 @@ import okhttp3.OkHttpClient
 
 private const val CREW_JOIN_PROTOCOL_V1 = 1
 private const val CREW_LAN_DISCOVERY_TIMEOUT_MS = 10_000L
+private const val CREW_RECONNECT_DIAL_TIMEOUT_MS = 15_000L
 private const val CREW_JOIN_TERMINAL_EVENT_WAIT_MS = 1_500L
 
 sealed interface CrewLanJoinLaunchResult {
@@ -107,6 +109,8 @@ class CrewLanJoinedSession internal constructor(
     private val engine: CrewSessionEngine,
     val joinState: StateFlow<CrewJoinState>,
     private val coordinator: CrewJoinCoordinator,
+    private val reconnectController: CrewJoinReconnectController,
+    private val networkChangeMonitor: CrewNetworkChangeMonitor,
     private val mediaRuntime: CrewActiveMediaRuntime,
     private val webRtcRuntime: CrewWebRtcRuntime,
     private val checkpoints: CrewCheckpointRepository,
@@ -118,6 +122,7 @@ class CrewLanJoinedSession internal constructor(
 
     val state: StateFlow<CrewState> = engine.state
     val reactions: SharedFlow<ActiveCrewReaction> = engine.reactions
+    val reconnectState: StateFlow<CrewJoinReconnectState> = reconnectController.state
     val peerMediaBlocked: StateFlow<Boolean> = mediaRuntime.peerMediaBlocked
     val allowedReactions: List<String> = engine.allowedReactions
 
@@ -137,6 +142,8 @@ class CrewLanJoinedSession internal constructor(
 
     override fun close() {
         if (!markReleased()) return
+        runCatching { networkChangeMonitor.close() }
+        runCatching { reconnectController.close() }
         runCatching { coordinator.close() }
         runCatching { engine.close() }
         runCatching { mediaRuntime.close() }
@@ -259,9 +266,13 @@ constructor(
         var mediaRuntime: CrewActiveMediaRuntime? = null
         var webRtc: CrewWebRtcRuntime? = null
         var coordinator: CrewJoinCoordinator? = null
+        var reconnectController: CrewJoinReconnectController? = null
+        var networkChangeMonitor: CrewNetworkChangeMonitor? = null
         val sessionId = signalPeer.sessionId
 
         suspend fun fail(reason: CrewLanJoinLaunchFailure): CrewLanJoinLaunchResult.Failed {
+            runCatching { networkChangeMonitor?.close() }
+            runCatching { reconnectController?.close() }
             runCatching { coordinator?.close() }
             runCatching { engine?.close() }
             runCatching { signalPeer.close() }
@@ -342,6 +353,30 @@ constructor(
                 if (runCatching { leases.save(CrewRejoinLease(activeSessionId, localMemberId, invite)) }.isFailure) {
                     return fail(CrewLanJoinLaunchFailure.EngineOrPersistence)
                 }
+                val activeReconnectController =
+                    CrewJoinReconnectController(
+                        localMemberId = localMemberId,
+                        session = CrewSessionEngineReconnectPort(activeEngine),
+                        dialer =
+                            CrewJoinedSessionReconnectDialer { expectedCoordinator ->
+                                dialReconnect(
+                                    invite = invite,
+                                    localMember = localMember,
+                                    expectedCoordinator = expectedCoordinator,
+                                    webRtcRuntime = activeWebRtc,
+                                )
+                            },
+                    )
+                        .also {
+                            reconnectController = it
+                            it.start()
+                        }
+                val activeNetworkChangeMonitor =
+                    CrewNetworkChangeMonitor(
+                        context.applicationContext,
+                        activeReconnectController::wake,
+                    )
+                        .also { networkChangeMonitor = it }
                 return CrewLanJoinLaunchResult.Started(
                     CrewLanJoinedSession(
                         sessionId = activeSessionId,
@@ -350,6 +385,8 @@ constructor(
                         engine = activeEngine,
                         joinState = activeCoordinator.state,
                         coordinator = activeCoordinator,
+                        reconnectController = activeReconnectController,
+                        networkChangeMonitor = activeNetworkChangeMonitor,
                         mediaRuntime = activeMediaRuntime,
                         webRtcRuntime = activeWebRtc,
                         checkpoints = checkpoints,
@@ -359,6 +396,113 @@ constructor(
             }
             CrewJoinState.Connecting,
             CrewJoinState.Bootstrapping -> error("Join coordinator emitted a non-terminal join state")
+        }
+    }
+
+    private suspend fun dialReconnect(
+        invite: CrewInvite,
+        localMember: CrewMember,
+        expectedCoordinator: CrewMemberId,
+        webRtcRuntime: CrewWebRtcRuntime,
+    ): CrewReconnectDialResult {
+        if (nowEpochMs() >= invite.expiresAtEpochMs) {
+            return CrewReconnectDialResult.Expired
+        }
+        val selection =
+            connectSignalingForReconnect(invite, localMember)
+                ?: return CrewReconnectDialResult.Retryable
+        val signalingPeer = selection.peer
+        if (signalingPeer.remoteMemberClaim != expectedCoordinator) {
+            signalingPeer.close()
+            return CrewReconnectDialResult.Retryable
+        }
+        val handle =
+            runCatching {
+                    CrewDirectPeerConnectionHandle(
+                        CrewDirectPeerConnection(
+                            peerFactory = webRtcRuntime,
+                            signalingPeer = signalingPeer,
+                            invite = invite,
+                            localMemberId = localMember.id,
+                            role = CrewDirectPeerRole.INITIATOR,
+                            iceServers = DEFAULT_CREW_REMOTE_ICE_SERVERS,
+                        )
+                    )
+                }
+                .getOrElse {
+                    signalingPeer.close()
+                    return CrewReconnectDialResult.Retryable
+                }
+        if (runCatching { handle.start() }.isFailure) {
+            handle.close()
+            return CrewReconnectDialResult.Retryable
+        }
+        val terminal =
+            withTimeoutOrNull(CREW_RECONNECT_DIAL_TIMEOUT_MS) {
+                handle.state.first {
+                    it is CrewDirectPeerState.Connected ||
+                        it is CrewDirectPeerState.Failed ||
+                        it == CrewDirectPeerState.Closed
+                }
+            }
+        return when (terminal) {
+            is CrewDirectPeerState.Connected ->
+                if (terminal.transport.remoteMemberId == expectedCoordinator) {
+                    CrewReconnectDialResult.Authenticated(handle, terminal.transport)
+                } else {
+                    handle.close()
+                    CrewReconnectDialResult.Retryable
+                }
+            is CrewDirectPeerState.Failed,
+            CrewDirectPeerState.Closed,
+            null -> {
+                handle.close()
+                CrewReconnectDialResult.Retryable
+            }
+            CrewDirectPeerState.New,
+            CrewDirectPeerState.Negotiating,
+            CrewDirectPeerState.Authenticating ->
+                error("Reconnect wait returned a non-terminal direct state")
+        }
+    }
+
+    private suspend fun connectSignalingForReconnect(
+        invite: CrewInvite,
+        localMember: CrewMember,
+    ): SignalingSelection? {
+        if (invite.relayLocator != null) {
+            val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull()
+            return selectSignalingPeer(
+                discovery,
+                invite,
+                localMember.id,
+                localMember.displayName,
+            )
+        }
+        val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull() ?: return null
+        return try {
+            val rendezvous =
+                awaitRendezvous(discovery, invite) as? RendezvousAwaitResult.Found
+                    ?: return null
+            when (
+                val signaling =
+                    CrewLanSignalingClient.connect(
+                        rendezvous.rendezvous,
+                        invite,
+                        localMember.id,
+                        localMember.displayName,
+                        nowEpochMs(),
+                    )
+            ) {
+                is CrewLanSignalConnectResult.Connected ->
+                    SignalingSelection(
+                        signaling.peer,
+                        CrewConnectivityPresentation.NEARBY,
+                    )
+                is CrewLanSignalConnectResult.Failed -> null
+            }
+        } finally {
+            runCatching { discovery.close() }
         }
     }
 

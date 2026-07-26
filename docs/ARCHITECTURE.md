@@ -676,6 +676,16 @@ host end.
 Playback remains a separate seam; authenticated media is composed explicitly
 beside the engine rather than hidden in transport discovery.
 
+After activation, `CrewJoinReconnectController` watches only the existing
+engine's canonical coordinator and attached-peer map. A missing coordinator peer
+starts one bounded retry loop; Android network changes only wake that loop.
+Each attempt reuses the LAN/hosted signaling selection and WebRTC runtime,
+requires the current coordinator's authenticated member identity, then attaches
+the replacement transport to the same `CrewSessionEngine` and requests a
+snapshot. The controller owns replacement connections and closes stale,
+wrong-member, expired, or superseded results. It never creates a new checkpoint,
+queue, player, or session engine.
+
 `ActiveCrewRuntime` is the application-wide LAN session owner above those two
 launchers. A generation-guarded state machine permits only one host, join, or
 end operation, retains the live session outside fragment/ViewModel lifetimes,

@@ -261,6 +261,9 @@ The active Crew surface contains:
 - Leave Crew
 
 Network diagnostics remain hidden unless degraded behavior requires explanation.
+A joined Crew remains on this active surface during bounded recovery and shows
+only a calm Reconnecting state. If the secure reconnect lease expires, say so
+plainly instead of spinning or exposing an address.
 
 ### Collaborative actions
 

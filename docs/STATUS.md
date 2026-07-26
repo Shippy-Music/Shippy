@@ -477,6 +477,14 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Relay Settings now performs one bounded cancellable `GET /healthz` against the
   configured HTTPS origin and reports Checking, Reachable, or Unreachable
   without resolving media or exposing session identity.
+- A joined Crew now keeps one single-owner reconnect loop beside the existing
+  session engine. After the current coordinator transport is actually detached,
+  it re-races LAN/hosted signaling, repeats the invitation- and
+  fingerprint-bound WebRTC authentication, attaches the replacement transport
+  to the same engine, and requests a canonical snapshot. Backoff is bounded,
+  Android default-network changes wake a pending retry, stale/wrong-coordinator
+  results are closed, and the UI shows reconnecting or expired without exposing
+  addresses or secrets.
 
 ## In Progress
 
@@ -484,9 +492,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Reconnection, transport migration, and TURN/relay fallback beyond hosted
-  signaling.
-- Transport migration after a reconnect.
+- TURN and full relay transport fallback beyond hosted signaling.
+- Renewable active-session reconnect credentials beyond the current short-lived
+  invitation lease.
 
 ## Not Started
 
@@ -512,6 +520,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - The private Crew source projection, protocol no-leak boundary, and relay
   health rendering are static-inspected with focused tests authored, but remain
   compile/device-unverified.
+- Joined-session reconnect/controller tests are authored and Graphify parses the
+  production wiring, but network callbacks, redial, authenticated replacement,
+  and snapshot recovery remain compile/multi-phone unverified.
 - Safe ungraceful election needs a strict majority. A direct two-member Crew
   pauses after coordinator loss until reconnection; the future relay/witness
   path must restore availability without weakening split-brain safety.
@@ -540,10 +551,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Wire live secure rejoin and transport migration through the existing
-   authenticated session engine.
-2. Finish the remaining player/audio/Android Auto surfaces.
-3. Add practical TURN and bounded relay media/larger-session behavior.
+1. Finish the remaining player/audio/Android Auto surfaces.
+2. Add renewable active-session reconnect credentials plus practical TURN.
+3. Implement bounded relay media/larger-session behavior.
 
 ## Verification Ledger
 

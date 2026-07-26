@@ -88,6 +88,7 @@ class ActiveCrewPresentation internal constructor(
     val crewState: CrewState,
     val inviteLink: String?,
     val connectivity: CrewConnectivityPresentation,
+    val reconnectState: CrewJoinReconnectState,
 ) {
     override fun toString() =
         "ActiveCrewPresentation(role=$role, sessionId=redacted, localMemberId=redacted, " +
@@ -126,6 +127,7 @@ constructor(
     private var generation = 0L
     private var ownedSession: OwnedSession? = null
     private var presentationJob: Job? = null
+    private var reconnectStateJob: Job? = null
     private var reactionJob: Job? = null
     private var peerMediaBlockedJob: Job? = null
 
@@ -318,6 +320,12 @@ constructor(
                     }
                 }
             }
+        val nextReconnectStateJob =
+            scope.launch(start = CoroutineStart.LAZY) {
+                session.reconnectState.collect {
+                    refreshPresentation(generation, session, session.state.value)
+                }
+            }
         val nextPeerMediaBlockedJob =
             scope.launch(start = CoroutineStart.LAZY) {
                 session.peerMediaBlocked.collect { blocked ->
@@ -337,13 +345,16 @@ constructor(
                 false
             } else {
                 presentationJob?.cancel()
+                reconnectStateJob?.cancel()
                 reactionJob?.cancel()
                 peerMediaBlockedJob?.cancel()
                 presentationJob = nextPresentationJob
+                reconnectStateJob = nextReconnectStateJob
                 reactionJob = nextReactionJob
                 peerMediaBlockedJob = nextPeerMediaBlockedJob
                 mutablePeerMediaBlocked.value = false
                 nextPresentationJob.start()
+                nextReconnectStateJob.start()
                 nextReactionJob.start()
                 nextPeerMediaBlockedJob.start()
                 mutableState.value =
@@ -353,6 +364,7 @@ constructor(
         }
         if (!activated) {
             nextPresentationJob.cancel()
+            nextReconnectStateJob.cancel()
             nextReactionJob.cancel()
             nextPeerMediaBlockedJob.cancel()
             session.endExplicitly()
@@ -399,9 +411,11 @@ constructor(
             synchronized(lock) {
                 if (generation == request.generation && ownedSession === request.session) {
                     presentationJob?.cancel()
+                    reconnectStateJob?.cancel()
                     reactionJob?.cancel()
                     peerMediaBlockedJob?.cancel()
                     presentationJob = null
+                    reconnectStateJob = null
                     reactionJob = null
                     peerMediaBlockedJob = null
                     mutablePeerMediaBlocked.value = false
@@ -426,6 +440,7 @@ constructor(
         val state: StateFlow<CrewState>
         val inviteLink: String?
         val connectivity: CrewConnectivityPresentation
+        val reconnectState: StateFlow<CrewJoinReconnectState>
         val reactions: SharedFlow<ActiveCrewReaction>
         val peerMediaBlocked: StateFlow<Boolean>
         val allowedReactions: List<String>
@@ -436,7 +451,15 @@ constructor(
         suspend fun sendReaction(emoji: String): CrewReactionSendResult
 
         fun presentation(crewState: CrewState) =
-            ActiveCrewPresentation(role, sessionId, localMemberId, crewState, inviteLink, connectivity)
+            ActiveCrewPresentation(
+                role,
+                sessionId,
+                localMemberId,
+                crewState,
+                inviteLink,
+                connectivity,
+                reconnectState.value,
+            )
 
         class Host(private val session: CrewLanHostSession) : OwnedSession {
             override val role = ActiveCrewMode.HOST
@@ -445,6 +468,8 @@ constructor(
             override val state = session.state
             override val inviteLink = session.inviteLink
             override val connectivity = session.connectivity
+            override val reconnectState =
+                MutableStateFlow<CrewJoinReconnectState>(CrewJoinReconnectState.Connected)
             override val reactions = session.reactions
             override val peerMediaBlocked = session.peerMediaBlocked
             override val allowedReactions = session.allowedReactions
@@ -462,6 +487,7 @@ constructor(
             override val state = session.state
             override val inviteLink: String? = null
             override val connectivity = session.connectivity
+            override val reconnectState = session.reconnectState
             override val reactions = session.reactions
             override val peerMediaBlocked = session.peerMediaBlocked
             override val allowedReactions = session.allowedReactions
