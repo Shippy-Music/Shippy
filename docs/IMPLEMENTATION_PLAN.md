@@ -113,6 +113,8 @@ through Auxio’s existing playback stack.
 - [x] Implement canonical track, provider candidate, playback candidate, and
       recording-version safeguards.
 - [x] Implement preferred/fallback provider settings.
+  - Settings exposes enabled providers, swap-safe preferred/fallback priority,
+    and user-triggered bounded metadata-only health refresh.
 - [x] Port or reimplement the first viable provider adapter from Bloomee evidence.
 - [x] Add additional viable provider adapters.
   - Anonymous YouTube Music search/direct-stream adapter is implemented with

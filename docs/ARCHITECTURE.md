@@ -321,6 +321,8 @@ Provider rules:
 - No reusable credentials embedded in source.
 - Stable metadata is persisted separately from expiring streams.
 - Kill/disable provider cleanly without breaking Local/Downloads.
+- Settings health checks call one bounded metadata-only `probeHealth` contract;
+  they never resolve or download playable media merely to render provider status.
 
 Bloomee donor order:
 

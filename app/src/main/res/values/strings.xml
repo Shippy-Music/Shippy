@@ -323,6 +323,17 @@
 
     <string name="set_root_title">Settings</string>
 
+    <string name="set_streaming_providers">Streaming providers</string>
+    <string name="set_provider_preferred">Preferred provider</string>
+    <string name="set_provider_fallback">Fallback provider</string>
+    <string name="set_provider_refresh">Refresh provider status</string>
+    <string name="set_provider_refreshing">Checking provider status…</string>
+    <string name="set_provider_no_fallback">No fallback provider is available</string>
+    <string name="set_provider_available">%1$s • Available</string>
+    <string name="set_provider_degraded">%1$s • Limited availability</string>
+    <string name="set_provider_unavailable">%1$s • Unavailable</string>
+    <string name="set_provider_checking">%1$s • Checking…</string>
+
     <string name="set_lastfm">Last.fm</string>
     <string name="set_key_lastfm">lastfm</string>
     <string name="set_lastfm_disconnected">Not connected</string>

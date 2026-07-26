@@ -49,6 +49,10 @@
 
     <string name="set_key_search_filters" translatable="false">auxio_search_filters</string>
     <string name="set_key_provider_priority" translatable="false">shippy_provider_priority</string>
+    <string name="set_key_provider_category" translatable="false">shippy_provider_category</string>
+    <string name="set_key_provider_preferred" translatable="false">shippy_provider_preferred</string>
+    <string name="set_key_provider_fallback" translatable="false">shippy_provider_fallback</string>
+    <string name="set_key_provider_refresh" translatable="false">shippy_provider_refresh</string>
     <string name="set_key_download_destination_uri" translatable="false">shippy_download_destination_uri</string>
     <string name="set_key_download_destination_name" translatable="false">shippy_download_destination_name</string>
     <string name="set_key_download_destination_auto_local_source_uri" translatable="false">shippy_download_destination_auto_local_source_uri</string>

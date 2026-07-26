@@ -49,6 +49,10 @@ class YouTubeMusicProvider @Inject constructor(private val transport: ProviderHt
 
     override fun health() = if (bootstrap == null) ProviderHealth.DEGRADED else ProviderHealth.AVAILABLE
 
+    /** Bootstrap is a small HTTPS metadata request and never requests a playable media URL. */
+    override suspend fun probeHealth(): ProviderHealth =
+        if (bootstrap() != null) ProviderHealth.AVAILABLE else ProviderHealth.UNAVAILABLE
+
     override suspend fun search(query: String, continuation: String?): ProviderResult<SearchPage> {
         if (query.isBlank()) return ProviderResult.Success(SearchPage(emptyList()))
         if (continuation != null) return ProviderResult.Failure(ProviderFailureKind.UNSUPPORTED, false, "YouTube Music continuation is not implemented")

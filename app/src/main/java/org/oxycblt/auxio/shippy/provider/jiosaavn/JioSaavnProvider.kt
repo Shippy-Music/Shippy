@@ -58,6 +58,18 @@ constructor(
 
     override fun health() = ProviderHealth.AVAILABLE
 
+    override suspend fun probeHealth(): ProviderHealth =
+        when (val result = search("music", null)) {
+            is ProviderResult.Success ->
+                if (result.value.tracks.isEmpty()) ProviderHealth.DEGRADED else ProviderHealth.AVAILABLE
+            is ProviderResult.Failure ->
+                when (result.kind) {
+                    ProviderFailureKind.NETWORK,
+                    ProviderFailureKind.RATE_LIMITED -> ProviderHealth.DEGRADED
+                    else -> ProviderHealth.UNAVAILABLE
+                }
+        }
+
     override suspend fun search(
         query: String,
         continuation: String?,

@@ -30,6 +30,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
+import androidx.preference.ListPreference
+import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
@@ -46,6 +48,8 @@ import org.oxycblt.auxio.shippy.download.DownloadDestinationReconciler
 import org.oxycblt.auxio.shippy.download.DownloadDestinationState
 import org.oxycblt.auxio.shippy.download.SafDownloadStorage
 import org.oxycblt.auxio.shippy.download.StorageResult
+import org.oxycblt.auxio.shippy.domain.ProviderId
+import org.oxycblt.auxio.shippy.provider.ProviderHealth
 import org.oxycblt.auxio.util.navigateSafe
 import org.oxycblt.auxio.util.showToast
 import timber.log.Timber as L
@@ -59,6 +63,7 @@ import timber.log.Timber as L
 class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private val musicModel: MusicViewModel by activityViewModels()
     private val lastFmModel: LastFmSettingsViewModel by viewModels()
+    private val providerSettingsModel: ProviderSettingsViewModel by viewModels()
     @Inject lateinit var downloadStorage: SafDownloadStorage
     @Inject lateinit var downloadDestinationReconciler: DownloadDestinationReconciler
     private val downloadDestinationLauncher =
@@ -85,6 +90,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
 
     override fun onResume() {
         super.onResume()
+        providerSettingsModel.refresh(force = false)
         lifecycleScope.launch { refreshDownloadDestination() }
     }
 
@@ -93,6 +99,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { lastFmModel.state.collect(::renderLastFm) }
+                launch { providerSettingsModel.state.collect(::renderProviderSettings) }
                 launch {
                     lastFmModel.events.collect { event ->
                         when (event) {
@@ -146,6 +153,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                     else -> lastFmModel.onPreferenceClicked()
                 }
             }
+            getString(R.string.set_key_provider_refresh) -> providerSettingsModel.refresh()
             getString(R.string.set_key_reindex) -> musicModel.refresh()
             getString(R.string.set_key_rescan) -> musicModel.rescan()
             else -> return super.onPreferenceTreeClick(preference)
@@ -192,6 +200,83 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                     getString(R.string.set_lastfm_reauthorization_required)
                 is LastFmSettingsState.Error -> getString(state.error.summaryRes)
             }
+    }
+
+    private fun renderProviderSettings(state: ProviderSettingsState) {
+        val category =
+            findPreference<PreferenceCategory>(getString(R.string.set_key_provider_category))
+                ?: return
+        val preferred =
+            providerPreference(
+                key = getString(R.string.set_key_provider_preferred),
+                title = getString(R.string.set_provider_preferred),
+            ) {
+                providerSettingsModel.setPreferred(it)
+            }
+        val fallback =
+            providerPreference(
+                key = getString(R.string.set_key_provider_fallback),
+                title = getString(R.string.set_provider_fallback),
+            ) {
+                providerSettingsModel.setFallback(it)
+            }
+        val refresh =
+            findPreference<Preference>(getString(R.string.set_key_provider_refresh))
+                ?: Preference(requireContext()).also {
+                    it.key = getString(R.string.set_key_provider_refresh)
+                    it.title = getString(R.string.set_provider_refresh)
+                    category.addPreference(it)
+                }
+        val entries = state.providers.map { it.displayName }.toTypedArray()
+        val values = state.providers.map { it.id.value }.toTypedArray()
+        preferred.entries = entries
+        preferred.entryValues = values
+        preferred.value = state.preferred?.value
+        preferred.isEnabled = state.preferred != null
+        preferred.summary = state.preferred?.let { providerSummary(state, it) }
+
+        fallback.entries = entries
+        fallback.entryValues = values
+        fallback.value = state.fallback?.value
+        fallback.isEnabled = state.fallback != null
+        fallback.summary =
+            state.fallback?.let { providerSummary(state, it) }
+                ?: getString(R.string.set_provider_no_fallback)
+        refresh.isEnabled = !state.refreshing && state.providers.isNotEmpty()
+        refresh.summary = if (state.refreshing) getString(R.string.set_provider_refreshing) else null
+    }
+
+    private fun providerPreference(
+        key: String,
+        title: String,
+        onChange: (ProviderId) -> Unit,
+    ): ListPreference =
+        findPreference<ListPreference>(key)
+            ?: ListPreference(requireContext()).also { preference ->
+                preference.key = key
+                preference.title = title
+                preference.setOnPreferenceChangeListener { _, value ->
+                    (value as? String)?.let(::ProviderId)?.let(onChange)
+                    false
+                }
+                findPreference<PreferenceCategory>(getString(R.string.set_key_provider_category))
+                    ?.addPreference(preference)
+            }
+
+    private fun providerSummary(state: ProviderSettingsState, id: ProviderId): String {
+        val option = state.providers.firstOrNull { it.id == id } ?: return id.value
+        val format =
+            if (option.checking) {
+                R.string.set_provider_checking
+            } else {
+                when (option.health) {
+                    ProviderHealth.AVAILABLE -> R.string.set_provider_available
+                    ProviderHealth.DEGRADED -> R.string.set_provider_degraded
+                    ProviderHealth.UNAVAILABLE,
+                    ProviderHealth.DISABLED -> R.string.set_provider_unavailable
+                }
+            }
+        return getString(format, option.displayName)
     }
 
     private fun showLastFmCredentialsDialog() {

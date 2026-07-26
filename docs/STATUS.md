@@ -412,6 +412,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   durable intent using current provider settings, never persists expiring
   streams or temporary/download projections, and falls back to Auxio's legacy
   local-only checkpoint if canonical restore is unavailable or fails.
+- Settings now exposes the actual enabled provider set as preferred and fallback
+  choices, persists swap-safe priority, and runs explicit bounded metadata-only
+  JioSaavn/YouTube Music health probes with scoped Available, Limited, and
+  Unavailable presentation.
 
 ## In Progress
 
@@ -419,7 +423,6 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   optional Musixmatch broker adapter.
 - Completing provider/player action surfaces beyond the first Search-to-play
   vertical slice.
-- Adding live provider health verification.
 - Hosted signaling and remaining transport lifecycle.
 - Transport migration after a reconnect.
 - Extending the first exact-Local rolling window to adaptive provider-aware
@@ -455,6 +458,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   path must restore availability without weakening split-brain safety.
 - Room/Hilt generation, JioSaavn/YouTube Music JSON parsing, Last.fm lifecycle,
   and provider playback are compile/device-unverified until the owner build.
+- Dynamic provider preferences, Hilt ViewModel generation, and live health
+  probe rendering are XML/static-checked only and remain compile/device-unverified.
 - WorkManager/Hilt worker generation, SAF storage, and foreground download
   execution are code/static-checked but compile/device-unverified.
 - The selected download directory enters Auxio's SAF source query. Users already

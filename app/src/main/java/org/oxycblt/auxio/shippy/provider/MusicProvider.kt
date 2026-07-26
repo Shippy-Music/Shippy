@@ -103,6 +103,9 @@ interface MusicProvider {
 
     fun health(): ProviderHealth
 
+    /** Performs one bounded, metadata-only availability check. */
+    suspend fun probeHealth(): ProviderHealth = health()
+
     suspend fun search(query: String, continuation: String? = null): ProviderResult<SearchPage>
 
     suspend fun resolve(

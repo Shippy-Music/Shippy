@@ -31,6 +31,10 @@
         app:summary="@string/set_lastfm_disconnected"
         app:title="@string/set_lastfm" />
 
+    <PreferenceCategory
+        app:key="@string/set_key_provider_category"
+        app:title="@string/set_streaming_providers" />
+
     <PreferenceCategory app:title="@string/lbl_crew">
 
         <SwitchPreferenceCompat
