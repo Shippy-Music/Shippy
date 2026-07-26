@@ -21,6 +21,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.settings.Settings
+import org.oxycblt.auxio.shippy.crew.invite.CrewRelayLocator
 
 /** User-controlled Crew media sharing preferences. */
 interface CrewSettings : Settings<CrewSettings.Listener> {
@@ -28,9 +29,55 @@ interface CrewSettings : Settings<CrewSettings.Listener> {
     val pushPullEnabled: Boolean
     fun setPushPullEnabled(enabled: Boolean)
 
+    /**
+     * Optional self-hosted relay endpoint. This is an HTTPS locator; the relay adapter changes
+     * only its scheme when opening the WebSocket. Invalid persisted values are intentionally
+     * unavailable to callers.
+     */
+    val relayLocator: CrewRelayLocator?
+
+    /** Validates and persists an endpoint, or clears it when [input] is blank. */
+    fun setRelayLocator(input: String): CrewRelayLocatorSettingResult
+
     interface Listener {
         /** Called when [pushPullEnabled] changes after this listener is registered. */
         fun onPushPullEnabledChanged(enabled: Boolean) {}
+
+        /** Called when the configured hosted relay changes after this listener is registered. */
+        fun onRelayLocatorChanged(locator: CrewRelayLocator?) {}
+    }
+}
+
+/** Typed result used by Settings UI so raw preference storage cannot bypass relay validation. */
+sealed interface CrewRelayLocatorSettingResult {
+    data class Configured(val locator: CrewRelayLocator) : CrewRelayLocatorSettingResult
+
+    data object Cleared : CrewRelayLocatorSettingResult
+
+    data object Invalid : CrewRelayLocatorSettingResult
+}
+
+/** Pure parsing and display helpers for the self-hosted relay setting. */
+object CrewRelayLocatorSettingInput {
+    fun parse(input: String): CrewRelayLocatorSettingResult {
+        val value = input.trim()
+        if (value.isEmpty()) return CrewRelayLocatorSettingResult.Cleared
+        return try {
+            CrewRelayLocatorSettingResult.Configured(CrewRelayLocator(value))
+        } catch (_: IllegalArgumentException) {
+            CrewRelayLocatorSettingResult.Invalid
+        }
+    }
+
+    /** Safe concise text for Settings; the locator contract excludes credentials/query/fragment. */
+    fun summary(locator: CrewRelayLocator?): String? {
+        locator ?: return null
+        val endpoint = java.net.URI(locator.value)
+        return buildString {
+            append(endpoint.host)
+            if (endpoint.port != -1) append(':').append(endpoint.port)
+            if (endpoint.rawPath.isNotEmpty() && endpoint.rawPath != "/") append(endpoint.rawPath)
+        }
     }
 }
 
@@ -46,9 +93,37 @@ constructor(
         sharedPreferences.edit { putBoolean(getString(R.string.set_key_crew_push_pull_enabled), enabled) }
     }
 
+    override val relayLocator: CrewRelayLocator?
+        get() =
+            runCatching {
+                sharedPreferences.getString(getString(R.string.set_key_crew_relay_locator), null)
+            }
+                .getOrNull()
+                ?.let(CrewRelayLocatorSettingInput::parse)
+                ?.let { result ->
+                    (result as? CrewRelayLocatorSettingResult.Configured)?.locator
+                }
+
+    override fun setRelayLocator(input: String): CrewRelayLocatorSettingResult {
+        val result = CrewRelayLocatorSettingInput.parse(input)
+        when (result) {
+            is CrewRelayLocatorSettingResult.Configured ->
+                sharedPreferences.edit {
+                    putString(getString(R.string.set_key_crew_relay_locator), result.locator.value)
+                }
+            CrewRelayLocatorSettingResult.Cleared ->
+                sharedPreferences.edit { remove(getString(R.string.set_key_crew_relay_locator)) }
+            CrewRelayLocatorSettingResult.Invalid -> Unit
+        }
+        return result
+    }
+
     override fun onSettingChanged(key: String, listener: CrewSettings.Listener) {
         if (key == getString(R.string.set_key_crew_push_pull_enabled)) {
             listener.onPushPullEnabledChanged(pushPullEnabled)
+        }
+        if (key == getString(R.string.set_key_crew_relay_locator)) {
+            listener.onRelayLocatorChanged(relayLocator)
         }
     }
 }

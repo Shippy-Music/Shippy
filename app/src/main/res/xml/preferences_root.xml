@@ -43,6 +43,11 @@
             app:summary="@string/set_crew_push_pull_enabled_desc"
             app:title="@string/set_crew_push_pull_enabled" />
 
+        <Preference
+            app:key="@string/set_key_crew_relay_locator"
+            app:summary="@string/set_crew_relay_not_configured"
+            app:title="@string/set_crew_relay" />
+
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/set_library">

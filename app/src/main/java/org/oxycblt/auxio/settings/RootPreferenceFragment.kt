@@ -44,6 +44,9 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
+import org.oxycblt.auxio.shippy.crew.settings.CrewRelayLocatorSettingInput
+import org.oxycblt.auxio.shippy.crew.settings.CrewRelayLocatorSettingResult
+import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
 import org.oxycblt.auxio.shippy.download.DownloadDestinationReconciler
 import org.oxycblt.auxio.shippy.download.DownloadDestinationState
 import org.oxycblt.auxio.shippy.download.SafDownloadStorage
@@ -66,6 +69,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private val providerSettingsModel: ProviderSettingsViewModel by viewModels()
     @Inject lateinit var downloadStorage: SafDownloadStorage
     @Inject lateinit var downloadDestinationReconciler: DownloadDestinationReconciler
+    @Inject lateinit var crewSettings: CrewSettings
     private val downloadDestinationLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
             if (uri != null) {
@@ -92,6 +96,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         super.onResume()
         providerSettingsModel.refresh(force = false)
         lifecycleScope.launch { refreshDownloadDestination() }
+        updateCrewRelaySummary()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -153,6 +158,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                     else -> lastFmModel.onPreferenceClicked()
                 }
             }
+            getString(R.string.set_key_crew_relay_locator) -> showCrewRelayDialog()
             getString(R.string.set_key_provider_refresh) -> providerSettingsModel.refresh()
             getString(R.string.set_key_reindex) -> musicModel.refresh()
             getString(R.string.set_key_rescan) -> musicModel.rescan()
@@ -184,6 +190,14 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private suspend fun refreshDownloadDestination() {
         downloadDestinationReconciler.reconcile()
         updateDownloadDestinationSummary()
+    }
+
+    private fun updateCrewRelaySummary() {
+        val preference =
+            findPreference<Preference>(getString(R.string.set_key_crew_relay_locator)) ?: return
+        preference.summary =
+            CrewRelayLocatorSettingInput.summary(crewSettings.relayLocator)
+                ?: getString(R.string.set_crew_relay_not_configured)
     }
 
     private fun renderLastFm(state: LastFmSettingsState) {
@@ -307,6 +321,44 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 }
                 dialog.dismiss()
                 lastFmModel.beginAuthorization(apiKey, apiSecret)
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showCrewRelayDialog() {
+        val content = layoutInflater.inflate(R.layout.dialog_crew_relay, null)
+        val endpointContainer = content.findViewById<TextInputLayout>(R.id.crew_relay_endpoint_container)
+        val endpoint = content.findViewById<TextInputEditText>(R.id.crew_relay_endpoint)
+        endpoint.setText(crewSettings.relayLocator?.value.orEmpty())
+        endpoint.setSelection(endpoint.length())
+        val dialog =
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.set_crew_relay)
+                .setMessage(R.string.set_crew_relay_message)
+                .setView(content)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setNeutralButton(R.string.set_crew_relay_clear, null)
+                .setPositiveButton(R.string.set_crew_relay_save, null)
+                .create()
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                crewSettings.setRelayLocator("")
+                updateCrewRelaySummary()
+                dialog.dismiss()
+            }
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                endpointContainer.error = null
+                when (crewSettings.setRelayLocator(endpoint.text?.toString().orEmpty())) {
+                    is CrewRelayLocatorSettingResult.Configured,
+                    CrewRelayLocatorSettingResult.Cleared -> {
+                        updateCrewRelaySummary()
+                        dialog.dismiss()
+                    }
+                    CrewRelayLocatorSettingResult.Invalid -> {
+                        endpointContainer.error = getString(R.string.set_crew_relay_invalid)
+                    }
+                }
             }
         }
         dialog.show()
