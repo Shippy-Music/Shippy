@@ -715,4 +715,12 @@
         <item quantity="one">%d second</item>
         <item quantity="other">%d seconds</item>
     </plurals>
+    <string name="lbl_lastfm_from_you">From your Last.fm</string>
+    <string name="fmt_lastfm_play_count">%1$s · %2$d scrobbles</string>
+    <string name="lbl_lastfm_loading">Loading from Last.fm…</string>
+    <string name="lbl_lastfm_unavailable">Last.fm is unavailable right now.</string>
+    <string name="lbl_lastfm_cached">Showing saved Last.fm activity.</string>
+    <string name="lbl_lastfm_top_tracks">Your top tracks</string>
+    <string name="lbl_recently_played">Recently played</string>
+    <string name="lbl_recent_downloads">Recent downloads</string>
 </resources>

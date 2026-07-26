@@ -77,6 +77,7 @@ import timber.log.Timber as L
  */
 @AndroidEntryPoint
 class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
+    companion object { const val ARG_INITIAL_QUERY = "initialQuery" }
     private val searchModel: SearchViewModel by viewModels()
     private val detailModel: DetailViewModel by activityViewModels()
     override val listModel: ListViewModel by activityViewModels()
@@ -150,6 +151,11 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
                 L.d("Keyboard is not shown yet")
                 showKeyboard(this)
                 launchedKeyboard = true
+            }
+            arguments?.getString(ARG_INITIAL_QUERY)?.takeIf { it.isNotBlank() }?.let { query ->
+                setText(query)
+                setSelection(query.length)
+                arguments?.remove(ARG_INITIAL_QUERY)
             }
         }
 

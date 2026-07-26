@@ -23,6 +23,8 @@ data class LastFmCredentials(
     private companion object {
         const val MAX_CREDENTIAL_FIELD_BYTES = 1024
     }
+
+    override fun toString(): String = "LastFmCredentials(username=$username, apiKey=redacted, apiSecret=redacted, sessionKey=redacted)"
 }
 interface LastFmCredentialRepository { suspend fun load(): LastFmCredentials?; suspend fun save(credentials: LastFmCredentials); suspend fun clear() }
 

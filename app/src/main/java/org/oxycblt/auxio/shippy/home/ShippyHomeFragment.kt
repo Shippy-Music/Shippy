@@ -19,6 +19,7 @@ import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentShippyHomeBinding
@@ -42,6 +43,7 @@ import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
 import org.oxycblt.auxio.shippy.library.systemRows
 import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
 import org.oxycblt.auxio.shippy.provider.ui.ProviderEntityDetailFragment
+import org.oxycblt.auxio.search.SearchFragment
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 
@@ -51,6 +53,19 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val crewModel: CrewViewModel by viewModels()
     private val collectionsModel: LibraryCollectionsViewModel by viewModels()
+    private val continuationModel: HomeContinuationViewModel by viewModels()
+    private val lastFmModel: LastFmHomeViewModel by viewModels()
+    private val lastFmTrackAdapter = HomeTrackAdapter { row ->
+        openSearch("${row.subtitle} ${row.title}")
+    }
+    private val recentlyPlayedAdapter = HomeTrackAdapter { row ->
+        openSearch("${row.subtitle} ${row.title}")
+    }
+    private val recentDownloadsAdapter = HomeTrackAdapter { row ->
+        continuationModel.state.value.recentDownloads
+            .firstOrNull { it.job.id.value == row.key }
+            ?.let(continuationModel::playDownload)
+    }
     private val systemCollectionAdapter =
         LibrarySystemCollectionAdapter { row ->
             if (row.kind == SystemCollectionKind.LOCAL) {
@@ -83,10 +98,15 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
             adapter = libraryShortcutsAdapter
             isNestedScrollingEnabled = false
         }
+        binding.homeRecentlyPlayedTracks.bindHomeTracks(recentlyPlayedAdapter)
+        binding.homeLastfmTracks.bindHomeTracks(lastFmTrackAdapter)
+        binding.homeRecentDownloadsTracks.bindHomeTracks(recentDownloadsAdapter)
 
         collectImmediately(playbackModel.displayItem, ::updateCurrentItem)
         collectImmediately(musicModel.statistics, ::updateLibrarySummary)
         collectImmediately(crewModel.state, ::updateCrew)
+        collectImmediately(continuationModel.state, ::updateContinuation)
+        collectImmediately(lastFmModel.state, ::updateLastFm)
         collectImmediately(
             collectionsModel.state,
             musicModel.statistics,
@@ -97,6 +117,9 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
 
     override fun onDestroyBinding(binding: FragmentShippyHomeBinding) {
         binding.homeLibraryShortcuts.adapter = null
+        binding.homeRecentlyPlayedTracks.adapter = null
+        binding.homeLastfmTracks.adapter = null
+        binding.homeRecentDownloadsTracks.adapter = null
         super.onDestroyBinding(binding)
     }
 
@@ -128,6 +151,87 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
                 statistics?.albums ?: 0,
                 statistics?.artists ?: 0,
             )
+    }
+
+    private fun updateLastFm(state: LastFmHomeState) {
+        val binding = requireBinding()
+        binding.homeLastfm.isVisible = state !is LastFmHomeState.Hidden
+        when (state) {
+            LastFmHomeState.Hidden -> Unit
+            LastFmHomeState.Loading -> {
+                binding.homeLastfmSummary.text = ""
+                binding.homeLastfmStatus.setText(R.string.lbl_lastfm_loading)
+                lastFmTrackAdapter.submitList(emptyList())
+            }
+            LastFmHomeState.Error -> {
+                binding.homeLastfmSummary.text = ""
+                binding.homeLastfmStatus.setText(R.string.lbl_lastfm_unavailable)
+                lastFmTrackAdapter.submitList(emptyList())
+            }
+            is LastFmHomeState.Content -> {
+                binding.homeLastfmSummary.text =
+                    getString(
+                        R.string.fmt_lastfm_play_count,
+                        state.overview.username,
+                        state.overview.playCount,
+                    )
+                binding.homeLastfmStatus.setText(
+                    if (state.stale) R.string.lbl_lastfm_cached
+                    else R.string.lbl_lastfm_top_tracks
+                )
+                lastFmTrackAdapter.submitList(
+                    state.overview.topTracks.map { track ->
+                        HomeTrackRow(
+                            key = "lastfm:${track.artist}:${track.title}",
+                            title = track.title,
+                            subtitle = track.artist,
+                            artwork = track.artworkUrl,
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    private fun updateContinuation(state: HomeContinuationState) {
+        val binding = requireBinding()
+        binding.homeRecentlyPlayed.isVisible = state.recentlyPlayed.isNotEmpty()
+        binding.homeRecentDownloads.isVisible = state.recentDownloads.isNotEmpty()
+        recentlyPlayedAdapter.submitList(
+            state.recentlyPlayed.map { entry ->
+                HomeTrackRow(
+                    key = entry.trackId,
+                    title = entry.title,
+                    subtitle = entry.artists.joinToString(", "),
+                    artwork = entry.artwork,
+                )
+            }
+        )
+        recentDownloadsAdapter.submitList(
+            state.recentDownloads.map { download ->
+                HomeTrackRow(
+                    key = download.job.id.value,
+                    title = download.track.title,
+                    subtitle = download.track.artists.joinToString(", "),
+                    artwork = download.track.artwork,
+                )
+            }
+        )
+    }
+
+    private fun RecyclerView.bindHomeTracks(homeAdapter: HomeTrackAdapter) {
+        layoutManager = LinearLayoutManager(requireContext())
+        adapter = homeAdapter
+        isNestedScrollingEnabled = false
+    }
+
+    private fun openSearch(query: String) {
+        val normalized = query.trim().replace(Regex("\\s+"), " ")
+        if (normalized.isEmpty()) return
+        findNavController().navigate(
+            R.id.search_fragment,
+            bundleOf(SearchFragment.ARG_INITIAL_QUERY to normalized),
+        )
     }
 
     private fun updateCrew(state: ActiveCrewRuntimeState) {

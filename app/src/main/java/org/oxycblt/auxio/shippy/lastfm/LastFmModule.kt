@@ -9,4 +9,5 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 abstract class LastFmModule {
     @Binds abstract fun credentials(repository: AndroidKeystoreLastFmCredentialRepository): LastFmCredentialRepository
+    @Binds abstract fun overviewCache(cache: AtomicLastFmOverviewCache): LastFmOverviewCache
 }
