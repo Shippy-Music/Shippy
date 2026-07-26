@@ -13,16 +13,20 @@ package org.oxycblt.auxio.home.list
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.annotation.StringRes
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemHeaderBinding
 import org.oxycblt.auxio.databinding.ItemLibraryCollectionBinding
+import org.oxycblt.auxio.databinding.ItemSongBinding
 import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 import org.oxycblt.auxio.shippy.library.LibrarySystemCollectionRow
+import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
+import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 
 /** A compact Auxio-styled section title that disappears when its projection is empty. */
 internal class LibrarySectionHeaderAdapter(@StringRes private val titleRes: Int) :
@@ -179,6 +183,76 @@ internal class LibraryOnboardingAdapter(
                 setOnClickListener { onChooseFolders() }
             }
         }
+    }
+}
+
+/** Artwork-led provider albums, artists, and playlists saved into Shippy's unified Library. */
+internal class SavedProviderEntityAdapter(
+    private val onClick: (SavedProviderEntity) -> Unit,
+) : ListAdapter<SavedProviderEntity, SavedProviderEntityAdapter.ViewHolder>(DIFF) {
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+        ViewHolder(
+            ItemSongBinding.inflate(
+                LayoutInflater.from(parent.context),
+                parent,
+                false,
+            )
+        )
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int) =
+        holder.bind(getItem(position), onClick)
+
+    internal class ViewHolder(
+        private val binding: ItemSongBinding
+    ) : RecyclerView.ViewHolder(binding.root) {
+        fun bind(saved: SavedProviderEntity, onClick: (SavedProviderEntity) -> Unit) {
+            val entity = saved.entity
+            val type =
+                binding.root.context.getString(
+                    when (entity.type) {
+                        ProviderEntityType.ALBUM -> R.string.lbl_album
+                        ProviderEntityType.ARTIST -> R.string.lbl_artist
+                        ProviderEntityType.PLAYLIST -> R.string.lbl_playlist
+                    }
+                )
+            binding.songName.text = entity.title
+            binding.songInfo.text =
+                buildList {
+                        if (saved.isPinned) add(binding.root.context.getString(R.string.lbl_pinned))
+                        add(type)
+                        entity.subtitle?.takeIf(String::isNotBlank)?.let(::add)
+                    }
+                    .joinToString(" • ")
+            binding.songAlbumCover.bindArtwork(entity.artwork, entity.title)
+            binding.songMenu.isVisible = false
+            binding.root.apply {
+                contentDescription =
+                    context.getString(
+                        R.string.desc_library_collection,
+                        entity.title,
+                        binding.songInfo.text,
+                    )
+                setOnClickListener { onClick(saved) }
+            }
+        }
+    }
+
+    private companion object {
+        val DIFF =
+            object : DiffUtil.ItemCallback<SavedProviderEntity>() {
+                override fun areItemsTheSame(
+                    oldItem: SavedProviderEntity,
+                    newItem: SavedProviderEntity,
+                ) =
+                    oldItem.entity.providerId == newItem.entity.providerId &&
+                        oldItem.entity.type == newItem.entity.type &&
+                        oldItem.entity.sourceItemId == newItem.entity.sourceItemId
+
+                override fun areContentsTheSame(
+                    oldItem: SavedProviderEntity,
+                    newItem: SavedProviderEntity,
+                ) = oldItem == newItem
+            }
     }
 }
 

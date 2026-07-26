@@ -31,6 +31,7 @@ import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Album
@@ -173,6 +174,10 @@ constructor(
     val openShippyCollection: Event<LibraryCollectionId>
         get() = _openShippyCollection
 
+    private val _openProviderEntity = MutableEvent<ProviderEntity>()
+    val openProviderEntity: Event<ProviderEntity>
+        get() = _openProviderEntity
+
     init {
         homeGenerator.attach()
     }
@@ -287,6 +292,10 @@ constructor(
 
     fun openShippyCollection(collectionId: LibraryCollectionId) {
         _openShippyCollection.put(collectionId)
+    }
+
+    fun openProviderEntity(entity: ProviderEntity) {
+        _openProviderEntity.put(entity)
     }
 
     fun showSettings() {

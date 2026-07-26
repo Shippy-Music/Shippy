@@ -214,8 +214,10 @@
     <string name="lbl_downloads">Downloads</string>
     <string name="lbl_pin">Pin</string>
     <string name="lbl_unpin">Unpin</string>
+    <string name="lbl_pinned">Pinned</string>
     <string name="lbl_local">Local</string>
     <string name="lbl_shippy_playlists">Playlists</string>
+    <string name="lbl_saved_from_providers">Saved albums, artists, and playlists</string>
     <string name="lbl_on_this_device">On this device</string>
 
     <string name="lbl_selection">Selection</string>
@@ -654,6 +656,8 @@
     <string name="lbl_remove_download">Remove download</string>
     <string name="lng_remove_download_confirmation">Remove this downloaded copy? The track stays in your playlists and can still stream.</string>
     <string name="desc_open_queue">Open queue</string>
+    <string name="desc_save_provider_entity">Save to Library</string>
+    <string name="desc_remove_provider_entity">Remove from Library</string>
     <string name="desc_current_lyric">Current lyric: %s</string>
 
     <plurals name="fmt_song_count">

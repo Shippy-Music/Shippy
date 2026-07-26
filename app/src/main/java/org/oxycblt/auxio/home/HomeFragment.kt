@@ -56,6 +56,7 @@ import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.library.usesAuxioLocalSurface
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
@@ -168,6 +169,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         collect(homeModel.recreateTabs.flow, ::handleRecreate)
         collect(homeModel.chooseMusicLocations.flow, ::handleChooseFolders)
         collect(homeModel.openShippyCollection.flow, ::handleOpenShippyCollection)
+        collect(homeModel.openProviderEntity.flow, ::handleOpenProviderEntity)
         collectImmediately(homeModel.currentTabType, ::updateCurrentTab)
         collect(detailModel.toShow.flow, ::handleShow)
         collect(listModel.menu.flow, ::handleMenu)
@@ -307,6 +309,23 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             )
         }
         homeModel.openShippyCollection.consume()
+    }
+
+    private fun handleOpenProviderEntity(entity: ProviderEntity?) {
+        if (entity == null) return
+        findNavController()
+            .navigateSafe(
+                HomeFragmentDirections.openProviderEntity(
+                    providerId = entity.providerId.value,
+                    sourceItemId = entity.sourceItemId,
+                    entityType = entity.type.name,
+                    title = entity.title,
+                    subtitle = entity.subtitle,
+                    artwork = entity.artwork,
+                    originalUrl = entity.originalUrl,
+                )
+            )
+        homeModel.openProviderEntity.consume()
     }
 
     private fun updateIndexerState(state: IndexingState?) {

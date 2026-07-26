@@ -136,6 +136,8 @@ through Auxio’s existing playback stack.
   - [x] Reuse canonical download state/actions on provider detail rows and route
         whole-collection Play next/Add to queue through the single resolved
         playback authority.
+  - [x] Persist exact provider albums, artists, and playlists with direct
+        save/remove, pinning, Library projection, and provider-detail reopening.
 
 **Validation:**
 

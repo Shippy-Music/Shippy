@@ -24,6 +24,7 @@ import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.library.CollectionRowDownloadPresentation
 import org.oxycblt.auxio.shippy.library.ShippyCollectionTrackRow
 import org.oxycblt.auxio.shippy.library.ui.ShippyCollectionTrackAdapter
+import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 import org.oxycblt.auxio.ui.ViewBindingFragment
@@ -72,10 +73,15 @@ class ProviderEntityDetailFragment :
                     model.addToQueue()
                     true
                 }
+                R.id.action_shippy_pin -> {
+                    model.togglePinned()
+                    true
+                }
                 else -> false
             }
         }
         binding.providerEntityTracks.adapter = tracksAdapter
+        binding.providerEntitySave.setOnClickListener { model.toggleSaved() }
         binding.providerEntityPlay.setOnClickListener { model.play(0, shuffled = false) }
         binding.providerEntityShuffle.setOnClickListener { model.play(0, shuffled = true) }
         binding.providerEntityRetry.setOnClickListener { model.retry() }
@@ -100,6 +106,7 @@ class ProviderEntityDetailFragment :
                 model.queueActionCompleted.consume()
             }
         }
+        collectImmediately(model.savedEntity, ::renderSavedEntity)
         model.load(entity)
     }
 
@@ -169,6 +176,25 @@ class ProviderEntityDetailFragment :
                 .show()
         } else {
             model.performDownloadAction(row)
+        }
+    }
+
+    private fun renderSavedEntity(saved: SavedProviderEntity?) {
+        val binding = requireBinding()
+        binding.providerEntitySave.setIconResource(
+            if (saved == null) R.drawable.ic_add_24 else R.drawable.ic_check_24
+        )
+        binding.providerEntitySave.contentDescription =
+            getString(
+                if (saved == null) {
+                    R.string.desc_save_provider_entity
+                } else {
+                    R.string.desc_remove_provider_entity
+                }
+            )
+        binding.providerEntityToolbar.menu.findItem(R.id.action_shippy_pin)?.apply {
+            isVisible = saved != null
+            title = getString(if (saved?.isPinned == true) R.string.lbl_unpin else R.string.lbl_pin)
         }
     }
 

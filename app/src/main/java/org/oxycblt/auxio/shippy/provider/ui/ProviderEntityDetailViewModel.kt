@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
@@ -29,6 +30,8 @@ import org.oxycblt.auxio.shippy.library.CollectionRowDownloadPresentation
 import org.oxycblt.auxio.shippy.library.ShippyCollectionTrackRow
 import org.oxycblt.auxio.shippy.library.collectionRowDownloadPresentation
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
+import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
+import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntityRepository
 import org.oxycblt.auxio.shippy.playback.PlaybackStartResult
 import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
@@ -75,6 +78,7 @@ constructor(
     private val playback: ShippyPlaybackController,
     private val downloads: DownloadJobRepository,
     private val downloadCoordinator: DownloadWorkCoordinator,
+    private val savedProviderEntities: SavedProviderEntityRepository,
 ) : ViewModel() {
     private val sourceState = MutableStateFlow<ProviderEntityDetailState?>(null)
     val state: StateFlow<ProviderEntityDetailState?> =
@@ -105,13 +109,22 @@ constructor(
     private val _queueActionCompleted = MutableEvent<ProviderCollectionQueueAction>()
     val queueActionCompleted: Event<ProviderCollectionQueueAction> = _queueActionCompleted
 
+    private val _savedEntity = MutableStateFlow<SavedProviderEntity?>(null)
+    val savedEntity: StateFlow<SavedProviderEntity?> = _savedEntity
+
     private var loadJob: Job? = null
     private var playbackJob: Job? = null
+    private var savedObservationJob: Job? = null
     private var requestedEntity: ProviderEntity? = null
 
     fun load(entity: ProviderEntity, force: Boolean = false) {
         if (!force && requestedEntity == entity && sourceState.value != null) return
         requestedEntity = entity
+        savedObservationJob?.cancel()
+        savedObservationJob =
+            viewModelScope.launch {
+                savedProviderEntities.observe(entity).collect { saved -> _savedEntity.value = saved }
+            }
         loadJob?.cancel()
         sourceState.value = ProviderEntityDetailState.Loading(entity)
         loadJob =
@@ -139,7 +152,9 @@ constructor(
                 sourceState.value =
                     when (result) {
                         is ProviderResult.Success ->
-                            ProviderEntityDetailState.Content(result.value)
+                            ProviderEntityDetailState.Content(result.value).also {
+                                savedProviderEntities.refreshIfSaved(result.value.entity)
+                            }
                         is ProviderResult.Failure ->
                             ProviderEntityDetailState.Error(entity, result.retryable)
                     }
@@ -233,6 +248,27 @@ constructor(
 
     fun addToQueue() {
         mutateQueue(ProviderCollectionQueueAction.ADD_TO_QUEUE)
+    }
+
+    fun toggleSaved() {
+        val entity =
+            (sourceState.value as? ProviderEntityDetailState.Content)?.page?.entity
+                ?: requestedEntity
+                ?: return
+        viewModelScope.launch {
+            if (_savedEntity.value == null) {
+                savedProviderEntities.save(entity)
+            } else {
+                savedProviderEntities.remove(entity)
+            }
+        }
+    }
+
+    fun togglePinned() {
+        val saved = _savedEntity.value ?: return
+        viewModelScope.launch {
+            savedProviderEntities.setPinned(saved.entity, !saved.isPinned)
+        }
     }
 
     private fun mutateQueue(action: ProviderCollectionQueueAction) {

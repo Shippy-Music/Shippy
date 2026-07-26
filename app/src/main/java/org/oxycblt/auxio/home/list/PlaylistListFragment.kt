@@ -75,6 +75,10 @@ class PlaylistListFragment :
         }
     private val onboardingAdapter =
         LibraryOnboardingAdapter { homeModel.startChooseMusicLocations() }
+    private val savedProvidersHeaderAdapter =
+        LibrarySectionHeaderAdapter(R.string.lbl_saved_from_providers)
+    private val savedProviderAdapter =
+        SavedProviderEntityAdapter { saved -> homeModel.openProviderEntity(saved.entity) }
     private val shippyPlaylistsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_shippy_playlists)
     private val shippyPlaylistAdapter =
         ShippyPlaylistProjectionAdapter { playlist -> homeModel.openShippyCollection(playlist.id) }
@@ -85,6 +89,8 @@ class PlaylistListFragment :
             collectionsHeaderAdapter,
             systemCollectionAdapter,
             onboardingAdapter,
+            savedProvidersHeaderAdapter,
+            savedProviderAdapter,
             shippyPlaylistsHeaderAdapter,
             shippyPlaylistAdapter,
             devicePlaylistsHeaderAdapter,
@@ -196,6 +202,8 @@ class PlaylistListFragment :
     private fun updateCollections(state: LibraryCollectionsState) {
         collectionState = state
         collectionsHeaderAdapter.setShown(true)
+        savedProvidersHeaderAdapter.setShown(state.savedProviderEntities.isNotEmpty())
+        savedProviderAdapter.submitList(state.savedProviderEntities)
         shippyPlaylistsHeaderAdapter.setShown(state.userPlaylists.isNotEmpty())
         shippyPlaylistAdapter.update(state.userPlaylists)
         renderSystemCollections()

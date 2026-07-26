@@ -15,4 +15,10 @@ class CanonicalTrackMetadataMigrationTest {
         assertEquals(6, ShippyDatabase.MIGRATION_6_7.startVersion)
         assertEquals(7, ShippyDatabase.MIGRATION_6_7.endVersion)
     }
+
+    @Test
+    fun `saved provider entities have an explicit non-destructive v8 to v9 migration`() {
+        assertEquals(8, ShippyDatabase.MIGRATION_8_9.startVersion)
+        assertEquals(9, ShippyDatabase.MIGRATION_8_9.endVersion)
+    }
 }

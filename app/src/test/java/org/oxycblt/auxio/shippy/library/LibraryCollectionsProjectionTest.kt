@@ -9,7 +9,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
+import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
+import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 
 class LibraryCollectionsProjectionTest {
     @Test
@@ -62,6 +66,28 @@ class LibraryCollectionsProjectionTest {
                     localSongCount = 0,
                     devicePlaylistCount = 0,
                     isLocalIndexing = true,
+                )
+        )
+        assertFalse(
+            LibraryCollectionsState(
+                    savedProviderEntities =
+                        listOf(
+                            SavedProviderEntity(
+                                ProviderEntity(
+                                    ProviderId("provider"),
+                                    "album-1",
+                                    ProviderEntityType.ALBUM,
+                                    "Saved album",
+                                ),
+                                isPinned = false,
+                                savedAtEpochMs = 1,
+                            )
+                        )
+                )
+                .shouldShowOnboarding(
+                    localSongCount = 0,
+                    devicePlaylistCount = 0,
+                    isLocalIndexing = false,
                 )
         )
     }

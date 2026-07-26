@@ -40,8 +40,9 @@ import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointItemEntit
             LastFmScrobbleEntity::class,
             PlaybackCheckpointEntity::class,
             PlaybackCheckpointItemEntity::class,
+            SavedProviderEntityRecord::class,
         ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
@@ -55,6 +56,7 @@ internal abstract class ShippyDatabase : RoomDatabase() {
     abstract fun canonicalTrackMetadataDao(): CanonicalTrackMetadataDao
     abstract fun lastFmScrobbleDao(): LastFmScrobbleDao
     abstract fun playbackCheckpointDao(): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointDao
+    abstract fun savedProviderEntityDao(): SavedProviderEntityDao
 
     companion object {
         val MIGRATION_1_2 =
@@ -274,6 +276,29 @@ internal abstract class ShippyDatabase : RoomDatabase() {
             database.execSQL("CREATE TABLE IF NOT EXISTS `playback_checkpoint` (`slot` TEXT NOT NULL, `positionMs` INTEGER NOT NULL, `repeatMode` TEXT NOT NULL, `heapIndex` INTEGER NOT NULL, `shuffledMapping` TEXT NOT NULL, PRIMARY KEY(`slot`))")
             database.execSQL("CREATE TABLE IF NOT EXISTS `playback_checkpoint_item` (`slot` TEXT NOT NULL, `heapPosition` INTEGER NOT NULL, `queueItemId` TEXT NOT NULL, `trackId` TEXT NOT NULL, `contextId` TEXT, `contributorId` TEXT, PRIMARY KEY(`slot`, `heapPosition`), FOREIGN KEY(`slot`) REFERENCES `playback_checkpoint`(`slot`) ON UPDATE NO ACTION ON DELETE CASCADE)")
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_checkpoint_item_trackId` ON `playback_checkpoint_item` (`trackId`)")
+        }
+        val MIGRATION_8_9 = Migration(8, 9) { database ->
+            database.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `saved_provider_entity` (
+                    `providerId` TEXT NOT NULL,
+                    `entityType` TEXT NOT NULL,
+                    `sourceItemId` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `subtitle` TEXT,
+                    `artwork` TEXT,
+                    `originalUrl` TEXT,
+                    `pinned` INTEGER NOT NULL,
+                    `savedAtEpochMs` INTEGER NOT NULL,
+                    PRIMARY KEY(`providerId`, `entityType`, `sourceItemId`)
+                )
+                """
+                    .trimIndent()
+            )
+            database.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_saved_provider_entity_pinned_savedAtEpochMs` " +
+                    "ON `saved_provider_entity` (`pinned`, `savedAtEpochMs`)"
+            )
         }
     }
 }

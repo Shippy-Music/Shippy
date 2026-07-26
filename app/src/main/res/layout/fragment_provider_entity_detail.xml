@@ -80,10 +80,19 @@
                 android:orientation="horizontal">
 
                 <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                    android:id="@+id/provider_entity_save"
+                    style="@style/Widget.Auxio.Button.Icon.Medium"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/desc_save_provider_entity"
+                    app:icon="@drawable/ic_add_24" />
+
+                <org.oxycblt.auxio.ui.RippleFixMaterialButton
                     android:id="@+id/provider_entity_shuffle"
                     style="@style/Widget.Auxio.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_small"
                     android:text="@string/lbl_shuffle"
                     app:icon="@drawable/ic_shuffle_24" />
 

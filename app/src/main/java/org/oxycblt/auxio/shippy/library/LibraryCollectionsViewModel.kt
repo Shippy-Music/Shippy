@@ -24,28 +24,36 @@ import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
+import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
+import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntityRepository
 
 /**
  * Read-only projection of Shippy-owned library relationships.
  *
- * Local music remains owned by Auxio/Musikr and is supplied by the Library fragment. This model
- * deliberately exposes no track metadata because relationship rows alone cannot prove it.
+ * Local music remains owned by Auxio/Musikr and is supplied by the Library fragment. Track
+ * relationships stay metadata-neutral; saved provider browse targets carry only the exact
+ * provider identity and presentation metadata needed to reopen their detail route.
  */
 @HiltViewModel
 class LibraryCollectionsViewModel
 @Inject
-constructor(private val repository: LibraryRelationshipRepository) : ViewModel() {
+constructor(
+    private val repository: LibraryRelationshipRepository,
+    savedProviderEntities: SavedProviderEntityRepository,
+) : ViewModel() {
 
     val state: StateFlow<LibraryCollectionsState> =
         combine(
                 repository.observeLikedTrackIds(),
                 repository.observeDownloadedTrackIds(),
                 repository.observeUserPlaylists(),
-            ) { liked, downloaded, userPlaylists ->
+                savedProviderEntities.observeAll(),
+            ) { liked, downloaded, userPlaylists, savedEntities ->
                 LibraryCollectionsState(
                     likedCount = liked.size,
                     downloadedCount = downloaded.size,
                     userPlaylists = userPlaylists,
+                    savedProviderEntities = savedEntities,
                 )
             }
             .stateIn(
@@ -124,6 +132,7 @@ internal data class LibraryCollectionsState(
     val likedCount: Int = 0,
     val downloadedCount: Int = 0,
     val userPlaylists: List<LibraryCollection.Playlist> = emptyList(),
+    val savedProviderEntities: List<SavedProviderEntity> = emptyList(),
 )
 
 internal data class LibrarySystemCollectionRow(
@@ -156,4 +165,5 @@ internal fun LibraryCollectionsState.shouldShowOnboarding(
         devicePlaylistCount == 0 &&
         likedCount == 0 &&
         downloadedCount == 0 &&
-        userPlaylists.isEmpty()
+        userPlaylists.isEmpty() &&
+        savedProviderEntities.isEmpty()

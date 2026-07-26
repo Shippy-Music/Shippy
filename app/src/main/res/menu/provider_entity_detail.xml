@@ -12,5 +12,10 @@
         android:icon="@drawable/ic_queue_add_24"
         android:title="@string/lbl_queue_add"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/action_shippy_pin"
+        android:title="@string/lbl_pin"
+        android:visible="false"
+        app:showAsAction="never" />
 
 </menu>

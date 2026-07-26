@@ -48,6 +48,7 @@ object ShippyPersistenceModule {
                 ShippyDatabase.MIGRATION_5_6,
                 ShippyDatabase.MIGRATION_6_7,
                 ShippyDatabase.MIGRATION_7_8,
+                ShippyDatabase.MIGRATION_8_9,
             )
             .build()
 
@@ -70,10 +71,20 @@ object ShippyPersistenceModule {
         database.canonicalTrackMetadataDao()
 
     @Provides
+    internal fun savedProviderEntityDao(database: ShippyDatabase): SavedProviderEntityDao =
+        database.savedProviderEntityDao()
+
+    @Provides
     @Singleton
     internal fun canonicalTrackMetadataRepository(
         repository: RoomCanonicalTrackMetadataRepository
     ): CanonicalTrackMetadataRepository = repository
+
+    @Provides
+    @Singleton
+    internal fun savedProviderEntityRepository(
+        repository: RoomSavedProviderEntityRepository
+    ): SavedProviderEntityRepository = repository
 
     @Provides
     internal fun playbackCheckpointDao(database: ShippyDatabase): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointDao = database.playbackCheckpointDao()
