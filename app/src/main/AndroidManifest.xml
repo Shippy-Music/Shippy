@@ -119,6 +119,17 @@
         </service>
 
         <service
+            android:name=".playback.service.PlaybackQuickSettingsTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_play_24"
+            android:label="@string/lbl_playback"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
