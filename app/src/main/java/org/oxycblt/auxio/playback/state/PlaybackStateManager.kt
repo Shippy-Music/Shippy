@@ -265,6 +265,12 @@ interface PlaybackStateManager {
      */
     fun toSavedState(): SavedState?
 
+    /** A source-neutral snapshot that preserves the exact canonical raw queue. */
+    fun toCanonicalCheckpoint(): CanonicalCheckpoint?
+
+    /** Applies freshly prepared canonical items using an already validated raw queue shape. */
+    fun applyCanonicalCheckpoint(checkpoint: CanonicalCheckpoint, destructive: Boolean)
+
     /**
      * Restores this instance from the given [SavedState].
      *
@@ -372,6 +378,14 @@ interface PlaybackStateManager {
         val shuffledMapping: List<Int>,
         val index: Int,
         val songUid: Music.UID,
+    )
+
+    data class CanonicalCheckpoint(
+        val heap: List<ResolvedQueueItem>,
+        val shuffledMapping: List<Int>,
+        val heapIndex: Int,
+        val positionMs: Long,
+        val repeatMode: RepeatMode,
     )
 }
 
@@ -822,6 +836,44 @@ constructor(
             index = stateMirror.index,
             songUid = currentSong.uid,
         )
+    }
+
+    @Synchronized
+    override fun toCanonicalCheckpoint(): PlaybackStateManager.CanonicalCheckpoint? {
+        val raw = stateMirror.rawQueue
+        if (raw.heap.isEmpty() || raw.heapIndex !in raw.heap.indices) return null
+        return PlaybackStateManager.CanonicalCheckpoint(
+            raw.heap, raw.shuffledMapping, raw.heapIndex,
+            stateMirror.progression.calculateElapsedPositionMs(), stateMirror.repeatMode
+        )
+    }
+
+    @Synchronized
+    override fun applyCanonicalCheckpoint(
+        checkpoint: PlaybackStateManager.CanonicalCheckpoint,
+        destructive: Boolean,
+    ) {
+        if (isInitialized && !destructive) return
+        val holder = stateHolder ?: return
+        check(
+            checkpoint.shuffledMapping.isEmpty() ||
+                (checkpoint.shuffledMapping.size == checkpoint.heap.size &&
+                    checkpoint.shuffledMapping.sorted() == checkpoint.heap.indices.toList())
+        ) {
+            "Canonical playback checkpoint shuffle mapping is inconsistent"
+        }
+        val raw = RawQueue(checkpoint.heap, checkpoint.shuffledMapping, checkpoint.heapIndex)
+        check(raw.heapIndex in raw.heap.indices && raw.resolveIndex() in raw.heap.indices) {
+            "Canonical playback checkpoint is inconsistent"
+        }
+        holder.applySavedState(
+            null,
+            raw,
+            checkpoint.positionMs.coerceAtLeast(0),
+            checkpoint.repeatMode,
+            StateAck.NewPlayback,
+        )
+        isInitialized = true
     }
 
     @Synchronized

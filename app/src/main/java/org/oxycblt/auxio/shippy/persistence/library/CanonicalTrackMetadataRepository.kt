@@ -28,6 +28,7 @@ import org.oxycblt.auxio.shippy.domain.TrackVersion
 /** Durable canonical metadata for relationship-backed library rows, independent of downloads. */
 interface CanonicalTrackMetadataRepository {
     fun observeAll(): Flow<List<Track>>
+    suspend fun getByIds(ids: List<TrackId>): Map<TrackId, Track>
     suspend fun upsert(track: Track)
 }
 
@@ -88,6 +89,10 @@ internal abstract class CanonicalTrackMetadataDao {
     @Query("SELECT * FROM canonical_track ORDER BY trackId")
     abstract fun observeAll(): Flow<List<StoredCanonicalTrack>>
 
+    @androidx.room.Transaction
+    @Query("SELECT * FROM canonical_track WHERE trackId IN (:trackIds)")
+    abstract suspend fun getByIds(trackIds: List<String>): List<StoredCanonicalTrack>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     protected abstract suspend fun insertTrack(track: CanonicalTrackEntity)
 
@@ -117,12 +122,21 @@ constructor(private val dao: CanonicalTrackMetadataDao) : CanonicalTrackMetadata
     override fun observeAll(): Flow<List<Track>> =
         dao.observeAll().map { it.map(StoredCanonicalTrack::toDomain) }
 
+    override suspend fun getByIds(ids: List<TrackId>): Map<TrackId, Track> =
+        ids.distinct()
+            .chunked(ROOM_QUERY_ID_CHUNK_SIZE)
+            .flatMap { chunk -> dao.getByIds(chunk.map(TrackId::value)) }
+            .map(StoredCanonicalTrack::toDomain).associateBy(Track::id)
+
     override suspend fun upsert(track: Track) =
         dao.upsert(
             track.toEntity(),
             track.candidates.mapIndexed { index, candidate -> candidate.toEntity(track.id, index) },
         )
 }
+
+// Android SQLite historically limits one statement to 999 bind parameters.
+private const val ROOM_QUERY_ID_CHUNK_SIZE = 900
 
 private fun Track.toEntity() =
     CanonicalTrackEntity(

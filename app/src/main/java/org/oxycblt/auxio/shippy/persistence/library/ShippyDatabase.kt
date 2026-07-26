@@ -22,6 +22,8 @@ import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
 import org.oxycblt.auxio.shippy.lyrics.LyricsCacheEntity
 import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleDao
 import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleEntity
+import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointEntity
+import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointItemEntity
 
 @Database(
     entities =
@@ -36,8 +38,10 @@ import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleEntity
             CanonicalTrackEntity::class,
             CanonicalTrackCandidateEntity::class,
             LastFmScrobbleEntity::class,
+            PlaybackCheckpointEntity::class,
+            PlaybackCheckpointItemEntity::class,
         ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
@@ -50,6 +54,7 @@ internal abstract class ShippyDatabase : RoomDatabase() {
     abstract fun crewCheckpointDao(): CrewCheckpointDao
     abstract fun canonicalTrackMetadataDao(): CanonicalTrackMetadataDao
     abstract fun lastFmScrobbleDao(): LastFmScrobbleDao
+    abstract fun playbackCheckpointDao(): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointDao
 
     companion object {
         val MIGRATION_1_2 =
@@ -264,6 +269,11 @@ internal abstract class ShippyDatabase : RoomDatabase() {
         val MIGRATION_6_7 = Migration(6, 7) { database ->
             database.execSQL("CREATE TABLE IF NOT EXISTS `lastfm_scrobble_outbox` (`id` TEXT NOT NULL, `artist` TEXT NOT NULL, `track` TEXT NOT NULL, `album` TEXT, `durationSeconds` INTEGER, `startedAtEpochSeconds` INTEGER NOT NULL, `queuedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`id`))")
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_lastfm_scrobble_outbox_queuedAtEpochMs` ON `lastfm_scrobble_outbox` (`queuedAtEpochMs`)")
+        }
+        val MIGRATION_7_8 = Migration(7, 8) { database ->
+            database.execSQL("CREATE TABLE IF NOT EXISTS `playback_checkpoint` (`slot` TEXT NOT NULL, `positionMs` INTEGER NOT NULL, `repeatMode` TEXT NOT NULL, `heapIndex` INTEGER NOT NULL, `shuffledMapping` TEXT NOT NULL, PRIMARY KEY(`slot`))")
+            database.execSQL("CREATE TABLE IF NOT EXISTS `playback_checkpoint_item` (`slot` TEXT NOT NULL, `heapPosition` INTEGER NOT NULL, `queueItemId` TEXT NOT NULL, `trackId` TEXT NOT NULL, `contextId` TEXT, `contributorId` TEXT, PRIMARY KEY(`slot`, `heapPosition`), FOREIGN KEY(`slot`) REFERENCES `playback_checkpoint`(`slot`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_checkpoint_item_trackId` ON `playback_checkpoint_item` (`trackId`)")
         }
     }
 }

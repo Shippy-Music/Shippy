@@ -1,6 +1,6 @@
 # Shippy Live Status
 
-**Updated:** 2026-07-25  
+**Updated:** 2026-07-26
 **Current stage:** Stages 2–6 — Library/player completion and Crew connectivity
 **Overall state:** In progress
 
@@ -406,6 +406,12 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Now Playing keeps provider/source diagnostics, original links, and technical
   metadata behind Song Information while direct Save and Download remain
   unduplicated primary actions.
+- Playback persistence now stores the source-neutral canonical queue, exact
+  duplicate-safe queue identities, shuffle order, selected heap item, position,
+  and repeat mode in Room v8. Restore re-resolves every surviving item from
+  durable intent using current provider settings, never persists expiring
+  streams or temporary/download projections, and falls back to Auxio's legacy
+  local-only checkpoint if canonical restore is unavailable or fails.
 
 ## In Progress
 
@@ -437,6 +443,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - Crew control serialization, chunk reassembly/media transfer, Room checkpoint
   and Last.fm v7 generation, session-engine convergence, and persistence tests
   are authored/static-parsed only and remain uncompiled.
+- Canonical playback Room v8 generation, Hilt wiring, fresh-resolution restore,
+  and its focused queue-remapping tests are authored/static-checked only and
+  remain uncompiled.
 - The first top-down Crew/player bridge keeps an exact Local `content://`
   candidate in canonical queue state because current supplier authorization
   still depends on it. A private per-device source projection must remove that

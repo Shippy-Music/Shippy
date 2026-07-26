@@ -47,6 +47,7 @@ object ShippyPersistenceModule {
                 ShippyDatabase.MIGRATION_4_5,
                 ShippyDatabase.MIGRATION_5_6,
                 ShippyDatabase.MIGRATION_6_7,
+                ShippyDatabase.MIGRATION_7_8,
             )
             .build()
 
@@ -73,6 +74,13 @@ object ShippyPersistenceModule {
     internal fun canonicalTrackMetadataRepository(
         repository: RoomCanonicalTrackMetadataRepository
     ): CanonicalTrackMetadataRepository = repository
+
+    @Provides
+    internal fun playbackCheckpointDao(database: ShippyDatabase): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointDao = database.playbackCheckpointDao()
+
+    @Provides
+    @Singleton
+    internal fun playbackCheckpointRepository(repository: org.oxycblt.auxio.shippy.persistence.playback.RoomPlaybackCheckpointRepository): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointRepository = repository
 
     @Provides
     internal fun lyricsCacheDao(database: ShippyDatabase): LyricsCacheDao =

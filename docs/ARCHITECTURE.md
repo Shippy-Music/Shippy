@@ -273,6 +273,15 @@ Persistence rules:
 - Crew media bytes are outside Room in bounded temporary files; Room stores only
   session-scoped manifests.
 
+The Room v8 playback checkpoint stores source-neutral queue intent separately
+from resolved media: ordered queue-item IDs, canonical track references, context
+and contributor, shuffle mapping, selected heap item, position, and repeat mode.
+Before restore, temporary Crew and synthesized Download candidates are removed
+from durable metadata; current download/provider/Crew availability is resolved
+again. Missing items are skipped with deterministic queue/index compaction, and
+Auxio's legacy local-only checkpoint remains the compatibility fallback. Neither
+resolved URLs nor request headers enter the checkpoint.
+
 The active Crew checkpoint is one replaceable Room row containing a versioned
 snapshot payload, indexed session/term/sequence identity, update time, and a
 SHA-256 integrity value. Loading cross-checks the indexed identity against the

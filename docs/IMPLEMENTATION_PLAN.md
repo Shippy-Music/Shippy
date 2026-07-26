@@ -92,7 +92,11 @@ through Auxio’s existing playback stack.
 - [x] Make queue the canonical playback order for UI, MediaSession, and later
       Crew.
 - [x] Implement reorder/remove/play-next/add/replace-context behavior.
-- [ ] Persist useful offline queue/context.
+- [x] Persist useful offline queue/context.
+  - Room v8 stores canonical durable queue intent, duplicate-safe item IDs,
+    shuffle order, selected occurrence, position, and repeat mode. Restore
+    resolves fresh playable candidates, skips unavailable items deterministically,
+    and keeps Auxio's local checkpoint as a compatibility fallback.
 
 **Validation:**
 

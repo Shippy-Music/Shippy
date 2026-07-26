@@ -42,6 +42,7 @@ import androidx.media3.exoplayer.source.MediaSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlin.math.abs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -64,6 +65,9 @@ import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
 import org.oxycblt.auxio.playback.state.StateAck
 import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
+import org.oxycblt.auxio.shippy.persistence.playback.CanonicalPlaybackCheckpoint
+import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointRepository
+import org.oxycblt.auxio.shippy.playback.CanonicalPlaybackRestoreCoordinator
 import org.oxycblt.musikr.MusicParent
 import timber.log.Timber as L
 
@@ -73,6 +77,8 @@ class ExoPlaybackStateHolder(
     private val player: ExoPlayer,
     private val playbackManager: PlaybackStateManager,
     private val persistenceRepository: PersistenceRepository,
+    private val canonicalCheckpoints: PlaybackCheckpointRepository,
+    private val canonicalRestore: CanonicalPlaybackRestoreCoordinator,
     private val playbackSettings: PlaybackSettings,
     private val commandFactory: PlaybackCommand.Factory,
     private val replayGainProcessor: ReplayGainAudioProcessor,
@@ -154,19 +160,26 @@ class ExoPlaybackStateHolder(
     }
 
     override fun handleDeferred(action: DeferredPlayback): Boolean {
-        val library =
-            musicRepository.library?.takeIf { !it.empty() }
-                // No library, cannot do anything.
-                ?: return false
-
         when (action) {
             // Restore state -> Start a new restoreState job
             is DeferredPlayback.RestoreState -> {
                 L.d("Restoring playback state")
                 restoreScope.launch {
-                    val state = persistenceRepository.readState()
+                    val canonical =
+                        try {
+                            canonicalRestore.restore()
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            L.e(error, "Unable to restore canonical playback checkpoint")
+                            null
+                        }
+                    val state = if (canonical == null) persistenceRepository.readState() else null
                     withContext(Dispatchers.Main) {
-                        if (state != null) {
+                        if (canonical != null) {
+                            playbackManager.applyCanonicalCheckpoint(canonical, false)
+                            if (action.play) playbackManager.playing(true)
+                        } else if (state != null) {
                             // Apply the saved state on the main thread to prevent code expecting
                             // state updates on the main thread from crashing.
                             playbackManager.applySavedState(state, false)
@@ -181,6 +194,7 @@ class ExoPlaybackStateHolder(
             }
             // Shuffle all -> Start new playback from all songs
             is DeferredPlayback.ShuffleAll -> {
+                val library = musicRepository.library?.takeIf { !it.empty() } ?: return false
                 L.d("Shuffling all tracks")
                 playbackManager.play(
                     requireNotNull(commandFactory.all(ShuffleMode.ON)) {
@@ -190,6 +204,7 @@ class ExoPlaybackStateHolder(
             }
             // Open -> Try to find the Song for the given file and then play it from all songs
             is DeferredPlayback.Open -> {
+                val library = musicRepository.library?.takeIf { !it.empty() } ?: return false
                 L.d("Opening specified file")
                 context.applicationContext.contentResolver
                     .query(
@@ -576,6 +591,7 @@ class ExoPlaybackStateHolder(
         saveJob {
             if (sessionOngoing) {
                 persistenceRepository.saveState(playbackManager.toSavedState())
+                saveCanonicalCheckpoint()
             }
             withContext(Dispatchers.Main) { cb() }
         }
@@ -589,6 +605,7 @@ class ExoPlaybackStateHolder(
             L.d("Committing saved state")
             if (sessionOngoing) {
                 persistenceRepository.saveState(playbackManager.toSavedState())
+                saveCanonicalCheckpoint()
             }
         }
     }
@@ -599,6 +616,26 @@ class ExoPlaybackStateHolder(
             it.cancel()
         }
         currentSaveJob = saveScope.launch { block() }
+    }
+
+    private suspend fun saveCanonicalCheckpoint() {
+        try {
+            playbackManager.toCanonicalCheckpoint()?.let { checkpoint ->
+                canonicalCheckpoints.replace(
+                    CanonicalPlaybackCheckpoint(
+                        checkpoint.heap.map(ResolvedQueueItem::item),
+                        checkpoint.shuffledMapping,
+                        checkpoint.heapIndex,
+                        checkpoint.positionMs.coerceAtLeast(0),
+                        checkpoint.repeatMode,
+                    )
+                )
+            } ?: canonicalCheckpoints.clear()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            L.e(error, "Unable to save canonical playback checkpoint")
+        }
     }
 
     private fun ResolvedQueueItem.buildMediaItem(): MediaItem {
@@ -676,6 +713,8 @@ class ExoPlaybackStateHolder(
         @ApplicationContext private val context: Context,
         private val playbackManager: PlaybackStateManager,
         private val persistenceRepository: PersistenceRepository,
+        private val canonicalCheckpoints: PlaybackCheckpointRepository,
+        private val canonicalRestore: CanonicalPlaybackRestoreCoordinator,
         private val playbackSettings: PlaybackSettings,
         private val commandFactory: PlaybackCommand.Factory,
         private val mediaSourceFactory: MediaSource.Factory,
@@ -722,6 +761,8 @@ class ExoPlaybackStateHolder(
                 exoPlayer,
                 playbackManager,
                 persistenceRepository,
+                canonicalCheckpoints,
+                canonicalRestore,
                 playbackSettings,
                 commandFactory,
                 replayGainProcessor,
