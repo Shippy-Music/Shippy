@@ -116,51 +116,56 @@ private constructor(
 
         if (localSong == null) {
             publish(null)
+            item.track.artwork
+                ?.takeIf { BitmapProvider.isValidArtworkUrl(it) }
+                ?.let { artwork ->
+                    bitmapProvider.loadArtwork(artwork, newArtworkTarget(::publish))
+                }
             return
         }
 
         L.d("Updating widget with new local artwork")
-        bitmapProvider.load(
-            localSong,
-            object : BitmapProvider.Target {
-                override fun onConfigRequest(builder: ImageRequest.Builder): ImageRequest.Builder {
-                    val cornerRadius =
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            // Android 12, always round the cover with the widget's inner radius
-                            L.d("Using android 12 corner radius")
-                            context.getDimenPixels(android.R.dimen.system_app_widget_inner_radius)
-                        } else if (uiSettings.roundMode) {
-                            // < Android 12, but the user still enabled round mode.
-                            L.d("Using default corner radius")
-                            context.getDimenPixels(R.dimen.m3_shape_corners_large)
-                        } else {
-                            // User did not enable round mode.
-                            L.d("Using no corner radius")
-                            0
-                        }
+        bitmapProvider.load(localSong, newArtworkTarget(::publish))
+    }
 
-                    val transformations = buildList {
-                        if (imageSettings.forceSquareCovers) {
-                            add(SquareCropTransformation.INSTANCE)
-                        }
-                        if (cornerRadius > 0) {
-                            add(WidgetBitmapTransformation(15f))
-                            add(RoundedRectTransformation(cornerRadius.toFloat()))
-                        } else {
-                            add(WidgetBitmapTransformation(3f))
-                        }
+    private fun newArtworkTarget(publish: (Bitmap?) -> Unit) =
+        object : BitmapProvider.Target {
+            override fun onConfigRequest(builder: ImageRequest.Builder): ImageRequest.Builder {
+                val cornerRadius =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        // Android 12, always round the cover with the widget's inner radius
+                        L.d("Using android 12 corner radius")
+                        context.getDimenPixels(android.R.dimen.system_app_widget_inner_radius)
+                    } else if (uiSettings.roundMode) {
+                        // < Android 12, but the user still enabled round mode.
+                        L.d("Using default corner radius")
+                        context.getDimenPixels(R.dimen.m3_shape_corners_large)
+                    } else {
+                        // User did not enable round mode.
+                        L.d("Using no corner radius")
+                        0
                     }
 
-                    return builder.size(Size.ORIGINAL).transformations(transformations)
+                val transformations = buildList {
+                    if (imageSettings.forceSquareCovers) {
+                        add(SquareCropTransformation.INSTANCE)
+                    }
+                    if (cornerRadius > 0) {
+                        add(WidgetBitmapTransformation(15f))
+                        add(RoundedRectTransformation(cornerRadius.toFloat()))
+                    } else {
+                        add(WidgetBitmapTransformation(3f))
+                    }
                 }
 
-                override fun onCompleted(bitmap: Bitmap?) {
-                    L.d("Bitmap loaded, uploading widget state")
-                    publish(bitmap)
-                }
-            },
-        )
-    }
+                return builder.size(Size.ORIGINAL).transformations(transformations)
+            }
+
+            override fun onCompleted(bitmap: Bitmap?) {
+                L.d("Bitmap loaded, uploading widget state")
+                publish(bitmap)
+            }
+        }
 
     /** Release this instance, preventing any further events from updating the widget instances. */
     fun release() {

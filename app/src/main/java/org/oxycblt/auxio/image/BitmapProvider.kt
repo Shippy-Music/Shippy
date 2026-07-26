@@ -26,6 +26,7 @@ import coil3.request.ImageRequest
 import coil3.size.Size
 import coil3.toBitmap
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.net.URI
 import javax.inject.Inject
 import org.oxycblt.musikr.Song
 
@@ -84,7 +85,26 @@ constructor(
      * @param target The [Target] to deliver the [Bitmap] to asynchronously.
      */
     @Synchronized
-    fun load(song: Song, target: Target) {
+    fun load(song: Song, target: Target) = load(song.cover, target)
+
+    /**
+     * Load a remote artwork [Bitmap] from a canonical HTTPS URL.
+     *
+     * URLs are deliberately constrained here because canonical metadata is received from a remote
+     * provider. This prevents arbitrary Coil data sources, credentials, and non-HTTPS schemes from
+     * entering the image pipeline.
+     *
+     * @return True when a request was queued, false when [url] is not an allowed artwork URL.
+     */
+    @Synchronized
+    fun loadArtwork(url: String, target: Target): Boolean {
+        if (!isValidArtworkUrl(url)) return false
+        load(url, target)
+        return true
+    }
+
+    @Synchronized
+    private fun load(data: Any?, target: Target) {
         // Increment the handle, indicating a newer request has been created
         val handle = ++currentHandle
         currentRequest?.run { disposable.dispose() }
@@ -94,7 +114,7 @@ constructor(
             target
                 .onConfigRequest(
                     ImageRequest.Builder(context)
-                        .data(song.cover)
+                        .data(data)
                         // Use ORIGINAL sizing, as we are not loading into any View-like component.
                         .size(Size.ORIGINAL)
                 )
@@ -123,5 +143,20 @@ constructor(
         ++currentHandle
         currentRequest?.run { disposable.dispose() }
         currentRequest = null
+    }
+
+    companion object {
+        /** True only for absolute, credential-free HTTPS URLs with a host. */
+        internal fun isValidArtworkUrl(url: String?): Boolean {
+            if (url.isNullOrBlank() || url != url.trim()) return false
+            return
+                runCatching { URI(url) }
+                    .getOrNull()
+                    ?.let { uri ->
+                        uri.scheme.equals("https", ignoreCase = true) &&
+                            !uri.host.isNullOrBlank() &&
+                            uri.userInfo == null
+                    } ?: false
+        }
     }
 }

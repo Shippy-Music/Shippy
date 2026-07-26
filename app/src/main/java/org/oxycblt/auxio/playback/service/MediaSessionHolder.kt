@@ -247,18 +247,19 @@ private constructor(
         }
 
         if (localSong == null) {
-            updateCanonicalMetadata(item)
+            updateCanonicalMetadata(item, revision)
             return
         }
         updateLocalMetadata(localSong, parent, revision)
     }
 
-    private fun updateCanonicalMetadata(item: QueueItem) {
+    private fun updateCanonicalMetadata(item: QueueItem, revision: Long) {
         val track = item.track
         val artists =
             track.artists.joinToString(", ").ifBlank { context.getString(R.string.cdc_unknown) }
         val album = track.album.orEmpty()
-        val metadata =
+        val artwork = track.artwork?.takeIf { BitmapProvider.isValidArtworkUrl(it) }
+        val builder =
             MediaMetadataCompat.Builder()
                 .putText(MediaMetadataCompat.METADATA_KEY_TITLE, track.title)
                 .putText(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
@@ -274,15 +275,32 @@ private constructor(
                     track.album ?: context.getString(R.string.app_name),
                 )
                 .apply {
-                    track.artwork?.takeIf(String::isNotBlank)?.let { artwork ->
+                    artwork?.let {
                         putString(MediaMetadataCompat.METADATA_KEY_ART_URI, artwork)
                         putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, artwork)
                     }
                 }
-                .build()
+        val metadata = builder.build()
         mediaSession.setMetadata(metadata)
         _notification.updateMetadata(metadata)
         foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
+
+        artwork?.let { url ->
+            bitmapProvider.loadArtwork(
+                url,
+                object : BitmapProvider.Target {
+                    override fun onCompleted(bitmap: Bitmap?) {
+                        if (revision != metadataRevision || bitmap == null) return
+                        builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
+                        builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
+                        val artworkMetadata = builder.build()
+                        mediaSession.setMetadata(artworkMetadata)
+                        _notification.updateMetadata(artworkMetadata)
+                        foregroundListener.updateForeground(ForegroundListener.Change.MEDIA_SESSION)
+                    }
+                },
+            )
+        }
     }
 
     private fun updateLocalMetadata(

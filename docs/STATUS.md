@@ -445,6 +445,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   existing durable SAF pipeline. Exact temporary bytes are first snapshotted
   into bounded app-private staging so Crew teardown cannot remove them before
   WorkManager runs; terminal publication/cancel/final failure removes the stage.
+- Canonical provider and Crew artwork now reaches MediaSession notification and
+  home-screen widget bitmaps through Auxio's existing Coil loader. Only
+  credential-free HTTPS artwork is accepted, and revision guards prevent a late
+  request from replacing newer playback metadata.
 
 ## In Progress
 
@@ -496,9 +500,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   multibinding, and playback lookup remain compile/device-unverified.
 - Canonical Media3 custom-cache-key/header routing is implemented and
   syntax-checked but remains runtime-unverified.
-- Remote provider artwork currently reaches in-app Coil surfaces and metadata
-  URIs; notification/widget bitmap loading still needs the dedicated remote
-  artwork path.
+- Remote provider artwork loading for MediaSession and widgets is
+  static-inspected with focused URL-policy tests authored, but remains
+  compile/device-unverified.
 - Final device behavior is deliberately unverified until the owner performs the
   build/test handoff.
 - The hosted-relay Android adapter and launcher wiring are static-checked only.
