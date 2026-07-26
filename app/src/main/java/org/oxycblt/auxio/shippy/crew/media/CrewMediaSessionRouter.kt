@@ -57,6 +57,7 @@ class CrewMediaSessionRouter(
     private val callbacks: CrewMediaSessionCallbacks,
 ) : CrewAuthenticatedMediaLifecycle {
     private val peers = ConcurrentHashMap<CrewMemberId, PeerState>()
+    private val fanoutPolicy = CrewMediaFanoutPolicy()
 
     override fun onPeerAttached(peer: CrewAuthenticatedMediaPeer) {
         if (peer.memberId != peer.transport.remoteMemberId || peer.memberId == localMemberId) return
@@ -71,6 +72,8 @@ class CrewMediaSessionRouter(
         peers.put(peer.memberId, replacement)?.let { previous ->
             previous.receivingTransfers.forEach(receiver::cancel)
             previous.receivingTransfers.clear()
+            previous.controller.clear()
+            fanoutPolicy.releaseForTarget(previous.peer.memberId)
         }
     }
 
@@ -110,6 +113,7 @@ class CrewMediaSessionRouter(
                 CrewMediaFrameResult.Accepted
             }
             is CrewMediaWireFrame.ObjectComplete -> {
+                releaseSupplierPermitIfOwned(decoded.transfer)
                 state.controller.forget(decoded.transfer)
                 CrewMediaFrameResult.Accepted
             }
@@ -118,6 +122,7 @@ class CrewMediaSessionRouter(
                     receiver.cancel(decoded.transfer)
                     state.receivingTransfers.remove(decoded.transfer)
                 }
+                releaseSupplierPermitIfOwned(decoded.transfer)
                 state.controller.forget(decoded.transfer)
                 CrewMediaFrameResult.Accepted
             }
@@ -126,6 +131,7 @@ class CrewMediaSessionRouter(
                     receiver.cancel(decoded.transfer)
                     state.receivingTransfers.remove(decoded.transfer)
                 }
+                releaseSupplierPermitIfOwned(decoded.transfer)
                 state.controller.forget(decoded.transfer)
                 runCatching {
                     callbacks.onTransferRejected(decoded.transfer, state.peer.memberId)
@@ -140,7 +146,28 @@ class CrewMediaSessionRouter(
         if (state.peer.transport === peer.transport && peers.remove(peer.memberId, state)) {
             state.receivingTransfers.forEach(receiver::cancel)
             state.receivingTransfers.clear()
+            fanoutPolicy.releaseForTarget(peer.memberId)
         }
+    }
+
+    /** Releases all per-session supplier permits when the active Crew runtime is torn down. */
+    fun close() {
+        peers.values.forEach { state ->
+            state.receivingTransfers.forEach(receiver::cancel)
+            state.receivingTransfers.clear()
+        }
+        peers.clear()
+        fanoutPolicy.releaseAll()
+    }
+
+    /** Push & Pull was disabled locally; abandon temporary work without changing Crew control state. */
+    fun onPushPullDisabled() {
+        peers.values.forEach { state ->
+            state.receivingTransfers.forEach(receiver::cancel)
+            state.receivingTransfers.clear()
+            state.controller.clear()
+        }
+        fanoutPolicy.releaseAll()
     }
 
     /** An external readiness signal may resume one previously backpressured supplier transfer. */
@@ -173,6 +200,12 @@ class CrewMediaSessionRouter(
     }
 
     private fun handleRequest(state: PeerState, frame: CrewMediaWireFrame.Request): CrewMediaFrameResult {
+        // A datagram-level retry for an already offered transfer neither re-authorizes a source nor
+        // consumes another upload permit. The controller has retained the existing offer state.
+        if (fanoutPolicy.hasPermit(frame.transfer)) {
+            state.controller.resume(frame.transfer)
+            return CrewMediaFrameResult.Accepted
+        }
         val source = runCatching {
             callbacks.authorizeSupplierSource(frame.transfer, state.peer.memberId)
         }.getOrNull()
@@ -183,8 +216,21 @@ class CrewMediaSessionRouter(
             // requester can select another supplier without losing the Crew connection.
             return CrewMediaFrameResult.Accepted
         }
+        when (fanoutPolicy.acquire(frame.transfer)) {
+            CrewMediaFanoutPolicy.Result.Duplicate -> {
+                state.controller.resume(frame.transfer)
+                return CrewMediaFrameResult.Accepted
+            }
+            CrewMediaFanoutPolicy.Result.RetryLater -> {
+                state.media.send(CrewMediaWireFrame.RetryLater(frame.transfer))
+                state.controller.forget(frame.transfer)
+                return CrewMediaFrameResult.Accepted
+            }
+            CrewMediaFanoutPolicy.Result.Acquired -> Unit
+        }
         val offered = runCatching { state.controller.offer(frame.transfer, source) }.getOrNull()
         if (offered == null) {
+            fanoutPolicy.release(frame.transfer)
             state.media.send(CrewMediaWireFrame.Rejected(frame.transfer))
             state.controller.forget(frame.transfer)
             return CrewMediaFrameResult.Accepted
@@ -247,8 +293,13 @@ class CrewMediaSessionRouter(
         receiver.cancel(transfer)
         state.receivingTransfers.remove(transfer)
         state.media.send(CrewMediaWireFrame.Rejected(transfer))
+        releaseSupplierPermitIfOwned(transfer)
         state.controller.forget(transfer)
         return CrewMediaFrameResult.Rejected(reason)
+    }
+
+    private fun releaseSupplierPermitIfOwned(transfer: CrewMediaTransferRef) {
+        if (transfer.supplierMemberId == localMemberId) fanoutPolicy.release(transfer)
     }
 
     private fun isInboundForLocal(frame: CrewMediaWireFrame, peerId: CrewMemberId): Boolean {

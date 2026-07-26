@@ -15,8 +15,12 @@ import org.oxycblt.auxio.shippy.domain.QueueItemId
 /** Wire bounds intentionally leave room below the 48 KiB Crew media-channel payload limit. */
 const val CREW_MEDIA_MAX_CHUNK_BYTES = 44 * 1024
 const val CREW_MEDIA_MAX_CHUNKS = 512
-/** The manifest has no paging in this foundation, so this is the actual transferable-object cap. */
-const val CREW_MEDIA_MAX_OBJECT_BYTES = 512L * CREW_MEDIA_MAX_CHUNK_BYTES
+/**
+ * Temporary peer media is deliberately small. The producer currently keeps the authorized object
+ * in memory long enough to hash and frame it, so this is a real supplier-memory bound, not merely
+ * a receiver validation limit.
+ */
+const val CREW_MEDIA_MAX_OBJECT_BYTES = 8L * 1024L * 1024L
 const val CREW_MEDIA_DIGEST_BYTES = 32
 const val CREW_MEDIA_MAX_REQUEST_ID_BYTES = 96
 const val CREW_MEDIA_MAX_ID_BYTES = 128

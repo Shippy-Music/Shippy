@@ -41,6 +41,11 @@ class CrewMediaTransferController(
         states.remove(transfer)
         outgoing.remove(transfer)
     }
+    /** Local policy/session teardown abandons all protocol work without sending another frame. */
+    fun clear() {
+        states.clear()
+        outgoing.clear()
+    }
     fun resume(transfer: CrewMediaTransferRef): CrewSendResult? {
         if (states[transfer] == CrewMediaTransferState.CANCELLED) return null
         val next = outgoing[transfer]?.firstOrNull() ?: return null
@@ -54,6 +59,9 @@ class CrewMediaTransferController(
         if (!valid(t) || !policy.accepts(activeSessionId) || !remoteMatches(t, frame)) return CrewMediaTransferState.REJECTED
         val prior = states[t]
         if (prior == CrewMediaTransferState.CANCELLED && frame !is CrewMediaWireFrame.Cancel) return CrewMediaTransferState.REJECTED
+        // A retransmitted request must not reset a supplier that has already offered this exact
+        // transfer. The router's fan-out permit remains attached to that one transfer.
+        if (frame is CrewMediaWireFrame.Request && outgoing.containsKey(t)) return prior ?: CrewMediaTransferState.REQUESTED
         val state = when (frame) {
             is CrewMediaWireFrame.Request -> CrewMediaTransferState.REQUESTED
             is CrewMediaWireFrame.Manifest -> CrewMediaTransferState.MANIFEST_WAIT

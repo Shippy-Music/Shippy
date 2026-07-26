@@ -185,6 +185,7 @@ class CrewActiveMediaRuntime internal constructor(
         override fun onPushPullEnabledChanged(enabled: Boolean) {
             if (!closed) {
                 policy.activate(sessionId, enabled)
+                if (!enabled) router.onPushPullDisabled()
                 scope.launch { reconcileLocalMedia() }
             }
         }
@@ -315,6 +316,7 @@ class CrewActiveMediaRuntime internal constructor(
         attachedPeers.clear()
         mutablePeerMediaBlocked.value = false
         runCatching { policy.deactivate(sessionId) }
+        runCatching { router.close() }
         runCatching { temporaryIndex.endSession(sessionId) }
         runCatching { privateSources.endSession(sessionId) }
         runCatching { cache.endSession(sessionId) }
