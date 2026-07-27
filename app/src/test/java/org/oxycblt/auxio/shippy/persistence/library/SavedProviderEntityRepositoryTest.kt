@@ -1,22 +1,29 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * SavedProviderEntityRepositoryTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * SavedProviderEntityRepositoryTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.persistence.library
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Test
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Test
 import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderEntityType
@@ -88,10 +95,16 @@ class SavedProviderEntityRepositoryTest {
             entityType: String,
             sourceItemId: String,
         ): Flow<SavedProviderEntityRecord?> =
-            records.map { all -> all.firstOrNull { it.matches(providerId, entityType, sourceItemId) } }
+            records.map { all ->
+                all.firstOrNull { it.matches(providerId, entityType, sourceItemId) }
+            }
 
         override suspend fun insert(record: SavedProviderEntityRecord) {
-            check(records.value.none { it.matches(record.providerId, record.entityType, record.sourceItemId) })
+            check(
+                records.value.none {
+                    it.matches(record.providerId, record.entityType, record.sourceItemId)
+                }
+            )
             records.value += record
         }
 
@@ -104,15 +117,27 @@ class SavedProviderEntityRepositoryTest {
             artwork: String?,
             originalUrl: String?,
         ): Int {
-            val index = records.value.indexOfFirst { it.matches(providerId, entityType, sourceItemId) }
+            val index =
+                records.value.indexOfFirst { it.matches(providerId, entityType, sourceItemId) }
             if (index < 0) return 0
-            records.value = records.value.toMutableList().also { current ->
-                current[index] = current[index].copy(title = title, subtitle = subtitle, artwork = artwork, originalUrl = originalUrl)
-            }
+            records.value =
+                records.value.toMutableList().also { current ->
+                    current[index] =
+                        current[index].copy(
+                            title = title,
+                            subtitle = subtitle,
+                            artwork = artwork,
+                            originalUrl = originalUrl,
+                        )
+                }
             return 1
         }
 
-        override suspend fun remove(providerId: String, entityType: String, sourceItemId: String): Int {
+        override suspend fun remove(
+            providerId: String,
+            entityType: String,
+            sourceItemId: String,
+        ): Int {
             val current = records.value
             records.value = current.filterNot { it.matches(providerId, entityType, sourceItemId) }
             return current.size - records.value.size
@@ -124,9 +149,13 @@ class SavedProviderEntityRepositoryTest {
             sourceItemId: String,
             pinned: Boolean,
         ): Int {
-            val index = records.value.indexOfFirst { it.matches(providerId, entityType, sourceItemId) }
+            val index =
+                records.value.indexOfFirst { it.matches(providerId, entityType, sourceItemId) }
             if (index < 0) return 0
-            records.value = records.value.toMutableList().also { current -> current[index] = current[index].copy(pinned = pinned) }
+            records.value =
+                records.value.toMutableList().also { current ->
+                    current[index] = current[index].copy(pinned = pinned)
+                }
             return 1
         }
 
@@ -141,4 +170,6 @@ private fun SavedProviderEntityRecord.matches(
     entityType: String,
     sourceItemId: String,
 ) =
-    this.providerId == providerId && this.entityType == entityType && this.sourceItemId == sourceItemId
+    this.providerId == providerId &&
+        this.entityType == entityType &&
+        this.sourceItemId == sourceItemId

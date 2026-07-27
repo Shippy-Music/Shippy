@@ -1,18 +1,18 @@
 # Shippy Owner Build And Device Handoff
 
-This is the first full-build and physical-device path. The implementation pass
-intentionally did not run Gradle or build an APK on the Windows development PC.
+The first full Windows build and automated verification pass is complete.
+Physical-device verification remains the owner's next step.
 
 ## 1. Supported Build Environment
 
-Use WSL2 Ubuntu, native Linux, or the existing GitHub Actions Ubuntu workflow.
-Auxio's custom Media3 and TagLib tasks invoke Unix tooling and do not support a
-native Windows build.
+Native Windows, WSL2 Ubuntu, native Linux, and the existing GitHub Actions
+Ubuntu workflow are supported. On Windows, Git Bash supplies `sh`; the native
+bootstrap scripts normalize paths and use Ninja.
 
 Required baseline:
 
 - Recursive Git submodules
-- JDK 21 for the app build
+- JDK 17+ to launch Gradle; the configured Java toolchain supplies JDK 21
 - Android SDK/target 36
 - Android NDK `28.2.13676358`
 - CMake and `ninja-build`
@@ -21,14 +21,14 @@ Required baseline:
 
 ## 2. Build And Install
 
-From the repository root in Linux/WSL:
+From the repository root:
 
 ```bash
 git submodule update --init --recursive
 chmod +x gradlew
 ./gradlew spotlessCheck
-./gradlew app:testDebugUnitTest musikr:testDebug
-./gradlew app:packageDebug
+./gradlew app:testDebugUnitTest musikr:testDebugUnitTest app:lintDebug
+./gradlew app:assembleDebug
 (cd relay && npm test)
 ```
 
@@ -36,6 +36,29 @@ Expected APK:
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
+```
+
+Internal r10 artifact (superseded by Alpha Release 1):
+
+```text
+Drive: gdrive:Shippy Builds/Shippy-debug-4.1.3-20260727-r10.apk
+Size: 66,885,204 bytes
+SHA-256: 7264BD1B21DC627361836F001E20AC75E6F6760B2D145EC428B2974D79262162
+MD5: AD36C7FD31FBED9B023DDD1B14F3DEED
+Package: org.oxycblt.auxio.debug
+Label: Shippy Debug
+Minimum Android: API 24
+```
+
+The public replacement is `Shippy-Alpha-Release-1.apk`, version
+`0.1.0-alpha.1` (version code 74), package `org.oxycblt.auxio.debug`, label
+`Shippy Alpha`.
+
+```text
+Size: 61,015,449 bytes
+SHA-256: 82C83CA5C08F2485BBEE04F257F77C7B9274D80FD3A184DD1E285D3E6B62850E
+MD5: 243B69968BA227095A0A4B707A2A6CBB
+Signature: APK Signature Scheme v2, Android alpha/debug certificate
 ```
 
 Install through either Android Studio or:
@@ -51,31 +74,62 @@ attribute an upstream native-tool failure to Shippy source.
 
 ## 3. Single-Phone Acceptance
 
-1. Open Shippy and verify exactly Home, Search, Library, and Crew.
-2. Select Local folders, rescan, and play MP3, M4A, WAV, FLAC, Ogg/Opus, and AAC
+1. Open Shippy and repeatedly switch between Home, Search, Library, and Crew,
+   including Library -> Home with the mini-player visible. Confirm every tab
+   opens without closing the app.
+2. With the mini-player visible, scroll Home and Crew to their final controls.
+   Confirm no content is hidden behind the mini-player or primary navigation.
+3. Confirm the Home title and toolbar sit below the status bar, then open
+   Settings from the Home top-right gear. Leave Settings with Back, reopen it,
+   and confirm neither transition terminates the app.
+4. Expand the full player and confirm Queue is absent while closed. Open Queue
+   through its explicit action, close it, and confirm it never overlaps player
+   controls.
+5. Save a local and a provider track, open Liked, and confirm both visible song
+   rows match its count and can start playback.
+6. Select Local folders, rescan, and play MP3, M4A, WAV, FLAC, Ogg/Opus, and AAC
    samples available on the device.
-3. Confirm mini-player persistence, full-player expansion, and Back collapse.
-4. Create, rename, pin, reorder, and delete a user playlist. Confirm Liked,
+7. Confirm mini-player persistence; tap and upward-swipe expansion; downward
+   swipe collapse from the artwork, track identity, and the lyrics-at-top
+   regions; and Back collapse. With the player scrolled down, confirm content
+   scrolls to the top before the sheet collapses.
+8. Create, rename, pin, reorder, and delete a user playlist. Confirm Liked,
    Downloads, and Local cannot be deleted.
-5. Search JioSaavn and YouTube Music; play a track and a JioSaavn album,
-   playlist, and artist result.
-6. Set a download destination, download a provider track, disable networking,
+9. Switch Search between JioSaavn, YouTube, and YouTube Music; play a track
+   from each available source plus a JioSaavn album, playlist, and artist.
+10. Set a download destination, download a provider track, disable networking,
    and play it from its original context and Downloads.
-7. Verify queue replace, Play next, Add to queue, reorder, remove, shuffle,
-   repeat, and process-restart restoration.
-8. Check save/playlist membership, sharing, Song Information, lyrics, sleep
+11. Verify queue replace, Play next, Add to queue, reorder, remove, shuffle,
+   repeat, and process-restart restoration. Open Queue from a long playlist and
+   confirm it lands on the currently playing item. Confirm Shuffle retains the
+   neighboring spring/bounce seen on Repeat without hitching or delaying its
+   visible state.
+12. Check the three-dot action surface from Search, Home, the full player,
+    Library Songs/Downloads, and Crew. Confirm it opens immediately for the
+    selected track in every context and never appears after switching tabs.
+13. Check save/playlist membership, sharing, Song Information, lyrics, sleep
    timer, ReplayGain, gapless, and several crossfade durations.
-9. Connect Last.fm, scrobble an eligible listen, restart the app, and verify Home
+14. Confirm the Now Playing title-row plus/tick edits saved destinations; the
+    compact identity artwork is correct; Sleep Timer, conditional Download, and
+    Queue work; and top-right overflow contains the consolidated player actions.
+    Scroll to the synced lyrics preview, open the full lyrics sheet, seek, and
+    confirm both surfaces stay on one timeline. Confirm the active lyric is
+    larger/brighter, inactive lines are matte, overflow opens immediately, and
+    Local tracks do not show Download.
+15. Change streaming and download quality independently, then verify a new
+   stream and download still resolve on every enabled provider.
+16. Connect Last.fm, scrobble an eligible listen, restart the app, and verify Home
    shows the same account's cached/live activity without exposing credentials.
-10. Verify notification, lock screen, headset/Bluetooth, audio focus,
-    becoming-noisy pause, home-screen widgets, Quick Settings playback tile,
-    and Android Auto where available.
+17. Verify notification, lock screen, headset/Bluetooth, audio focus,
+   becoming-noisy pause, home-screen widgets, Quick Settings playback tile,
+   and Android Auto where available.
 
 ## 4. Crew LAN Acceptance
 
 Use two phones first, then three.
 
-1. Start a Crew, join through QR, and repeat through pasted link.
+1. Start a Crew and join through Google's native QR scanner, then repeat
+   through pasted link. Confirm Shippy never requests camera permission.
 2. Disconnect internet while retaining the LAN; confirm session controls and
    Local playback continue.
 3. From every phone, play/pause, seek, skip, replace the playlist, add, move, and
@@ -124,7 +178,7 @@ Record:
 
 ## 7. Deliberately Unverified In This Pass
 
-- APK compilation, generated Android code, and installation
+- Installation and behavior on physical Android devices
 - Codec/device-specific audio behavior and real crossfade/gapless quality
 - Live provider longevity and undocumented response drift
 - SAF grant/revocation behavior across OEMs

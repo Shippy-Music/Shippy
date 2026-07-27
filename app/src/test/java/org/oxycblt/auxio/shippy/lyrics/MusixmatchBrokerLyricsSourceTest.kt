@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * MusixmatchBrokerLyricsSourceTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * MusixmatchBrokerLyricsSourceTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.lyrics
 
 import java.io.IOException
@@ -37,23 +44,23 @@ class MusixmatchBrokerLyricsSourceTest {
 
     @Test
     fun `broker posts normalized identity only and returns Musixmatch record`() = runBlocking {
-        val transport =
-            FakeTransport {
-                response(
-                    200,
-                    """
-                    {
-                      "id": 42,
-                      "trackName": "Song",
-                      "artistName": "Artist Co",
-                      "albumName": "Album",
-                      "durationSeconds": 123.0,
-                      "plainLyrics": "Broker lyrics",
-                      "syncedLyrics": "[00:01.00] Broker lyrics"
-                    }
-                    """.trimIndent(),
-                )
-            }
+        val transport = FakeTransport {
+            response(
+                200,
+                """
+                {
+                  "id": 42,
+                  "trackName": "Song",
+                  "artistName": "Artist Co",
+                  "albumName": "Album",
+                  "durationSeconds": 123.0,
+                  "plainLyrics": "Broker lyrics",
+                  "syncedLyrics": "[00:01.00] Broker lyrics"
+                }
+                """
+                    .trimIndent(),
+            )
+        }
         val source = MusixmatchBrokerLyricsSource(transport, FakeSettings(ENDPOINT))
 
         val result =
@@ -87,26 +94,29 @@ class MusixmatchBrokerLyricsSourceTest {
         assertEquals(
             LyricsLookupResult.NotFound,
             MusixmatchBrokerLyricsSource(
-                FakeTransport { response(404, "") },
-                FakeSettings(ENDPOINT),
-            ).lookup(request()),
+                    FakeTransport { response(404, "") },
+                    FakeSettings(ENDPOINT),
+                )
+                .lookup(request()),
         )
         assertEquals(
             LyricsFailureKind.RATE_LIMITED,
             failureKind(
                 MusixmatchBrokerLyricsSource(
-                    FakeTransport { response(429, "") },
-                    FakeSettings(ENDPOINT),
-                ).lookup(request())
+                        FakeTransport { response(429, "") },
+                        FakeSettings(ENDPOINT),
+                    )
+                    .lookup(request())
             ),
         )
         assertEquals(
             LyricsFailureKind.SERVICE_UNAVAILABLE,
             failureKind(
                 MusixmatchBrokerLyricsSource(
-                    FakeTransport { response(503, "") },
-                    FakeSettings(ENDPOINT),
-                ).lookup(request())
+                        FakeTransport { response(503, "") },
+                        FakeSettings(ENDPOINT),
+                    )
+                    .lookup(request())
             ),
         )
     }
@@ -117,18 +127,20 @@ class MusixmatchBrokerLyricsSourceTest {
             LyricsFailureKind.NETWORK,
             failureKind(
                 MusixmatchBrokerLyricsSource(
-                    FakeTransport { throw IOException("offline") },
-                    FakeSettings(ENDPOINT),
-                ).lookup(request())
+                        FakeTransport { throw IOException("offline") },
+                        FakeSettings(ENDPOINT),
+                    )
+                    .lookup(request())
             ),
         )
         assertEquals(
             LyricsFailureKind.MALFORMED_RESPONSE,
             failureKind(
                 MusixmatchBrokerLyricsSource(
-                    FakeTransport { response(200, "not json") },
-                    FakeSettings(ENDPOINT),
-                ).lookup(request())
+                        FakeTransport { response(200, "not json") },
+                        FakeSettings(ENDPOINT),
+                    )
+                    .lookup(request())
             ),
         )
     }
@@ -193,7 +205,8 @@ class MusixmatchBrokerLyricsSourceTest {
                           "durationSeconds": 300.0,
                           "plainLyrics": "Wrong recording"
                         }
-                        """.trimIndent(),
+                        """
+                            .trimIndent(),
                     )
                 },
                 FakeSettings(ENDPOINT),
@@ -239,7 +252,7 @@ class MusixmatchBrokerLyricsSourceTest {
         (result as LyricsLookupResult.Failure).kind
 
     private class FakeTransport(
-        private val response: suspend (ProviderHttpRequest) -> ProviderHttpResponse,
+        private val response: suspend (ProviderHttpRequest) -> ProviderHttpResponse
     ) : ProviderHttpTransport {
         var request: ProviderHttpRequest? = null
 
@@ -249,9 +262,7 @@ class MusixmatchBrokerLyricsSourceTest {
         }
     }
 
-    private class FakeSettings(
-        override val endpoint: String?,
-    ) : MusixmatchBrokerSettings {
+    private class FakeSettings(override val endpoint: String?) : MusixmatchBrokerSettings {
         override fun setEndpoint(endpoint: String?) = Unit
 
         override fun registerListener(listener: Nothing) = Unit
@@ -259,9 +270,7 @@ class MusixmatchBrokerLyricsSourceTest {
         override fun unregisterListener(listener: Nothing) = Unit
     }
 
-    private class FakeClock(
-        var nowEpochMs: Long = 0,
-    ) : LyricsCacheClock {
+    private class FakeClock(var nowEpochMs: Long = 0) : LyricsCacheClock {
         override fun nowEpochMs(): Long = nowEpochMs
     }
 

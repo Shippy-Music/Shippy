@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewControlProtocolTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewControlProtocolTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.protocol
 
 import org.junit.Assert.assertEquals
@@ -117,7 +124,7 @@ class CrewControlProtocolTest {
                     candidates =
                         listOf(
                             publicProvider.copy(
-                                locator = "https://stream.example/private-provider",
+                                locator = "https://stream.example/private-provider"
                             ),
                             publicProvider.copy(
                                 id = CandidateId("local-private"),
@@ -260,9 +267,13 @@ class CrewControlProtocolTest {
             )
 
         assertRoundTrip(CrewControlMessage.AvailabilityAnnounced(announcement))
-        val malformedCode = CrewControlCodec.encode(CrewControlMessage.AvailabilityAnnounced(announcement))
+        val malformedCode =
+            CrewControlCodec.encode(CrewControlMessage.AvailabilityAnnounced(announcement))
         malformedCode[malformedCode.lastIndex] = 99.toByte()
-        assertEquals(CrewControlDecodeResult.Rejected.MALFORMED, CrewControlCodec.decode(malformedCode))
+        assertEquals(
+            CrewControlDecodeResult.Rejected.MALFORMED,
+            CrewControlCodec.decode(malformedCode),
+        )
     }
 
     @Test(expected = IllegalArgumentException::class)
@@ -321,10 +332,7 @@ class CrewControlProtocolTest {
         assertEquals(
             CrewControlFrameResult.Rejected.INTEGRITY_FAILED,
             CrewControlReassembler()
-                .accept(
-                    CrewTransportFrame(CrewTransportChannel.CONTROL, bytes),
-                    nowMonotonicMs = 0,
-                ),
+                .accept(CrewTransportFrame(CrewTransportChannel.CONTROL, bytes), nowMonotonicMs = 0),
         )
     }
 
@@ -357,9 +365,8 @@ class CrewControlProtocolTest {
     @Test(expected = IllegalArgumentException::class)
     fun `oversized metadata is rejected before framing`() {
         val item =
-            queueItem("oversized").copy(
-                track = queueItem("oversized").track.copy(title = "x".repeat(16 * 1024 + 1))
-            )
+            queueItem("oversized")
+                .copy(track = queueItem("oversized").track.copy(title = "x".repeat(16 * 1024 + 1)))
         CrewControlCodec.encode(
             CrewControlMessage.Request(
                 CrewActionRequest(

@@ -134,7 +134,10 @@ active/recent Crew context. It must not become a grid of every feature.
 Search finds songs, albums, artists, and playlists from enabled providers.
 Local results may appear in a clearly labelled **On this device** section for
 convenience, but remain local items and are never silently merged with provider
-records.
+records. The empty global-search state shows bounded recent searches with their
+last selected result metadata; clearing the query is a one-tap field action.
+Search launched from Library is explicitly local-only and does not contact
+providers.
 
 ### Library
 
@@ -160,7 +163,8 @@ The mini-player remains attached above primary navigation while media is active.
 Tapping or swiping it expands the full player. The full player contains artwork,
 track identity, seek/progress, essential playback controls, save/download
 affordances, queue access, lyrics below the primary controls, and a restrained
-secondary menu.
+secondary menu. Every expansion starts at the top of Now Playing rather than
+restoring an old lyrics scroll position.
 
 ## 5. Library And Storage Model
 
@@ -174,7 +178,9 @@ but are rule-driven views, not ordinary mutable playlist rows:
 - **Local** contains indexed files from user-approved device folders.
 
 They cannot be renamed or deleted. Removing a song from one collection changes
-that relationship only; it does not unexpectedly erase unrelated copies.
+that relationship only; it does not unexpectedly erase unrelated copies. Their
+names and artwork are source-controlled, but they may be pinned, unpinned, and
+reordered alongside user playlists.
 
 ### 5.2 User collections
 
@@ -185,7 +191,13 @@ User playlists support:
 - Mixed downloaded and streamable provider tracks
 - Local tracks
 - Pinning and sorting
+- User-selected artwork from Android's document picker
+- Per-playlist persisted sort mode
 - Queue playback in the playlist’s visible order
+
+Collection Download appears only while at least one eligible online track is
+missing. It downloads, resumes, or retries only those missing tracks; Local
+tracks and already available copies are skipped.
 
 ### 5.3 Local realm
 

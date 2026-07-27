@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * LastFm.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.lastfm
 
 import java.security.MessageDigest
@@ -24,12 +41,28 @@ data class LastFmCredentials(
         const val MAX_CREDENTIAL_FIELD_BYTES = 1024
     }
 
-    override fun toString(): String = "LastFmCredentials(username=$username, apiKey=redacted, apiSecret=redacted, sessionKey=redacted)"
+    override fun toString(): String =
+        "LastFmCredentials(username=$username, apiKey=redacted, apiSecret=redacted, sessionKey=redacted)"
 }
-interface LastFmCredentialRepository { suspend fun load(): LastFmCredentials?; suspend fun save(credentials: LastFmCredentials); suspend fun clear() }
 
-data class LastFmTrack(val artist: String, val title: String, val album: String?, val durationMs: Long?) {
-    init { require(artist.isNotBlank() && title.isNotBlank()) }
+interface LastFmCredentialRepository {
+    suspend fun load(): LastFmCredentials?
+
+    suspend fun save(credentials: LastFmCredentials)
+
+    suspend fun clear()
+}
+
+data class LastFmTrack(
+    val artist: String,
+    val title: String,
+    val album: String?,
+    val durationMs: Long?,
+) {
+    init {
+        require(artist.isNotBlank() && title.isNotBlank())
+    }
+
     companion object {
         fun from(item: QueueItem): LastFmTrack? =
             item.track.artists.firstOrNull(String::isNotBlank)?.let { artist ->
@@ -41,11 +74,16 @@ data class LastFmTrack(val artist: String, val title: String, val album: String?
 object LastFmSigning {
     fun signature(parameters: Map<String, String>, secret: String): String {
         val input = parameters.toSortedMap().entries.joinToString("") { it.key + it.value } + secret
-        return MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        return MessageDigest.getInstance("MD5")
+            .digest(input.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
 }
 
-internal fun LastFmTrack.outbox(startedAtEpochSeconds: Long, nowEpochMs: Long): LastFmScrobbleEntity {
+internal fun LastFmTrack.outbox(
+    startedAtEpochSeconds: Long,
+    nowEpochMs: Long,
+): LastFmScrobbleEntity {
     require(startedAtEpochSeconds > 0)
     return LastFmScrobbleEntity(
         UUID.randomUUID().toString(),

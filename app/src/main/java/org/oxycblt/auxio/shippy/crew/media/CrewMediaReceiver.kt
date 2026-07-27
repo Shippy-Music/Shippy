@@ -1,4 +1,20 @@
-/* Copyright (c) 2026 Shippy contributors */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * CrewMediaReceiver.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.crew.media
 
 import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaCache
@@ -8,17 +24,25 @@ data class CrewMediaReceiverPolicy(
     val maxAssemblies: Int = 2,
     val maxBufferedBytes: Long = CREW_MEDIA_MAX_OBJECT_BYTES,
 ) {
-    init { require(maxAssemblies > 0 && maxBufferedBytes > 0) }
+    init {
+        require(maxAssemblies > 0 && maxBufferedBytes > 0)
+    }
 }
 
 sealed interface CrewMediaReceiveResult {
     data object Accepted : CrewMediaReceiveResult
-    data class Complete(val manifest: CrewMediaManifest, val file: java.io.File) : CrewMediaReceiveResult
+
+    data class Complete(val manifest: CrewMediaManifest, val file: java.io.File) :
+        CrewMediaReceiveResult
+
     data class Retry(val reason: String) : CrewMediaReceiveResult
+
     data class Rejected(val reason: String) : CrewMediaReceiveResult
 }
 
-/** Bounded receiver: out-of-window media requests retry; protocol corruption is rejected locally. */
+/**
+ * Bounded receiver: out-of-window media requests retry; protocol corruption is rejected locally.
+ */
 class CrewMediaReceiver(
     private val activeSessionId: CrewSessionId,
     private val cache: CrewTemporaryMediaCache,
@@ -29,7 +53,8 @@ class CrewMediaReceiver(
     private var bufferedBytes = 0L
 
     fun accept(manifest: CrewMediaManifest): CrewMediaReceiveResult {
-        if (manifest.transfer.sessionId != activeSessionId) return CrewMediaReceiveResult.Rejected("wrong session")
+        if (manifest.transfer.sessionId != activeSessionId)
+            return CrewMediaReceiveResult.Rejected("wrong session")
         assemblies[manifest.transfer]?.let { existing ->
             return if (existing.manifest == manifest) {
                 CrewMediaReceiveResult.Accepted
@@ -37,7 +62,10 @@ class CrewMediaReceiver(
                 CrewMediaReceiveResult.Rejected("conflicting manifest")
             }
         }
-        if (assemblies.size >= policy.maxAssemblies || reservedBytes + manifest.objectSizeBytes > policy.maxBufferedBytes) {
+        if (
+            assemblies.size >= policy.maxAssemblies ||
+                reservedBytes + manifest.objectSizeBytes > policy.maxBufferedBytes
+        ) {
             return CrewMediaReceiveResult.Retry("receiver window full")
         }
         assemblies[manifest.transfer] = Assembly(manifest)
@@ -46,15 +74,21 @@ class CrewMediaReceiver(
     }
 
     fun accept(chunk: CrewMediaChunk): CrewMediaReceiveResult {
-        if (chunk.transfer.sessionId != activeSessionId) return CrewMediaReceiveResult.Rejected("wrong session")
-        val assembly = assemblies[chunk.transfer] ?: return CrewMediaReceiveResult.Retry("manifest required")
+        if (chunk.transfer.sessionId != activeSessionId)
+            return CrewMediaReceiveResult.Rejected("wrong session")
+        val assembly =
+            assemblies[chunk.transfer] ?: return CrewMediaReceiveResult.Retry("manifest required")
         if (assembly.manifest.objectIntegrity != chunk.objectIntegrity) {
             return CrewMediaReceiveResult.Rejected("wrong object")
         }
-        val descriptor = assembly.manifest.chunks.getOrNull(chunk.index)
-            ?: return CrewMediaReceiveResult.Rejected("unknown chunk")
+        val descriptor =
+            assembly.manifest.chunks.getOrNull(chunk.index)
+                ?: return CrewMediaReceiveResult.Rejected("unknown chunk")
         val payload = chunk.copyPayload()
-        if (payload.size != descriptor.sizeBytes || CrewMediaDigest.sha256(payload) != descriptor.integrity) {
+        if (
+            payload.size != descriptor.sizeBytes ||
+                CrewMediaDigest.sha256(payload) != descriptor.integrity
+        ) {
             return CrewMediaReceiveResult.Rejected("chunk integrity mismatch")
         }
         if (!assembly.chunks.containsKey(chunk.index)) {
@@ -64,7 +98,8 @@ class CrewMediaReceiver(
             assembly.chunks[chunk.index] = payload
             bufferedBytes += payload.size
         }
-        if (assembly.chunks.size != assembly.manifest.chunks.size) return CrewMediaReceiveResult.Accepted
+        if (assembly.chunks.size != assembly.manifest.chunks.size)
+            return CrewMediaReceiveResult.Accepted
         val objectBytes = ByteArray(assembly.manifest.objectSizeBytes.toInt())
         var offset = 0
         assembly.manifest.chunks.indices.forEach { index ->

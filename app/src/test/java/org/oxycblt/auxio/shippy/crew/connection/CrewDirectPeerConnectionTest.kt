@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewDirectPeerConnectionTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewDirectPeerConnectionTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.connection
 
 import java.util.concurrent.ConcurrentHashMap
@@ -55,7 +62,7 @@ import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewSessionDescriptionType
 
 class CrewDirectPeerConnectionTest {
     @Test
-    fun `two peers negotiate and authenticate the same direct Crew`() =
+    fun `two peers negotiate and authenticate the same direct Crew`() {
         runBlocking {
             val fixture = Fixture()
             val signals =
@@ -98,14 +105,8 @@ class CrewDirectPeerConnectionTest {
                         responder.state.filterIsInstance<CrewDirectPeerState.Connected>().first()
                     }
 
-                assertEquals(
-                    fixture.responderMemberId,
-                    initiatorConnected.transport.remoteMemberId,
-                )
-                assertEquals(
-                    fixture.initiatorMemberId,
-                    responderConnected.transport.remoteMemberId,
-                )
+                assertEquals(fixture.responderMemberId, initiatorConnected.transport.remoteMemberId)
+                assertEquals(fixture.initiatorMemberId, responderConnected.transport.remoteMemberId)
                 assertTrue(rtc.peer(FakeSide.INITIATOR).createsDataChannels)
                 assertFalse(rtc.peer(FakeSide.RESPONDER).createsDataChannels)
 
@@ -122,6 +123,7 @@ class CrewDirectPeerConnectionTest {
                 responder.close()
             }
         }
+    }
 
     private class Fixture {
         val now = System.currentTimeMillis()
@@ -149,19 +151,9 @@ class CrewDirectPeerConnectionTest {
         private val toResponder = Channel<CrewSignalMessage>(Channel.UNLIMITED)
 
         val initiator: CrewSignalPeer =
-            FakeSignalPeer(
-                sessionId,
-                responderMemberId,
-                toInitiator,
-                toResponder,
-            )
+            FakeSignalPeer(sessionId, responderMemberId, toInitiator, toResponder)
         val responder: CrewSignalPeer =
-            FakeSignalPeer(
-                sessionId,
-                initiatorMemberId,
-                toResponder,
-                toInitiator,
-            )
+            FakeSignalPeer(sessionId, initiatorMemberId, toResponder, toInitiator)
     }
 
     private class FakeSignalPeer(
@@ -208,13 +200,14 @@ class CrewDirectPeerConnectionTest {
                 ): CrewRtcNegotiationPeer {
                     assertTrue(iceServers.isEmpty())
                     return FakeRtcPeer(
-                        side,
-                        expectedSessionId,
-                        claimedRemoteMemberId,
-                        createsDataChannels,
-                        signalSink,
-                        this@FakeRtcLink,
-                    ).also { peers[side] = it }
+                            side,
+                            expectedSessionId,
+                            claimedRemoteMemberId,
+                            createsDataChannels,
+                            signalSink,
+                            this@FakeRtcLink,
+                        )
+                        .also { peers[side] = it }
                 }
             }
 
@@ -225,7 +218,7 @@ class CrewDirectPeerConnectionTest {
                 when (side) {
                     FakeSide.INITIATOR -> FakeSide.RESPONDER
                     FakeSide.RESPONDER -> FakeSide.INITIATOR
-                },
+                }
             )
     }
 
@@ -238,8 +231,7 @@ class CrewDirectPeerConnectionTest {
         private val link: FakeRtcLink,
     ) : CrewRtcNegotiationPeer {
         private val mutableState = MutableStateFlow(CrewTransportState.CONNECTING)
-        private val authenticationFrames =
-            Channel<CrewAuthenticationFrame>(Channel.UNLIMITED)
+        private val authenticationFrames = Channel<CrewAuthenticationFrame>(Channel.UNLIMITED)
         private val mutableGeneration = MutableStateFlow(-1L)
 
         override val negotiationState: StateFlow<CrewTransportState> = mutableState
@@ -297,7 +289,7 @@ class CrewDirectPeerConnectionTest {
         }
 
         override fun completeAuthentication(
-            binding: CrewAuthenticatedPeerBinding,
+            binding: CrewAuthenticatedPeerBinding
         ): CrewPeerTransport {
             require(binding.sessionId == expectedSessionId)
             require(binding.remoteMemberId == claimedRemoteMemberId)
@@ -314,12 +306,7 @@ class CrewDirectPeerConnectionTest {
 
         private fun emitCandidate(generation: Long) {
             signalSink.onLocalIceCandidate(
-                CrewIceCandidate(
-                    generation,
-                    "data",
-                    0,
-                    "candidate:${side.name.lowercase()}",
-                ),
+                CrewIceCandidate(generation, "data", 0, "candidate:${side.name.lowercase()}")
             )
         }
     }

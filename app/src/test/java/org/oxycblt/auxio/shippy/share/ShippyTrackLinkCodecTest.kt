@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * ShippyTrackLinkCodecTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.share
 
 import org.junit.Assert.assertEquals
@@ -24,7 +41,10 @@ class ShippyTrackLinkCodecTest {
         assertEquals(original.id, decoded.id)
         assertEquals(original.title, decoded.title)
         assertEquals(original.artists, decoded.artists)
-        assertEquals(original.candidates.single().sourceItemId, decoded.candidates.single().sourceItemId)
+        assertEquals(
+            original.candidates.single().sourceItemId,
+            decoded.candidates.single().sourceItemId,
+        )
         assertNull(decoded.candidates.single().locator)
         assertTrue(!link.contains("expired.example"))
         assertTrue(!link.contains("secret"))
@@ -47,10 +67,7 @@ class ShippyTrackLinkCodecTest {
         assertNull(ProviderTrackSharing.originalLink(track(sourceItemId = "bad/id")))
     }
 
-    private fun track(
-        locator: String? = null,
-        sourceItemId: String = "abc123_defG",
-    ) =
+    private fun track(locator: String? = null, sourceItemId: String = "abc123_defG") =
         Track(
             id = TrackId("youtube_music:$sourceItemId"),
             realm = TrackRealm.PROVIDER,

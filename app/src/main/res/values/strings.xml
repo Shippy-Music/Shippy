@@ -3,7 +3,7 @@
     <!-- Info namespace | App labels -->
     <eat-comment />
 
-    <string name="info_app_desc">A simple, rational music player for android.</string>
+    <string name="info_app_desc">Your music, every source, in one fast Android player.</string>
 
     <!-- Label Namespace | Static Labels -->
     <eat-comment />
@@ -102,6 +102,8 @@
     <!-- Search for music -->
     <string name="lbl_search">Search</string>
     <string name="lbl_searching_providers">Searching providers…</string>
+    <string name="lbl_music_source">Music source</string>
+    <string name="fmt_music_source">Source: %1$s</string>
     <string name="fmt_provider_temporarily_unavailable">%1$s is temporarily unavailable</string>
     <string name="fmt_provider_unavailable">%1$s is unavailable</string>
     <string name="msg_provider_playback_unavailable">This track is unavailable right now</string>
@@ -159,6 +161,7 @@
     <string name="lbl_queue_add">Add to queue</string>
 
     <string name="lbl_playlist_add">Add to playlist</string>
+    <string name="lbl_edit_playlists">Edit playlists</string>
 
     <string name="lbl_artist_details">Go to artist</string>
     <string name="lbl_album_details">Go to album</string>
@@ -209,6 +212,13 @@
     <string name="lbl_licenses">Licenses</string>
     <string name="lbl_library_counts">Library statistics</string>
     <string name="lbl_lyrics">Lyrics</string>
+    <string name="lbl_change_artwork">Change artwork</string>
+    <string name="lbl_clear">Clear</string>
+    <string name="lbl_recent_searches">Recent searches</string>
+    <string name="desc_scroll_for_lyrics">Scroll for lyrics</string>
+    <string name="lbl_close">Close</string>
+    <string name="desc_open_lyrics">Open synchronized lyrics</string>
+    <string name="lbl_show_lyrics">Show lyrics</string>
     <string name="lbl_collections">Collections</string>
     <string name="lbl_liked">Liked</string>
     <string name="lbl_downloads">Downloads</string>
@@ -216,6 +226,21 @@
     <string name="lbl_unpin">Unpin</string>
     <string name="lbl_pinned">Pinned</string>
     <string name="lbl_local">Local</string>
+    <string name="lbl_collection_order">Playlist order</string>
+    <string name="lbl_collection_by_title">Title</string>
+    <string name="lbl_collection_by_artist">Artist</string>
+    <string name="lbl_collection_by_duration">Duration</string>
+    <string name="lbl_playlist_by_author">Playlist · Rudra Tiwari</string>
+    <string name="lbl_liked_collection_subtitle">Songs you saved</string>
+    <string name="lbl_downloads_collection_subtitle">Available offline</string>
+    <string name="lbl_local_collection_subtitle">On this device</string>
+    <string name="fmt_collection_metadata">%1$d songs · %2$s</string>
+    <string name="fmt_collection_metadata_without_duration">%1$d songs</string>
+    <string name="desc_play_collection">Play this collection</string>
+    <string name="desc_shuffle_collection">Shuffle this collection</string>
+    <string name="desc_download_collection">Download available songs</string>
+    <string name="desc_collection_download_complete">All available songs are downloaded</string>
+    <string name="desc_collection_download_working">Collection downloads are in progress</string>
     <string name="lbl_shippy_playlists">Playlists</string>
     <string name="lbl_saved_from_providers">Saved albums, artists, and playlists</string>
     <string name="lbl_on_this_device">On this device</string>
@@ -229,7 +254,7 @@
     <string name="lbl_report">Report</string>
 
     <string name="lbl_author">Author</string>
-    <string name="lbl_author_name">Alexander Capehart</string>
+    <string name="lbl_author_name">Rudra Tiwari</string>
     <string name="lbl_feedback">Feedback</string>
     <string name="lbl_github">Make an issue on GitHub</string>
     <string name="lbl_email">Send an email</string>
@@ -277,6 +302,7 @@
     <string name="ttl_crew_qr_code">Join Crew</string>
     <string name="lng_crew_qr_code">Scan this code to join the Crew.</string>
     <string name="lng_scan_crew_qr_code">Point your camera at a Crew QR code.</string>
+    <string name="err_crew_qr_scan">Couldn’t scan this Crew code</string>
     <string name="ttl_react_to_crew">React to Crew</string>
     <string name="lbl_open_queue">Open queue</string>
     <string name="lbl_react_to_crew">React</string>
@@ -557,7 +583,15 @@
     <string name="desc_add_folder">Add folder</string>
     <string name="desc_music_location_delete">Remove folder</string>
 
-    <string name="desc_auxio_icon">Auxio icon</string>
+    <string name="desc_auxio_icon">Shippy icon</string>
+    <string name="set_playback_quality">Streaming quality</string>
+    <string name="set_download_quality">Download quality</string>
+    <string name="set_playback_and_downloads">Playback and downloads</string>
+    <string name="set_quality_low">Low · 96 kbps</string>
+    <string name="set_quality_medium">Medium · 160 kbps</string>
+    <string name="set_quality_high">High · 320 kbps</string>
+    <string name="set_key_playback_quality" translatable="false">playback_quality</string>
+    <string name="set_key_download_quality" translatable="false">download_quality</string>
     <string name="desc_no_cover">Album cover</string>
     <string name="desc_album_cover">Album cover for %s</string>
     <string name="desc_artist_image">Artist image for %s</string>
@@ -664,6 +698,7 @@
     <string name="desc_library_collection">%1$s. %2$s.</string>
     <string name="desc_loading_collection">Loading collection</string>
     <string name="desc_save_to_liked">Save to Liked</string>
+    <string name="lbl_remove_from_liked">Remove from Liked</string>
     <string name="desc_saved_to_liked">Saved to Liked</string>
     <string name="desc_edit_saved_destinations">Edit saved destinations</string>
     <string name="desc_download">Download</string>

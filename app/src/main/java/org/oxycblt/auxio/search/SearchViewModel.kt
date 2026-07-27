@@ -15,15 +15,14 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.search
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.async
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -36,14 +35,15 @@ import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.auxio.playback.PlaybackSettings
-import org.oxycblt.auxio.shippy.search.ProviderSearchSnapshot
-import org.oxycblt.auxio.shippy.search.UnifiedSearchRepository
 import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
 import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.playback.PlaybackStartResult
 import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
+import org.oxycblt.auxio.shippy.provider.ProviderDescriptor
 import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderEntityType
+import org.oxycblt.auxio.shippy.search.ProviderSearchSnapshot
+import org.oxycblt.auxio.shippy.search.UnifiedSearchRepository
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Library
@@ -65,10 +65,19 @@ constructor(
     private val playbackSettings: PlaybackSettings,
     private val unifiedSearchRepository: UnifiedSearchRepository,
     private val shippyPlaybackController: ShippyPlaybackController,
+    private val searchHistory: SearchHistoryStore,
 ) : ViewModel(), MusicRepository.UpdateListener {
     private var lastQuery: String? = null
     private var currentSearchJob: Job? = null
     private var currentProviderPlaybackJob: Job? = null
+    private var localOnly = false
+    val providerOptions: List<ProviderDescriptor> = unifiedSearchRepository.providers()
+    private val _selectedProvider =
+        MutableStateFlow(
+            unifiedSearchRepository.preferredProvider() ?: providerOptions.firstOrNull()
+        )
+    val selectedProvider: StateFlow<ProviderDescriptor?>
+        get() = _selectedProvider
 
     private val _searchResults = MutableStateFlow(listOf<Item>())
     /** The results of the last [search] call, if any. */
@@ -85,6 +94,13 @@ constructor(
 
     init {
         musicRepository.addUpdateListener(this)
+        viewModelScope.launch {
+            searchHistory.observe().collect { history ->
+                if (lastQuery.isNullOrBlank()) {
+                    _searchResults.value = history.asSearchItems()
+                }
+            }
+        }
     }
 
     override fun onCleared() {
@@ -113,7 +129,7 @@ constructor(
         val normalizedQuery = query?.trim().orEmpty()
         if (normalizedQuery.isEmpty()) {
             L.d("Cannot search for the current query, aborting")
-            _searchResults.value = listOf()
+            _searchResults.value = searchHistory.observe().value.asSearchItems()
             return
         }
 
@@ -122,9 +138,29 @@ constructor(
         L.d("Searching Shippy for $normalizedQuery")
         currentSearchJob =
             viewModelScope.launch {
-                val providerSearch = async { unifiedSearchRepository.search(normalizedQuery) }
+                val providerSearch =
+                    if (localOnly) {
+                        null
+                    } else {
+                        async {
+                            unifiedSearchRepository.search(
+                                normalizedQuery,
+                                _selectedProvider.value?.id,
+                            )
+                        }
+                    }
                 val localItems =
                     musicRepository.library?.let { searchImpl(it, normalizedQuery) }.orEmpty()
+                if (localOnly) {
+                    _searchResults.value =
+                        combineSearchResults(
+                            providers = null,
+                            localItems = localItems,
+                            providersLoading = false,
+                            filters = searchSettings.filters,
+                        )
+                    return@launch
+                }
                 _searchResults.value =
                     combineSearchResults(
                         providers = null,
@@ -134,7 +170,7 @@ constructor(
                     )
                 _searchResults.value =
                     combineSearchResults(
-                        providers = providerSearch.await(),
+                        providers = requireNotNull(providerSearch).await(),
                         localItems = localItems,
                         providersLoading = false,
                         filters = searchSettings.filters,
@@ -143,6 +179,11 @@ constructor(
     }
 
     fun playProviderTrack(track: Track) {
+        recordSearchSelection(
+            title = track.title,
+            subtitle = track.artists.joinToString(", ").ifBlank { track.album },
+            artwork = track.artwork,
+        )
         currentProviderPlaybackJob?.cancel()
         currentProviderPlaybackJob =
             viewModelScope.launch {
@@ -153,77 +194,95 @@ constructor(
             }
     }
 
+    fun selectProvider(provider: ProviderDescriptor) {
+        if (provider !in providerOptions || provider == _selectedProvider.value) return
+        _selectedProvider.value = provider
+        search(lastQuery)
+    }
+
+    fun setLocalOnly(enabled: Boolean) {
+        if (localOnly == enabled) return
+        localOnly = enabled
+        search(lastQuery)
+    }
+
+    fun recordSearchSelection(title: String, subtitle: String? = null, artwork: String? = null) {
+        val query = lastQuery?.takeIf(String::isNotBlank) ?: return
+        searchHistory.record(query, title, subtitle, artwork)
+    }
+
+    fun clearSearchHistory() {
+        searchHistory.clear()
+    }
+
     private fun combineSearchResults(
         providers: ProviderSearchSnapshot?,
         localItems: List<Item>,
         providersLoading: Boolean,
         filters: Set<MusicType>,
-    ): List<Item> =
-        buildList {
-            val providerTypesEnabled =
-                filters.isEmpty() ||
-                    filters.any {
-                        it == MusicType.SONGS ||
-                            it == MusicType.ALBUMS ||
-                            it == MusicType.ARTISTS ||
-                            it == MusicType.PLAYLISTS
-                    }
-            if (providersLoading && providerTypesEnabled) {
-                add(BasicHeader(R.string.lbl_searching_providers))
-            } else if (providerTypesEnabled) {
-                providers?.sections.orEmpty().forEach { section ->
-                    val entities =
-                        section.entities.filter { entity -> entity.allowedBy(filters) }
-                    val tracks =
-                        section.tracks
-                            .takeIf { filters.isEmpty() || MusicType.SONGS in filters }
-                            .orEmpty()
-                    if (section.failure == null && entities.isEmpty() && tracks.isEmpty()) {
-                        return@forEach
-                    }
-                    if (isNotEmpty()) add(PlainDivider(null))
-                    add(SearchTextHeader(section.provider.displayName))
-                    val failure = section.failure
-                    if (failure != null) {
-                        add(
-                            ProviderSearchFailureItem(
-                                providerName = section.provider.displayName,
-                                retryable = failure.retryable,
-                            )
+    ): List<Item> = buildList {
+        // Device matches are the fastest and cheapest answer. Keep them visibly separate, but
+        // surface them before remote provider sections so an already-owned song is never buried.
+        if (localItems.isNotEmpty()) {
+            add(BasicHeader(R.string.lbl_on_this_device))
+            addAll(localItems)
+        }
+
+        val providerTypesEnabled =
+            filters.isEmpty() ||
+                filters.any {
+                    it == MusicType.SONGS ||
+                        it == MusicType.ALBUMS ||
+                        it == MusicType.ARTISTS ||
+                        it == MusicType.PLAYLISTS
+                }
+        if (providersLoading && providerTypesEnabled) {
+            if (isNotEmpty()) add(PlainDivider(null))
+            add(BasicHeader(R.string.lbl_searching_providers))
+        } else if (providerTypesEnabled) {
+            providers?.sections.orEmpty().forEach { section ->
+                val entities = section.entities.filter { entity -> entity.allowedBy(filters) }
+                val tracks =
+                    section.tracks
+                        .takeIf { filters.isEmpty() || MusicType.SONGS in filters }
+                        .orEmpty()
+                if (section.failure == null && entities.isEmpty() && tracks.isEmpty()) {
+                    return@forEach
+                }
+                if (isNotEmpty()) add(PlainDivider(null))
+                add(SearchTextHeader(section.provider.displayName))
+                val failure = section.failure
+                if (failure != null) {
+                    add(
+                        ProviderSearchFailureItem(
+                            providerName = section.provider.displayName,
+                            retryable = failure.retryable,
                         )
-                    } else {
-                        ProviderEntityType.entries.forEach { type ->
-                            val typedEntities = entities.filter { it.type == type }
-                            if (typedEntities.isNotEmpty()) {
-                                add(BasicHeader(type.headerLabel))
-                                addAll(
-                                    typedEntities.map { entity ->
-                                        ProviderEntityItem(
-                                            section.provider.displayName,
-                                            entity,
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                        if (tracks.isNotEmpty()) {
-                            add(BasicHeader(R.string.lbl_songs))
+                    )
+                } else {
+                    ProviderEntityType.entries.forEach { type ->
+                        val typedEntities = entities.filter { it.type == type }
+                        if (typedEntities.isNotEmpty()) {
+                            add(BasicHeader(type.headerLabel))
                             addAll(
-                                tracks.map { track ->
-                                    ProviderTrackItem(section.provider.displayName, track)
+                                typedEntities.map { entity ->
+                                    ProviderEntityItem(section.provider.displayName, entity)
                                 }
                             )
                         }
                     }
+                    if (tracks.isNotEmpty()) {
+                        add(BasicHeader(R.string.lbl_songs))
+                        addAll(
+                            tracks.map { track ->
+                                ProviderTrackItem(section.provider.displayName, track)
+                            }
+                        )
+                    }
                 }
             }
-
-            if (localItems.isNotEmpty()) {
-                if (isNotEmpty()) add(PlainDivider(null))
-                add(BasicHeader(R.string.lbl_on_this_device))
-                addAll(localItems)
-            }
         }
+    }
 
     private fun ProviderEntity.allowedBy(filters: Set<MusicType>) =
         filters.isEmpty() ||
@@ -333,3 +392,13 @@ constructor(
         val SORT = Sort(Sort.Mode.ByName, Sort.Direction.ASCENDING)
     }
 }
+
+private fun List<RecentSearch>.asSearchItems(): List<Item> =
+    if (isEmpty()) {
+        emptyList()
+    } else {
+        buildList {
+            add(BasicHeader(R.string.lbl_recent_searches))
+            addAll(map(::RecentSearchItem))
+        }
+    }

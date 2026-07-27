@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.queue
 
 import android.content.Context
@@ -59,7 +58,11 @@ class QueueBottomSheetBehavior<V : View>(context: Context, attributeSet: Attribu
         // split-screen resize, where layout happens before insets are re-applied.
         val effectiveBarHeight = if (barHeight > 0) barHeight else getIdealBarHeight(child.context)
         expandedOffset = effectiveBarHeight + barSpacing
-        return super.onLayoutChild(parent, child, layoutDirection)
+        val laidOut = super.onLayoutChild(parent, child, layoutDirection)
+        // Queue is opened explicitly from the player action. Keeping its drag handle as a
+        // collapsed peek overlays the lowest playback controls on compact phones.
+        peekHeight = 0
+        return laidOut
     }
 
     override fun layoutDependsOn(parent: CoordinatorLayout, child: V, dependency: View) =
@@ -100,6 +103,9 @@ class QueueBottomSheetBehavior<V : View>(context: Context, attributeSet: Attribu
 
     override fun applyWindowInsets(child: View, insets: WindowInsets): WindowInsets {
         super.applyWindowInsets(child, insets)
+        // A closed Queue must be completely off-screen. Physical navigation/gesture insets are
+        // still delivered to the playback panel independently.
+        peekHeight = 0
         // Offset our expanded panel by the size of the playback bar, as that is shown when
         // we slide up the panel. Use ideal bar height as fallback when the bar hasn't been
         // measured yet (can occur when window insets are applied before onDependentViewChanged).

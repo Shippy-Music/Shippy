@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewPrivateSourceRegistryTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewPrivateSourceRegistryTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.media
 
 import org.junit.Assert.assertEquals
@@ -16,6 +28,7 @@ import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
+import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.domain.Track
@@ -75,15 +88,17 @@ class CrewPrivateSourceRegistryTest {
     @Test
     fun `provider realm is never stamped as a local contribution`() {
         val raw =
-            item().copy(
-                track =
-                    item()
-                        .track
-                        .copy(
-                            realm = TrackRealm.PROVIDER,
-                            candidates = listOf(providerCandidate("https://stream.example/audio")),
-                        )
-            )
+            item()
+                .copy(
+                    track =
+                        item()
+                            .track
+                            .copy(
+                                realm = TrackRealm.PROVIDER,
+                                candidates =
+                                    listOf(providerCandidate("https://stream.example/audio")),
+                            )
+                )
 
         assertNull(publicizeCrewQueueItem(raw, member).contributorId)
     }
@@ -102,12 +117,7 @@ class CrewPrivateSourceRegistryTest {
 
         assertEquals(
             "content://local/audio",
-            registry
-                .overlay(firstSession, member, publicItem)
-                .track
-                .candidates
-                .single()
-                .locator,
+            registry.overlay(firstSession, member, publicItem).track.candidates.single().locator,
         )
         assertNull(
             registry
@@ -118,12 +128,7 @@ class CrewPrivateSourceRegistryTest {
                 .locator
         )
         assertNull(
-            registry
-                .overlay(secondSession, member, publicItem)
-                .track
-                .candidates
-                .single()
-                .locator
+            registry.overlay(secondSession, member, publicItem).track.candidates.single().locator
         )
     }
 
@@ -141,23 +146,13 @@ class CrewPrivateSourceRegistryTest {
         registry.beginSession(firstSession)
         assertEquals(
             "content://local/audio",
-            registry
-                .overlay(firstSession, member, public.item)
-                .track
-                .candidates
-                .single()
-                .locator,
+            registry.overlay(firstSession, member, public.item).track.candidates.single().locator,
         )
 
         registry.beginSession(secondSession)
         registry.beginSession(firstSession)
         assertNull(
-            registry
-                .overlay(firstSession, member, public.item)
-                .track
-                .candidates
-                .single()
-                .locator
+            registry.overlay(firstSession, member, public.item).track.candidates.single().locator
         )
     }
 
@@ -177,44 +172,23 @@ class CrewPrivateSourceRegistryTest {
                 track =
                     publicItem.track.copy(
                         candidates =
-                            publicItem.track.candidates.map {
-                                it.copy(sourceItemId = "different")
-                            }
+                            publicItem.track.candidates.map { it.copy(sourceItemId = "different") }
                     )
             )
 
         assertNull(
-            registry
-                .overlay(firstSession, member, mismatched)
-                .track
-                .candidates
-                .single()
-                .locator
+            registry.overlay(firstSession, member, mismatched).track.candidates.single().locator
         )
 
         registry.prune(firstSession, emptyList())
         assertNull(
-            registry
-                .overlay(firstSession, member, publicItem)
-                .track
-                .candidates
-                .single()
-                .locator
+            registry.overlay(firstSession, member, publicItem).track.candidates.single().locator
         )
 
-        registry.captureAndPublicize(
-            firstSession,
-            member,
-            CrewAction.QueueItemInserted(item(), 0),
-        )
+        registry.captureAndPublicize(firstSession, member, CrewAction.QueueItemInserted(item(), 0))
         registry.endSession(firstSession)
         assertNull(
-            registry
-                .overlay(firstSession, member, publicItem)
-                .track
-                .candidates
-                .single()
-                .locator
+            registry.overlay(firstSession, member, publicItem).track.candidates.single().locator
         )
     }
 
@@ -223,36 +197,34 @@ class CrewPrivateSourceRegistryTest {
         val registry = CrewPrivateSourceRegistry()
         registry.beginSession(firstSession)
 
-        listOf("content:not-hierarchical", "content://", "%%%")
-            .forEach { locator ->
-                val raw =
-                    item().copy(
+        listOf("content:not-hierarchical", "content://", "%%%").forEach { locator ->
+            val raw =
+                item()
+                    .copy(
                         track =
                             item()
                                 .track
                                 .copy(
                                     candidates =
-                                        item().track.candidates.map {
-                                            it.copy(locator = locator)
-                                        }
+                                        item().track.candidates.map { it.copy(locator = locator) }
                                 )
                     )
-                val public =
-                    registry.captureAndPublicize(
-                        firstSession,
-                        member,
-                        CrewAction.QueueReplaced(listOf(raw)),
-                    ) as CrewAction.QueueReplaced
+            val public =
+                registry.captureAndPublicize(
+                    firstSession,
+                    member,
+                    CrewAction.QueueReplaced(listOf(raw)),
+                ) as CrewAction.QueueReplaced
 
-                assertNull(
-                    registry
-                        .overlay(firstSession, member, public.items.single())
-                        .track
-                        .candidates
-                        .single()
-                        .locator
-                )
-            }
+            assertNull(
+                registry
+                    .overlay(firstSession, member, public.items.single())
+                    .track
+                    .candidates
+                    .single()
+                    .locator
+            )
+        }
     }
 
     private fun item(): QueueItem {
@@ -299,6 +271,7 @@ class CrewPrivateSourceRegistryTest {
             sourceItemId = "provider-item",
             availability = CandidateAvailability.RESOLVABLE,
             locator = locator,
+            providerId = ProviderId("provider"),
         )
 
     private fun temporaryCandidate() =

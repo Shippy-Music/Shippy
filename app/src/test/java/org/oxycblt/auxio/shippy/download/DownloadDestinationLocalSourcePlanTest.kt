@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * DownloadDestinationLocalSourcePlanTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * DownloadDestinationLocalSourcePlanTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.download
 
 import org.junit.Assert.assertEquals
@@ -18,7 +25,8 @@ import org.junit.Test
 class DownloadDestinationLocalSourcePlanTest {
     @Test
     fun `preserves an already manual Local source`() {
-        val plan = plan(existing = listOf("manual"), previous = null, autoAdded = null, next = "manual")
+        val plan =
+            plan(existing = listOf("manual"), previous = null, autoAdded = null, next = "manual")
 
         assertEquals(listOf("manual"), plan.sourceUris)
         assertEquals(null, plan.autoAddedDestinationUri)
@@ -42,7 +50,8 @@ class DownloadDestinationLocalSourcePlanTest {
 
     @Test
     fun `adds the new destination as a Local source`() {
-        val plan = plan(existing = listOf("manual"), previous = null, autoAdded = null, next = "downloads")
+        val plan =
+            plan(existing = listOf("manual"), previous = null, autoAdded = null, next = "downloads")
 
         assertEquals(listOf("manual", "downloads"), plan.sourceUris)
         assertEquals("downloads", plan.autoAddedDestinationUri)
@@ -64,11 +73,6 @@ class DownloadDestinationLocalSourcePlanTest {
         assertFalse(plan.sourceChanged)
     }
 
-    private fun plan(
-        existing: List<String>,
-        previous: String?,
-        autoAdded: String?,
-        next: String,
-    ) =
+    private fun plan(existing: List<String>, previous: String?, autoAdded: String?, next: String) =
         DownloadDestinationLocalSourcePlan.create(existing, previous, autoAdded, next)
 }

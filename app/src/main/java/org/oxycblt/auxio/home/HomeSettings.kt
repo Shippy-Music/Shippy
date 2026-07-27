@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.home
 
 import android.content.Context
@@ -70,6 +69,10 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
         get() = sharedPreferences.getBoolean(getString(R.string.set_key_hide_collaborators), false)
 
     override fun migrate() {
+        val tabsKey = getString(R.string.set_key_home_tabs)
+        if (sharedPreferences.getInt(tabsKey, Tab.SEQUENCE_DEFAULT) == Tab.SEQUENCE_AUXIO_DEFAULT) {
+            sharedPreferences.edit { putInt(tabsKey, Tab.SEQUENCE_DEFAULT) }
+        }
         if (sharedPreferences.contains(OLD_KEY_LIB_TABS)) {
             L.d("Migrating tab setting")
             val oldTabs =
@@ -84,7 +87,7 @@ class HomeSettingsImpl @Inject constructor(@ApplicationContext context: Context)
             L.d("New tabs: $oldTabs")
 
             sharedPreferences.edit {
-                putInt(getString(R.string.set_key_home_tabs), Tab.toIntCode(oldTabs))
+                putInt(tabsKey, Tab.toIntCode(oldTabs))
                 remove(OLD_KEY_LIB_TABS)
             }
         }

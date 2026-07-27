@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewCoordinatorSequencer.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewCoordinatorSequencer.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.session
 
 import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
@@ -36,20 +43,12 @@ data class CrewActionRequest(
 }
 
 sealed interface CrewSequenceResult {
-    data class Published(
-        val event: DurableCrewEvent,
-        val state: CrewState,
-    ) : CrewSequenceResult
+    data class Published(val event: DurableCrewEvent, val state: CrewState) : CrewSequenceResult
 
-    data class Duplicate(
-        val event: DurableCrewEvent,
-        val state: CrewState,
-    ) : CrewSequenceResult
+    data class Duplicate(val event: DurableCrewEvent, val state: CrewState) : CrewSequenceResult
 
-    data class Rejected(
-        val reason: CrewSequenceRejection,
-        val state: CrewState,
-    ) : CrewSequenceResult
+    data class Rejected(val reason: CrewSequenceRejection, val state: CrewState) :
+        CrewSequenceResult
 }
 
 enum class CrewSequenceRejection {
@@ -81,8 +80,7 @@ class CrewCoordinatorSequencer(
         }
     }
 
-    @Synchronized
-    fun state(): CrewState = currentState
+    @Synchronized fun state(): CrewState = currentState
 
     @Synchronized
     fun sequence(
@@ -131,12 +129,7 @@ class CrewCoordinatorSequencer(
                 action = request.action,
             )
         return when (
-            val result =
-                reducer.apply(
-                    currentState,
-                    event,
-                    authenticatedPublisher = localMemberId,
-                )
+            val result = reducer.apply(currentState, event, authenticatedPublisher = localMemberId)
         ) {
             is CrewEventResult.Applied -> {
                 currentState = result.state
@@ -149,8 +142,7 @@ class CrewCoordinatorSequencer(
             is CrewEventResult.Rejected,
             is CrewEventResult.SnapshotRequired,
             is CrewEventResult.StaleSequenceRejected,
-            is CrewEventResult.StaleTermRejected ->
-                rejected(CrewSequenceRejection.ACTION_REJECTED)
+            is CrewEventResult.StaleTermRejected -> rejected(CrewSequenceRejection.ACTION_REJECTED)
         }
     }
 
@@ -161,10 +153,7 @@ class CrewCoordinatorSequencer(
             currentState.term
         }
 
-    private fun isAuthorizedAction(
-        action: CrewAction,
-        requester: CrewMemberId,
-    ): Boolean =
+    private fun isAuthorizedAction(action: CrewAction, requester: CrewMemberId): Boolean =
         when (action) {
             is CrewAction.MemberJoined -> requester == currentState.coordinatorMemberId
             is CrewAction.MemberUpdated -> action.member.id == requester

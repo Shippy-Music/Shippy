@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewJoinCoordinator.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewJoinCoordinator.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import java.io.Closeable
@@ -42,9 +49,7 @@ interface CrewJoinedSessionPort : Closeable {
 }
 
 /** Production adapter; dependencies for [CrewSessionEngine] remain outside this coordinator. */
-class CrewSessionEngineJoinPort(
-    private val engine: CrewSessionEngine,
-) : CrewJoinedSessionPort {
+class CrewSessionEngineJoinPort(private val engine: CrewSessionEngine) : CrewJoinedSessionPort {
     override suspend fun start() = engine.start()
 
     override fun attachPeer(transport: CrewPeerTransport) = engine.attachPeer(transport)
@@ -133,7 +138,8 @@ class CrewJoinCoordinator(
                     signalingPeer.remoteMemberClaim.protocolVersion != sessionId.protocolVersion ->
                     CrewJoinFailure.ProtocolMismatch
                 signalingPeer.sessionId != sessionId -> CrewJoinFailure.SessionMismatch
-                signalingPeer.remoteMemberClaim == localMemberId -> CrewJoinFailure.ClaimedLocalMember
+                signalingPeer.remoteMemberClaim == localMemberId ->
+                    CrewJoinFailure.ClaimedLocalMember
                 else -> null
             }
         synchronized(lock) {
@@ -144,18 +150,20 @@ class CrewJoinCoordinator(
             reject(invalid)
             return
         }
-        val created = runCatching { initiators.createInitiator(signalingPeer) }.getOrElse {
-            reject(CrewJoinFailure.ConnectionSetupFailed)
-            return
-        }
+        val created =
+            runCatching { initiators.createInitiator(signalingPeer) }
+                .getOrElse {
+                    reject(CrewJoinFailure.ConnectionSetupFailed)
+                    return
+                }
         synchronized(lock) { handle = created }
         stateJob = scope.launch { created.state.collect { observe(created, it) } }
-        timeoutJob = scope.launch {
-            delay(timeoutMs)
-            reject(CrewJoinFailure.TimedOut)
-        }
-        runCatching { created.start() }
-            .onFailure { reject(CrewJoinFailure.ConnectionSetupFailed) }
+        timeoutJob =
+            scope.launch {
+                delay(timeoutMs)
+                reject(CrewJoinFailure.TimedOut)
+            }
+        runCatching { created.start() }.onFailure { reject(CrewJoinFailure.ConnectionSetupFailed) }
     }
 
     private fun observe(
@@ -165,7 +173,8 @@ class CrewJoinCoordinator(
         if (synchronized(lock) { handle !== observedHandle || active || closed }) return
         when (directState) {
             is CrewDirectPeerState.Connected -> connected(observedHandle, directState.transport)
-            is CrewDirectPeerState.Failed -> reject(CrewJoinFailure.ConnectionFailed(directState.reason))
+            is CrewDirectPeerState.Failed ->
+                reject(CrewJoinFailure.ConnectionFailed(directState.reason))
             CrewDirectPeerState.Closed -> reject(CrewJoinFailure.ConnectionClosed)
             CrewDirectPeerState.New,
             CrewDirectPeerState.Negotiating,
@@ -173,25 +182,34 @@ class CrewJoinCoordinator(
         }
     }
 
-    private fun connected(observedHandle: CrewDirectConnectionHandle, transport: CrewPeerTransport) {
+    private fun connected(
+        observedHandle: CrewDirectConnectionHandle,
+        transport: CrewPeerTransport,
+    ) {
         if (transport.remoteMemberId != signalingPeer.remoteMemberClaim) {
             reject(CrewJoinFailure.MemberIdMismatch)
             return
         }
-        val startBootstrap = synchronized(lock) {
-            if (handle !== observedHandle || bootstrapJob != null || active || closed) false
-            else true
-        }
+        val startBootstrap =
+            synchronized(lock) {
+                if (handle !== observedHandle || bootstrapJob != null || active || closed) false
+                else true
+            }
         if (!startBootstrap) return
         mutableState.value = CrewJoinState.Bootstrapping
         bootstrapJob =
             scope.launch {
                 val accumulator = CrewJoinBootstrapAccumulator(sessionId, localMemberId)
                 transport.incoming.collect { frame ->
-                    when (val result = accumulator.accept(transport.remoteMemberId, frame, nowMonotonicMs())) {
+                    when (
+                        val result =
+                            accumulator.accept(transport.remoteMemberId, frame, nowMonotonicMs())
+                    ) {
                         CrewJoinBootstrapResult.Waiting -> Unit
-                        is CrewJoinBootstrapResult.Rejected -> reject(CrewJoinFailure.BootstrapRejected(result))
-                        is CrewJoinBootstrapResult.Accepted -> activate(observedHandle, transport, result.snapshot)
+                        is CrewJoinBootstrapResult.Rejected ->
+                            reject(CrewJoinFailure.BootstrapRejected(result))
+                        is CrewJoinBootstrapResult.Accepted ->
+                            activate(observedHandle, transport, result.snapshot)
                     }
                 }
             }
@@ -203,21 +221,29 @@ class CrewJoinCoordinator(
         snapshot: CrewSnapshot,
     ) {
         val joined =
-            runCatching { sessions.create(snapshot) }.getOrElse {
-                reject(CrewJoinFailure.SessionFailure)
-                return
+            runCatching { sessions.create(snapshot) }
+                .getOrElse {
+                    reject(CrewJoinFailure.SessionFailure)
+                    return
+                }
+        val mayActivate =
+            synchronized(lock) {
+                if (handle !== observedHandle || active || closed) false
+                else {
+                    session = joined
+                    true
+                }
             }
-        val mayActivate = synchronized(lock) {
-            if (handle !== observedHandle || active || closed) false else {
-                session = joined
-                true
-            }
-        }
         if (!mayActivate) {
             joined.close()
             return
         }
-        val started = runCatching { joined.start(); joined.attachPeer(transport) }.isSuccess
+        val started =
+            runCatching {
+                    joined.start()
+                    joined.attachPeer(transport)
+                }
+                .isSuccess
         if (!started) {
             reject(CrewJoinFailure.SessionFailure)
             return
@@ -233,12 +259,13 @@ class CrewJoinCoordinator(
     }
 
     private fun reject(reason: CrewJoinFailure) {
-        val resources = synchronized(lock) {
-            if (active || closed || mutableState.value is CrewJoinState.Rejected) return
-            closed = true
-            mutableState.value = CrewJoinState.Rejected(reason)
-            Pair(handle, session)
-        }
+        val resources =
+            synchronized(lock) {
+                if (active || closed || mutableState.value is CrewJoinState.Rejected) return
+                closed = true
+                mutableState.value = CrewJoinState.Rejected(reason)
+                Pair(handle, session)
+            }
         resources.first?.close()
         resources.second?.close()
         signalingPeer.close()
@@ -246,12 +273,13 @@ class CrewJoinCoordinator(
     }
 
     override fun close() {
-        val resources = synchronized(lock) {
-            if (closed) return
-            closed = true
-            if (!active) mutableState.value = CrewJoinState.Rejected(CrewJoinFailure.Closed)
-            Pair(handle, session)
-        }
+        val resources =
+            synchronized(lock) {
+                if (closed) return
+                closed = true
+                if (!active) mutableState.value = CrewJoinState.Rejected(CrewJoinFailure.Closed)
+                Pair(handle, session)
+            }
         resources.first?.close()
         resources.second?.close()
         signalingPeer.close()

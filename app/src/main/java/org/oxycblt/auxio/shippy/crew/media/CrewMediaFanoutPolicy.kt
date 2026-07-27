@@ -1,4 +1,20 @@
-/* Copyright (c) 2026 Shippy contributors */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * CrewMediaFanoutPolicy.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.crew.media
 
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
@@ -12,7 +28,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
  * to the same target.
  */
 internal class CrewMediaFanoutPolicy(
-    private val maxConcurrentUploads: Int = MAX_CONCURRENT_UPLOADS,
+    private val maxConcurrentUploads: Int = MAX_CONCURRENT_UPLOADS
 ) {
     init {
         require(maxConcurrentUploads > 0)
@@ -25,8 +41,10 @@ internal class CrewMediaFanoutPolicy(
         when {
             transfer in activeTransfers -> Result.Duplicate
             activeTransfers.size >= maxConcurrentUploads -> Result.RetryLater
-            activeTransfers.any { it.supplierMemberId == transfer.supplierMemberId && it.targetMemberId == transfer.targetMemberId } ->
-                Result.RetryLater
+            activeTransfers.any {
+                it.supplierMemberId == transfer.supplierMemberId &&
+                    it.targetMemberId == transfer.targetMemberId
+            } -> Result.RetryLater
             else -> {
                 activeTransfers += transfer
                 Result.Acquired
@@ -38,8 +56,7 @@ internal class CrewMediaFanoutPolicy(
         activeTransfers -= transfer
     }
 
-    @Synchronized
-    fun hasPermit(transfer: CrewMediaTransferRef) = transfer in activeTransfers
+    @Synchronized fun hasPermit(transfer: CrewMediaTransferRef) = transfer in activeTransfers
 
     @Synchronized
     fun releaseForTarget(targetMemberId: CrewMemberId) {
@@ -51,10 +68,13 @@ internal class CrewMediaFanoutPolicy(
         activeTransfers.clear()
     }
 
-    @Synchronized
-    internal fun activeCountForTest() = activeTransfers.size
+    @Synchronized internal fun activeCountForTest() = activeTransfers.size
 
-    internal enum class Result { Acquired, Duplicate, RetryLater }
+    internal enum class Result {
+        Acquired,
+        Duplicate,
+        RetryLater,
+    }
 
     private companion object {
         const val MAX_CONCURRENT_UPLOADS = 2

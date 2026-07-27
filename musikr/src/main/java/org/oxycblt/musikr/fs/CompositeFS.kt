@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CompositeFS.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CompositeFS.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -9,10 +9,12 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.musikr.fs
 
 import kotlinx.coroutines.CancellationException
@@ -52,19 +54,22 @@ class CompositeFS(private val primary: FS, private val secondary: FS) : FS {
 
     override fun track(): Flow<FSUpdate> = merge(primary.track(), secondary.track())
 
-    private suspend fun forward(source: FS, destination: Channel<File>, seenPaths: MutableSet<Path>) =
-        coroutineScope {
-            val sourceFiles = Channel<File>(Channel.UNLIMITED)
-            val forwardTask =
-                async(Dispatchers.Default) {
-                    for (file in sourceFiles) {
-                        if (seenPaths.add(file.path)) {
-                            destination.send(file)
-                        }
+    private suspend fun forward(
+        source: FS,
+        destination: Channel<File>,
+        seenPaths: MutableSet<Path>,
+    ) = coroutineScope {
+        val sourceFiles = Channel<File>(Channel.UNLIMITED)
+        val forwardTask =
+            async(Dispatchers.Default) {
+                for (file in sourceFiles) {
+                    if (seenPaths.add(file.path)) {
+                        destination.send(file)
                     }
                 }
-            val result = source.explore(sourceFiles).await()
-            result.getOrThrow()
-            forwardTask.await()
-        }
+            }
+        val result = source.explore(sourceFiles).await()
+        result.getOrThrow()
+        forwardTask.await()
+    }
 }

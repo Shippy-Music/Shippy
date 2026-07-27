@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * PlaybackQuickSettingsTileService.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * PlaybackQuickSettingsTileService.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.playback.service
 
 import android.content.ComponentName
@@ -75,17 +74,11 @@ class PlaybackQuickSettingsTileService : TileService(), PlaybackStateManager.Lis
 
     override fun onIndexMoved(index: Int) = updateWhileListening()
 
-    override fun onQueueChanged(
-        queue: List<Song>,
-        index: Int,
-        change: QueueChange,
-    ) = updateWhileListening()
+    override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) =
+        updateWhileListening()
 
-    override fun onQueueReordered(
-        queue: List<Song>,
-        index: Int,
-        isShuffled: Boolean,
-    ) = updateWhileListening()
+    override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) =
+        updateWhileListening()
 
     override fun onNewPlayback(
         parent: MusicParent?,
@@ -123,15 +116,17 @@ class PlaybackQuickSettingsTileService : TileService(), PlaybackStateManager.Lis
 
     private fun updateTile() {
         val tile = qsTile ?: return
-        val state = quickSettingsTileState(
-            hasCurrentItem = playbackManager.currentQueueItem != null,
-            isPlaying = playbackManager.progression.isPlaying,
-        )
+        val state =
+            quickSettingsTileState(
+                hasCurrentItem = playbackManager.currentQueueItem != null,
+                isPlaying = playbackManager.progression.isPlaying,
+            )
         tile.state = state
-        tile.icon = Icon.createWithResource(
-            this,
-            if (state == Tile.STATE_ACTIVE) R.drawable.ic_pause_24 else R.drawable.ic_play_24,
-        )
+        tile.icon =
+            Icon.createWithResource(
+                this,
+                if (state == Tile.STATE_ACTIVE) R.drawable.ic_pause_24 else R.drawable.ic_play_24,
+            )
         tile.label = getString(R.string.lbl_playback)
         tile.updateTile()
     }
@@ -143,7 +138,7 @@ class PlaybackQuickSettingsTileService : TileService(), PlaybackStateManager.Lis
                 .putExtra(
                     Intent.EXTRA_KEY_EVENT,
                     KeyEvent(action, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE),
-                ),
+                )
         )
     }
 }

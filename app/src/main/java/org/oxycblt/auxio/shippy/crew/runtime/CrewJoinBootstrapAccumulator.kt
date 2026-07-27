@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewJoinBootstrapAccumulator.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewJoinBootstrapAccumulator.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
@@ -21,8 +28,9 @@ import org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame
 /**
  * Receives authenticated CONTROL frames while a joining member waits for its admission snapshot.
  *
- * This deliberately owns no transport and creates no [org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine].
- * The caller supplies the authenticated remote identity for every frame.
+ * This deliberately owns no transport and creates no
+ * [org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine]. The caller supplies the authenticated
+ * remote identity for every frame.
  */
 class CrewJoinBootstrapAccumulator(
     private val expectedSessionId: CrewSessionId,
@@ -51,7 +59,8 @@ class CrewJoinBootstrapAccumulator(
             is CrewControlFrameResult.Pending -> CrewJoinBootstrapResult.Waiting
             is CrewControlFrameResult.Rejected ->
                 CrewJoinBootstrapResult.Rejected.Framing(frameResult)
-            is CrewControlFrameResult.Complete -> acceptMessage(authenticatedMemberId, frameResult.message)
+            is CrewControlFrameResult.Complete ->
+                acceptMessage(authenticatedMemberId, frameResult.message)
         }
     }
 
@@ -85,9 +94,8 @@ class CrewJoinBootstrapAccumulator(
 sealed interface CrewJoinBootstrapResult {
     data object Waiting : CrewJoinBootstrapResult
 
-    data class Accepted(
-        val snapshot: org.oxycblt.auxio.shippy.crew.core.CrewSnapshot,
-    ) : CrewJoinBootstrapResult
+    data class Accepted(val snapshot: org.oxycblt.auxio.shippy.crew.core.CrewSnapshot) :
+        CrewJoinBootstrapResult
 
     sealed interface Rejected : CrewJoinBootstrapResult {
         data object WrongChannel : Rejected

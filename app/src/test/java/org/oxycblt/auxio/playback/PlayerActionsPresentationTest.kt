@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * PlayerActionsPresentationTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * PlayerActionsPresentationTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.playback
 
 import org.junit.Assert.assertTrue
@@ -27,27 +39,31 @@ class PlayerActionsPresentationTest {
                 CandidateId("local:candidate"),
                 null,
                 setOf(ProviderId("jiosaavn")),
-            ) is
-                PlayerDownloadPresentation.Hidden
+            )
+                is PlayerDownloadPresentation.Hidden
         )
     }
 
     @Test
     fun `local tracks show download for the resolved available Crew temporary candidate`() {
-        val track = localTrack().copy(
-            candidates = localTrack().candidates + TrackCandidate(
-                id = CandidateId("crew:candidate"),
-                trackId = TrackId("local:track"),
-                kind = CandidateKind.CREW_TEMPORARY,
-                sourceId = "crew-temporary",
-                sourceItemId = "song",
-                availability = CandidateAvailability.AVAILABLE,
-                locator = "file:/private/crew-media",
-            )
-        )
+        val track =
+            localTrack()
+                .copy(
+                    candidates =
+                        localTrack().candidates +
+                            TrackCandidate(
+                                id = CandidateId("crew:candidate"),
+                                trackId = TrackId("local:track"),
+                                kind = CandidateKind.CREW_TEMPORARY,
+                                sourceId = "crew-temporary",
+                                sourceItemId = "song",
+                                availability = CandidateAvailability.AVAILABLE,
+                                locator = "file:/private/crew-media",
+                            )
+                )
         assertTrue(
-            downloadPresentation(track, CandidateId("crew:candidate"), null, emptySet()) is
-                PlayerDownloadPresentation.Ready
+            downloadPresentation(track, CandidateId("crew:candidate"), null, emptySet())
+                is PlayerDownloadPresentation.Ready
         )
     }
 
@@ -59,8 +75,8 @@ class PlayerActionsPresentationTest {
                 CandidateId("provider:candidate"),
                 null,
                 setOf(ProviderId("jiosaavn")),
-            ) is
-                PlayerDownloadPresentation.Ready
+            )
+                is PlayerDownloadPresentation.Ready
         )
     }
 
@@ -72,8 +88,8 @@ class PlayerActionsPresentationTest {
                 CandidateId("provider:candidate"),
                 null,
                 emptySet(),
-            ) is
-                PlayerDownloadPresentation.Hidden
+            )
+                is PlayerDownloadPresentation.Hidden
         )
     }
 
@@ -85,8 +101,8 @@ class PlayerActionsPresentationTest {
                 CandidateId("other:candidate"),
                 null,
                 setOf(ProviderId("jiosaavn")),
-            ) is
-                PlayerDownloadPresentation.Hidden
+            )
+                is PlayerDownloadPresentation.Hidden
         )
     }
 
@@ -94,11 +110,7 @@ class PlayerActionsPresentationTest {
     fun `synced lyrics stay empty before the first timestamp`() {
         val lyrics =
             SyncedLyrics(
-                lines =
-                    listOf(
-                        SyncedLyricLine(2_000, "First"),
-                        SyncedLyricLine(4_000, "Second"),
-                    ),
+                lines = listOf(SyncedLyricLine(2_000, "First"), SyncedLyricLine(4_000, "Second")),
                 plainText = "First\nSecond",
             )
 

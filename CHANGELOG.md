@@ -1,3 +1,28 @@
+## Shippy Alpha Release 1
+
+Shippy's first public alpha combines an Android-native local player with a
+unified provider/download model and the first complete Crew collaboration
+foundation.
+
+### Included
+
+- Home, Search, Library, and Crew navigation with a persistent mini-player
+- Local, Liked, Downloads, and user playlists
+- JioSaavn, YouTube, and YouTube Music search and playback
+- User-selected download storage and offline playback
+- Full player, queue, synced lyrics, sleep timer, ReplayGain, gapless playback,
+  crossfade, widgets, Android Auto, and Quick Settings controls
+- Crew shared queue, playback synchronization, reactions, QR joining, LAN and
+  hosted-relay signaling, and temporary active-Crew Push/Pull media
+
+### Alpha limitations
+
+- Provider integrations rely on external services and may break when those
+  services change.
+- Crew requires broader multi-phone, NAT, relay, and network-change testing.
+- Accessibility hardening is scheduled before the stable release.
+- This build uses the alpha application ID and signing path.
+
 ## v4.1.3
 
 ## What's Fixed

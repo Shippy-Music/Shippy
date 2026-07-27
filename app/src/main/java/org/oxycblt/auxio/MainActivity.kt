@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio
 
 import android.content.Intent
@@ -150,7 +149,8 @@ class MainActivity : AppCompatActivity() {
                 lifecycleScope.launch {
                     when (shippyPlaybackController.play(track)) {
                         is PlaybackStartResult.Started -> Unit
-                        is PlaybackStartResult.Failed -> showToast(R.string.msg_shippy_track_unavailable)
+                        is PlaybackStartResult.Failed ->
+                            showToast(R.string.msg_shippy_track_unavailable)
                     }
                 }
             }

@@ -1,41 +1,66 @@
-/* Copyright (c) 2026 Shippy contributors */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * CrewMediaTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.crew.media
 
-import java.io.File
 import java.io.ByteArrayInputStream
+import java.io.File
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaCache
+import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
-import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
-import org.oxycblt.auxio.shippy.domain.CandidateId
-import org.oxycblt.auxio.shippy.domain.QueueItemId
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.emptyFlow
 import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
-import org.oxycblt.auxio.shippy.crew.transport.CrewTransportState
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame
+import org.oxycblt.auxio.shippy.crew.transport.CrewTransportState
+import org.oxycblt.auxio.shippy.domain.CandidateId
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 
 class CrewMediaTest {
     @Test
     fun `manifest and chunks round trip without locators or secrets`() {
         val manifest = manifest(byteArrayOf(1, 2), byteArrayOf(3, 4, 5))
-        val decoded = CrewMediaWireCodec.decode(CrewMediaWireCodec.encode(CrewMediaWireFrame.Manifest(manifest)))
+        val decoded =
+            CrewMediaWireCodec.decode(
+                CrewMediaWireCodec.encode(CrewMediaWireFrame.Manifest(manifest))
+            )
 
         assertEquals(CrewMediaWireFrame.Manifest(manifest), decoded)
         assertEquals(
             CrewMediaWireFrame.Chunk(chunk(manifest, 0, byteArrayOf(1, 2))),
             CrewMediaWireCodec.decode(
-                CrewMediaWireCodec.encode(CrewMediaWireFrame.Chunk(chunk(manifest, 0, byteArrayOf(1, 2)))),
+                CrewMediaWireCodec.encode(
+                    CrewMediaWireFrame.Chunk(chunk(manifest, 0, byteArrayOf(1, 2)))
+                )
             ),
         )
-        assertFalse(CrewMediaWireCodec.encode(CrewMediaWireFrame.Manifest(manifest)).decodeToString().contains("file:"))
+        assertFalse(
+            CrewMediaWireCodec.encode(CrewMediaWireFrame.Manifest(manifest))
+                .decodeToString()
+                .contains("file:")
+        )
     }
 
     @Test
@@ -52,7 +77,10 @@ class CrewMediaTest {
         val complete = receiver.accept(chunk(manifest, 0, first)) as CrewMediaReceiveResult.Complete
         assertEquals(manifest, complete.manifest)
         assertTrue(complete.file.isFile)
-        assertArrayEquals(first + second, cache.read(manifest.transfer.sessionId, manifest.objectIntegrity))
+        assertArrayEquals(
+            first + second,
+            cache.read(manifest.transfer.sessionId, manifest.objectIntegrity),
+        )
     }
 
     @Test
@@ -80,11 +108,22 @@ class CrewMediaTest {
         val manifest = manifest(byteArrayOf(1, 2), byteArrayOf(3, 4, 5))
         val cache = CrewTemporaryMediaCache(tempDirectory())
         cache.beginSession(manifest.transfer.sessionId)
-        val receiver = CrewMediaReceiver(manifest.transfer.sessionId, cache, CrewMediaReceiverPolicy(maxAssemblies = 1, maxBufferedBytes = 5))
+        val receiver =
+            CrewMediaReceiver(
+                manifest.transfer.sessionId,
+                cache,
+                CrewMediaReceiverPolicy(maxAssemblies = 1, maxBufferedBytes = 5),
+            )
 
         assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(manifest))
-        assertTrue(receiver.accept(chunk(manifest, 0, byteArrayOf(9, 9))) is CrewMediaReceiveResult.Rejected)
-        assertTrue(receiver.accept(manifest.copy(objectIntegrity = CrewMediaDigest.sha256(byteArrayOf(9)))) is CrewMediaReceiveResult.Retry)
+        assertTrue(
+            receiver.accept(chunk(manifest, 0, byteArrayOf(9, 9)))
+                is CrewMediaReceiveResult.Rejected
+        )
+        assertTrue(
+            receiver.accept(manifest.copy(objectIntegrity = CrewMediaDigest.sha256(byteArrayOf(9))))
+                is CrewMediaReceiveResult.Rejected
+        )
     }
 
     @Test
@@ -117,7 +156,10 @@ class CrewMediaTest {
         val old = manifest(byteArrayOf(1))
         cache.beginSession(old.transfer.sessionId)
         cache.put(old, byteArrayOf(1))
-        val current = old.copy(transfer = old.transfer.copy(sessionId = CrewSessionId("next", ProtocolVersion(1))))
+        val current =
+            old.copy(
+                transfer = old.transfer.copy(sessionId = CrewSessionId("next", ProtocolVersion(1)))
+            )
 
         cache.beginSession(current.transfer.sessionId)
         assertEquals(null, cache.read(old.transfer.sessionId, old.objectIntegrity))
@@ -142,37 +184,54 @@ class CrewMediaTest {
     fun `request protocol frames round trip and keep exact target supplier identity`() {
         val transfer = manifest(byteArrayOf(1)).transfer
         listOf(
-            CrewMediaWireFrame.Request(transfer), CrewMediaWireFrame.Cancel(transfer),
-            CrewMediaWireFrame.ManifestAccepted(transfer), CrewMediaWireFrame.RetryLater(transfer),
-            CrewMediaWireFrame.Rejected(transfer), CrewMediaWireFrame.ObjectComplete(transfer),
-        ).forEach { assertEquals(it, CrewMediaWireCodec.decode(CrewMediaWireCodec.encode(it))) }
+                CrewMediaWireFrame.Request(transfer),
+                CrewMediaWireFrame.Cancel(transfer),
+                CrewMediaWireFrame.ManifestAccepted(transfer),
+                CrewMediaWireFrame.RetryLater(transfer),
+                CrewMediaWireFrame.Rejected(transfer),
+                CrewMediaWireFrame.ObjectComplete(transfer),
+            )
+            .forEach { assertEquals(it, CrewMediaWireCodec.decode(CrewMediaWireCodec.encode(it))) }
     }
 
     @Test
     fun `transfer codec preserves exact queue item identity and bounds it`() {
         val transfer = manifest(byteArrayOf(1)).transfer
-        val decoded = CrewMediaWireCodec.decode(CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(transfer)))
-            as CrewMediaWireFrame.Request
+        val decoded =
+            CrewMediaWireCodec.decode(
+                CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(transfer))
+            ) as CrewMediaWireFrame.Request
         assertEquals(transfer.queueItemId, decoded.transfer.queueItemId)
-        val previousVersion = CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(transfer))
-            .also { it[0] = 2 }
+        val previousVersion =
+            CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(transfer)).also { it[0] = 2 }
         assertTrue(runCatching { CrewMediaWireCodec.decode(previousVersion) }.isFailure)
-        val tooLong = transfer.copy(queueItemId = QueueItemId("q".repeat(CREW_MEDIA_MAX_ID_BYTES + 1)))
-        assertTrue(runCatching { CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(tooLong)) }.isFailure)
+        val tooLong =
+            transfer.copy(queueItemId = QueueItemId("q".repeat(CREW_MEDIA_MAX_ID_BYTES + 1)))
+        assertTrue(
+            runCatching { CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(tooLong)) }.isFailure
+        )
     }
 
     @Test
     fun `producer bounds source before transfer and emits verified chunks`() {
         val bytes = byteArrayOf(1, 2, 3)
-        val source = object : CrewAuthorizedMediaSource {
-            override val lengthBytes = bytes.size.toLong()
-            override val mimeType = "audio/test"
-            override fun open() = ByteArrayInputStream(bytes)
-        }
+        val source =
+            object : CrewAuthorizedMediaSource {
+                override val lengthBytes = bytes.size.toLong()
+                override val mimeType = "audio/test"
+
+                override fun open() = ByteArrayInputStream(bytes)
+            }
         val (manifest, chunks) = CrewMediaProducer.produce(manifest(bytes).transfer, source)
         assertEquals(CrewMediaDigest.sha256(bytes), manifest.objectIntegrity)
-        assertEquals(CrewMediaDigest.sha256(bytes), chunks.single().let { CrewMediaDigest.sha256(it.copyPayload()) })
-        assertTrue(runCatching { CrewMediaWireCodec.decode(ByteArray(CREW_MEDIA_MAX_FRAME_BYTES + 1)) }.isFailure)
+        assertEquals(
+            CrewMediaDigest.sha256(bytes),
+            chunks.single().let { CrewMediaDigest.sha256(it.copyPayload()) },
+        )
+        assertTrue(
+            runCatching { CrewMediaWireCodec.decode(ByteArray(CREW_MEDIA_MAX_FRAME_BYTES + 1)) }
+                .isFailure
+        )
     }
 
     @Test
@@ -181,20 +240,39 @@ class CrewMediaTest {
         val policy = ActiveCrewPushPullPolicy().also { it.activate(transfer.sessionId, true) }
         val peer = FakePeer(transfer.targetMemberId)
         val media = CrewMediaTransport(transfer.sessionId, policy, peer)
-        val supplier = CrewMediaTransferController(transfer.sessionId, transfer.supplierMemberId, peer, media, policy)
-        assertEquals(CrewMediaTransferState.REQUESTED, supplier.receive(CrewMediaWireFrame.Request(transfer)))
+        val supplier =
+            CrewMediaTransferController(
+                transfer.sessionId,
+                transfer.supplierMemberId,
+                peer,
+                media,
+                policy,
+            )
+        assertEquals(
+            CrewMediaTransferState.REQUESTED,
+            supplier.receive(CrewMediaWireFrame.Request(transfer)),
+        )
         val wrong = transfer.copy(targetMemberId = CrewMemberId("other", ProtocolVersion(1)))
-        assertEquals(CrewMediaTransferState.REJECTED, supplier.receive(CrewMediaWireFrame.Request(wrong)))
+        assertEquals(
+            CrewMediaTransferState.REJECTED,
+            supplier.receive(CrewMediaWireFrame.Request(wrong)),
+        )
         policy.deactivate(transfer.sessionId)
-        assertEquals(CrewMediaTransferState.REJECTED, supplier.receive(CrewMediaWireFrame.Request(transfer)))
+        assertEquals(
+            CrewMediaTransferState.REJECTED,
+            supplier.receive(CrewMediaWireFrame.Request(transfer)),
+        )
     }
 
     private fun manifest(vararg chunks: ByteArray): CrewMediaManifest {
         val bytes = chunks.fold(byteArrayOf()) { all, next -> all + next }
         return CrewMediaManifest(
             CrewMediaTransferRef(
-                CrewSessionId("session", ProtocolVersion(1)), CrewMediaRequestId("request-1"),
-                QueueItemId("queue-item-1"), CandidateId("crew-temporary:exact"), CrewMemberId("target", ProtocolVersion(1)),
+                CrewSessionId("session", ProtocolVersion(1)),
+                CrewMediaRequestId("request-1"),
+                QueueItemId("queue-item-1"),
+                CandidateId("crew-temporary:exact"),
+                CrewMemberId("target", ProtocolVersion(1)),
                 CrewMemberId("supplier", ProtocolVersion(1)),
             ),
             "audio/test",
@@ -216,8 +294,11 @@ class CrewMediaTest {
         override val state = MutableStateFlow(CrewTransportState.CONNECTED)
         override val incoming = emptyFlow<CrewTransportFrame>()
         override val drops = emptyFlow<org.oxycblt.auxio.shippy.crew.transport.CrewTransportDrop>()
+
         override fun trySend(frame: CrewTransportFrame) = CrewSendResult.Sent(0)
+
         override fun bufferedBytes(channel: CrewTransportChannel) = 0L
+
         override fun close() = Unit
     }
 }

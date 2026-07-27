@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewLanSignaling.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewLanSignaling.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.lan
 
 import java.io.Closeable
@@ -67,8 +74,7 @@ private const val SIGNAL_CONNECT_TIMEOUT_MS = 5_000
 private const val SIGNAL_HANDSHAKE_TIMEOUT_MS = 8_000
 private const val SIGNAL_MAX_ENCRYPTED_FRAME_BYTES =
     MAX_CREW_SIGNAL_MESSAGE_BYTES + SIGNAL_GCM_TAG_BYTES + Long.SIZE_BYTES
-private const val SIGNAL_MIN_ENCRYPTED_FRAME_BYTES =
-    Long.SIZE_BYTES + SIGNAL_GCM_TAG_BYTES + 3
+private const val SIGNAL_MIN_ENCRYPTED_FRAME_BYTES = Long.SIZE_BYTES + SIGNAL_GCM_TAG_BYTES + 3
 private const val SIGNAL_INCOMING_CAPACITY = 64
 private const val DEFAULT_MAX_SIGNAL_PEERS = 8
 private const val SIGNAL_CLOCK_SKEW_TOLERANCE_MS = 2 * 60 * 1000L
@@ -147,8 +153,10 @@ class CrewLanSignalingHost(
     private val inviteResolver: CrewLanSignalInviteResolver =
         CrewLanSignalInviteResolver { protocol, locator, inviteId, _, now ->
             invite.takeIf {
-                it.protocolVersion == protocol && it.sessionLocator == locator &&
-                    it.inviteId == inviteId && isActiveSignalInvite(it, now)
+                it.protocolVersion == protocol &&
+                    it.sessionLocator == locator &&
+                    it.inviteId == inviteId &&
+                    isActiveSignalInvite(it, now)
             }
         },
 ) : Closeable {
@@ -158,8 +166,15 @@ class CrewLanSignalingHost(
     private val serverSocket =
         createSignalServerSocket(
             maxPeers.also {
-                validateHostConfig(invite, sessionId, localMemberId, localDisplayName, nowEpochMs, it)
-            },
+                validateHostConfig(
+                    invite,
+                    sessionId,
+                    localMemberId,
+                    localDisplayName,
+                    nowEpochMs,
+                    it,
+                )
+            }
         )
     private val acceptedPeers = Channel<CrewSignalPeer>(maxPeers)
     private val livePeers = ConcurrentHashMap.newKeySet<SecureCrewSignalPeer>()
@@ -214,8 +229,7 @@ class CrewLanSignalingHost(
                             livePeers.remove(it)
                         }
                     livePeers += peer
-                    if (acceptedPeers.trySend(peer).isFailure) peer.close()
-                    else peer.start()
+                    if (acceptedPeers.trySend(peer).isFailure) peer.close() else peer.start()
                 } catch (_: Exception) {
                     socket.closeQuietly()
                 } finally {
@@ -253,17 +267,17 @@ object CrewLanSignalingClient {
                 CrewLanIdentity(invite.protocolVersion, invite.sessionLocator, invite.inviteId)
             if (rendezvous.identity != expectedIdentity) {
                 return@withContext CrewLanSignalConnectResult.Failed(
-                    CrewLanSignalConnectFailure.INVITATION_MISMATCH,
+                    CrewLanSignalConnectFailure.INVITATION_MISMATCH
                 )
             }
             if (!isActiveSignalInvite(invite, nowEpochMs)) {
                 return@withContext CrewLanSignalConnectResult.Failed(
-                    CrewLanSignalConnectFailure.INVITATION_INACTIVE,
+                    CrewLanSignalConnectFailure.INVITATION_INACTIVE
                 )
             }
             if (localMemberId.protocolVersion != invite.protocolVersion) {
                 return@withContext CrewLanSignalConnectResult.Failed(
-                    CrewLanSignalConnectFailure.PROTOCOL_ERROR,
+                    CrewLanSignalConnectFailure.PROTOCOL_ERROR
                 )
             }
             requireValidSignalDisplayName(localDisplayName)
@@ -279,7 +293,13 @@ object CrewLanSignalingClient {
                         SIGNAL_CONNECT_TIMEOUT_MS,
                     )
                     val handshake =
-                        clientHandshake(socket, invite, localMemberId, localDisplayName, nonceSource)
+                        clientHandshake(
+                            socket,
+                            invite,
+                            localMemberId,
+                            localDisplayName,
+                            nonceSource,
+                        )
                     val peer =
                         SecureCrewSignalPeer(
                             socket,
@@ -300,7 +320,7 @@ object CrewLanSignalingClient {
                 } catch (_: SignalProtocolException) {
                     socket.closeQuietly()
                     return@withContext CrewLanSignalConnectResult.Failed(
-                        CrewLanSignalConnectFailure.PROTOCOL_ERROR,
+                        CrewLanSignalConnectFailure.PROTOCOL_ERROR
                     )
                 } catch (error: CancellationException) {
                     socket.closeQuietly()
@@ -314,7 +334,7 @@ object CrewLanSignalingClient {
                     CrewLanSignalConnectFailure.AUTHENTICATION_FAILED
                 } else {
                     CrewLanSignalConnectFailure.NO_REACHABLE_ADDRESS
-                },
+                }
             )
         }
 }
@@ -340,8 +360,7 @@ private class SecureCrewSignalPeer(
     private val receiveSecret = SecretKeySpec(receiveKey.copyOf(), "AES")
     private val sendMutex = Mutex()
     private val incomingChannel = Channel<CrewSignalMessage>(SIGNAL_INCOMING_CAPACITY)
-    private val mutableState =
-        MutableStateFlow(CrewSignalConnectionState.CONNECTED)
+    private val mutableState = MutableStateFlow(CrewSignalConnectionState.CONNECTED)
     private var sendSequence = 0L
     private var receiveSequence = 0L
 
@@ -374,13 +393,7 @@ private class SecureCrewSignalPeer(
                     val plain = CrewSignalMessageCodec.encode(message)
                     val sequence = sendSequence++
                     val encrypted =
-                        encryptFrame(
-                            sendSecret,
-                            sendNoncePrefix,
-                            transcriptHash,
-                            sequence,
-                            plain,
-                        )
+                        encryptFrame(sendSecret, sendNoncePrefix, transcriptHash, sequence, plain)
                     output.writeInt(Long.SIZE_BYTES + encrypted.size)
                     output.writeLong(sequence)
                     output.write(encrypted)
@@ -400,9 +413,7 @@ private class SecureCrewSignalPeer(
             while (!closed.get()) {
                 val frameSize = input.readInt()
                 require(
-                    frameSize in
-                        SIGNAL_MIN_ENCRYPTED_FRAME_BYTES..
-                            SIGNAL_MAX_ENCRYPTED_FRAME_BYTES,
+                    frameSize in SIGNAL_MIN_ENCRYPTED_FRAME_BYTES..SIGNAL_MAX_ENCRYPTED_FRAME_BYTES
                 ) {
                     "Crew encrypted signaling frame has invalid size"
                 }
@@ -509,7 +520,9 @@ private fun serverHandshake(
     require(
         protocolVersion == invite.protocolVersion &&
             remoteMemberId.protocolVersion == invite.protocolVersion
-    ) { "Crew signaling protocol does not match" }
+    ) {
+        "Crew signaling protocol does not match"
+    }
     val serverNonce = nonceSource.nextCheckedNonce()
     val transcript =
         SignalTranscript(
@@ -631,8 +644,7 @@ private class SignalTranscript(
         )
 
     fun keys(): SignalSessionKeys {
-        val pseudoRandomKey =
-            hmac(hash, invite.secret.value.toByteArray(Charsets.UTF_8))
+        val pseudoRandomKey = hmac(hash, invite.secret.value.toByteArray(Charsets.UTF_8))
         return SignalSessionKeys(
             clientToServerKey = hkdfExpand(pseudoRandomKey, "client-to-server", hash),
             serverToClientKey = hkdfExpand(pseudoRandomKey, "server-to-client", hash),
@@ -719,9 +731,7 @@ private fun DataOutputStream.writeSizedSignalString(value: String) {
 
 private fun DataInputStream.readSizedSignalString(): String {
     val size = readUnsignedShort()
-    require(size in 1..SIGNAL_MAX_ID_BYTES) {
-        "Crew signaling handshake value has invalid size"
-    }
+    require(size in 1..SIGNAL_MAX_ID_BYTES) { "Crew signaling handshake value has invalid size" }
     val bytes = readSignalBytes(size)
     return bytes.toString(Charsets.UTF_8).also {
         require(it.toByteArray(Charsets.UTF_8).contentEquals(bytes)) {
@@ -782,8 +792,7 @@ private fun DataInputStream.readSignalSessionId(): CrewSessionId {
     return CrewSessionId(readSizedSignalString(), protocolVersion)
 }
 
-private fun DataInputStream.readSignalBytes(size: Int) =
-    ByteArray(size).also { readFully(it) }
+private fun DataInputStream.readSignalBytes(size: Int) = ByteArray(size).also { readFully(it) }
 
 private fun CrewSignalNonceSource.nextCheckedNonce() =
     nextNonce().copyOf().also {
@@ -791,14 +800,13 @@ private fun CrewSignalNonceSource.nextCheckedNonce() =
     }
 
 private fun requireActiveSignalInvite(invite: CrewInvite, nowEpochMs: Long) {
-    require(isActiveSignalInvite(invite, nowEpochMs)) {
-        "Crew signaling invitation is not active"
-    }
+    require(isActiveSignalInvite(invite, nowEpochMs)) { "Crew signaling invitation is not active" }
 }
 
 private fun isActiveSignalInvite(invite: CrewInvite, nowEpochMs: Long) =
     nowEpochMs >= 0 &&
-        invite.expiresAtEpochMs - invite.issuedAtEpochMs <= SIGNAL_MAX_RECONNECT_CREDENTIAL_LIFETIME_MS &&
+        invite.expiresAtEpochMs - invite.issuedAtEpochMs <=
+            SIGNAL_MAX_RECONNECT_CREDENTIAL_LIFETIME_MS &&
         invite.issuedAtEpochMs - nowEpochMs <= SIGNAL_CLOCK_SKEW_TOLERANCE_MS &&
         nowEpochMs < invite.expiresAtEpochMs
 
@@ -818,8 +826,14 @@ private fun validateHostConfig(
         "Crew signaling member protocol must match the invitation"
     }
     requireValidSignalDisplayName(localDisplayName)
-    requireActiveSignalInvite(invite, nowEpochMs)
+    require(isShortLivedPublicSignalInvite(invite, nowEpochMs)) {
+        "Crew signaling invitation is not active"
+    }
 }
+
+private fun isShortLivedPublicSignalInvite(invite: CrewInvite, nowEpochMs: Long) =
+    isActiveSignalInvite(invite, nowEpochMs) &&
+        invite.expiresAtEpochMs - invite.issuedAtEpochMs <= SIGNAL_MAX_INVITE_LIFETIME_MS
 
 private fun requireValidSignalDisplayName(value: String) {
     require(value.isNotBlank()) { "Crew signaling display name must not be blank" }

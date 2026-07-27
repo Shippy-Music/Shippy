@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewCheckpointRepository.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewCheckpointRepository.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.persistence.crew
 
 import java.security.MessageDigest
@@ -21,10 +28,7 @@ import org.oxycblt.auxio.shippy.crew.protocol.CrewControlCodec
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlDecodeResult
 import org.oxycblt.auxio.shippy.crew.protocol.CrewControlMessage
 
-data class PersistedCrewCheckpoint(
-    val snapshot: CrewSnapshot,
-    val updatedAtEpochMs: Long,
-)
+data class PersistedCrewCheckpoint(val snapshot: CrewSnapshot, val updatedAtEpochMs: Long)
 
 sealed interface CrewCheckpointLoadResult {
     data object Empty : CrewCheckpointLoadResult
@@ -40,10 +44,7 @@ sealed interface CrewCheckpointLoadResult {
 interface CrewCheckpointRepository {
     suspend fun load(): CrewCheckpointLoadResult
 
-    suspend fun save(
-        snapshot: CrewSnapshot,
-        nowEpochMs: Long,
-    )
+    suspend fun save(snapshot: CrewSnapshot, nowEpochMs: Long)
 
     /** Clears only the named session, so a delayed leave cannot erase a newly joined Crew. */
     suspend fun clear(sessionId: CrewSessionId): Boolean
@@ -52,9 +53,7 @@ interface CrewCheckpointRepository {
 @Singleton
 internal class RoomCrewCheckpointRepository
 @Inject
-constructor(
-    private val dao: CrewCheckpointDao,
-) : CrewCheckpointRepository {
+constructor(private val dao: CrewCheckpointDao) : CrewCheckpointRepository {
     private val mutationMutex = Mutex()
 
     override suspend fun load(): CrewCheckpointLoadResult =
@@ -70,10 +69,7 @@ constructor(
             }
         }
 
-    override suspend fun save(
-        snapshot: CrewSnapshot,
-        nowEpochMs: Long,
-    ) {
+    override suspend fun save(snapshot: CrewSnapshot, nowEpochMs: Long) {
         mutationMutex.withLock {
             dao.replace(CrewCheckpointPersistence.encode(snapshot, nowEpochMs))
         }
@@ -86,10 +82,7 @@ constructor(
 internal object CrewCheckpointPersistence {
     private const val ACTIVE_SLOT = "active"
 
-    fun encode(
-        snapshot: CrewSnapshot,
-        nowEpochMs: Long,
-    ): CrewCheckpointEntity {
+    fun encode(snapshot: CrewSnapshot, nowEpochMs: Long): CrewCheckpointEntity {
         require(nowEpochMs >= 0) { "Crew checkpoint timestamp cannot be negative" }
         val payload =
             CrewControlCodec.encode(
@@ -129,7 +122,9 @@ internal object CrewCheckpointPersistence {
                 is CrewControlDecodeResult.Rejected ->
                     return CrewCheckpointLoadResult.CorruptRemoved(entity.sessionId)
             }
-        if (message !is CrewControlMessage.SnapshotInstalled || message.electionVotes.isNotEmpty()) {
+        if (
+            message !is CrewControlMessage.SnapshotInstalled || message.electionVotes.isNotEmpty()
+        ) {
             return CrewCheckpointLoadResult.CorruptRemoved(entity.sessionId)
         }
         val snapshot = message.snapshot
@@ -146,6 +141,5 @@ internal object CrewCheckpointPersistence {
         )
     }
 
-    private fun ByteArray.sha256(): ByteArray =
-        MessageDigest.getInstance("SHA-256").digest(this)
+    private fun ByteArray.sha256(): ByteArray = MessageDigest.getInstance("SHA-256").digest(this)
 }

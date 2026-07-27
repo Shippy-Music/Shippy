@@ -3,10 +3,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
+    android:layout_height="match_parent"
     android:background="?attr/colorSurface"
-    android:orientation="vertical"
-    android:transitionGroup="true"
     tools:context=".settings.AboutFragment">
 
     <org.oxycblt.auxio.ui.CoordinatorAppBarLayout
@@ -32,225 +30,58 @@
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_margin="@dimen/spacing_medium"
+            android:layout_height="wrap_content"
+            android:padding="@dimen/spacing_medium"
             android:orientation="vertical">
 
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <androidx.constraintlayout.widget.ConstraintLayout
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:paddingBottom="@dimen/spacing_tiny">
+                    android:layout_height="wrap_content"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical"
+                    android:padding="@dimen/spacing_large">
 
                     <ImageView
-                        android:id="@+id/about_auxio_icon"
-                        style="@style/Widget.Auxio.Image.Small"
-                        android:layout_marginTop="@dimen/spacing_medium"
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
                         android:contentDescription="@string/desc_auxio_icon"
-                        android:src="@mipmap/ic_launcher"
-                        app:layout_constraintEnd_toStartOf="@+id/about_app_name"
-                        app:layout_constraintHorizontal_chainStyle="packed"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="parent" />
+                        android:src="@mipmap/ic_launcher" />
 
                     <TextView
-                        android:id="@+id/about_app_name"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="@dimen/spacing_medium"
+                        android:layout_marginTop="@dimen/spacing_medium"
                         android:text="@string/info_app_name"
-                        android:textAppearance="?attr/textAppearanceTitleLargeEmphasized"
-                        app:layout_constraintBottom_toBottomOf="@+id/about_auxio_icon"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toEndOf="@+id/about_auxio_icon"
-                        app:layout_constraintTop_toTopOf="@+id/about_auxio_icon" />
+                        android:textAppearance="?attr/textAppearanceHeadlineSmall" />
 
                     <TextView
-                        android:id="@+id/about_desc"
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_small"
+                        android:layout_marginTop="@dimen/spacing_tiny"
                         android:gravity="center"
-                        android:paddingStart="@dimen/spacing_medium"
-                        android:paddingEnd="@dimen/spacing_medium"
                         android:text="@string/info_app_desc"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_auxio_icon" />
-
-
-                    <ImageView
-                        android:id="@+id/about_version_icon"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="@dimen/spacing_medium"
-                        android:contentDescription="@string/lbl_version"
-                        android:src="@drawable/ic_about_24"
-                        app:layout_constraintBottom_toBottomOf="@+id/about_version"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toTopOf="@+id/about_version_title" />
-
-                    <TextView
-                        android:id="@+id/about_version_title"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="@dimen/spacing_medium"
-                        android:layout_marginTop="@dimen/spacing_mid_medium"
-                        android:text="@string/lbl_version"
-                        android:textAppearance="?attr/textAppearanceBodyLarge"
-                        app:layout_constraintBottom_toTopOf="@+id/about_version"
-                        app:layout_constraintStart_toEndOf="@+id/about_version_icon"
-                        app:layout_constraintTop_toBottomOf="@+id/about_desc" />
+                        android:textAppearance="?attr/textAppearanceBodyMedium" />
 
                     <TextView
                         android:id="@+id/about_version"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="@dimen/spacing_medium"
-                        android:textAppearance="?attr/textAppearanceBodySmall"
-                        app:layout_constraintStart_toStartOf="@+id/about_version_title"
-                        app:layout_constraintTop_toBottomOf="@+id/about_version_title"
-                        tools:text="16.16.16" />
+                        android:layout_marginTop="@dimen/spacing_medium"
+                        android:textAppearance="?attr/textAppearanceLabelLarge"
+                        tools:text="4.1.3" />
 
                     <TextView
-                        android:id="@+id/about_code"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/spacing_mid_medium"
-                        android:text="@string/lbl_code"
-                        app:drawableStartCompat="@drawable/ic_code_24"
-                        app:layout_constraintBottom_toTopOf="@+id/about_wiki"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_version" />
-
-                    <TextView
-                        android:id="@+id/about_wiki"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lbl_wiki"
-                        app:drawableStartCompat="@drawable/ic_help_24"
-                        app:layout_constraintBottom_toTopOf="@+id/about_licenses"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_code" />
-
-                    <TextView
-                        android:id="@+id/about_licenses"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lbl_licenses"
-                        app:drawableStartCompat="@drawable/ic_license_24"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_wiki" />
-
-
-                </androidx.constraintlayout.widget.ConstraintLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_medium">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:orientation="vertical"
-                    android:paddingBottom="@dimen/spacing_tiny">
-
-                    <TextView
-                        android:id="@+id/about_author"
-                        style="@style/Widget.Auxio.TextView.Header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lbl_author"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent" />
-
-                    <TextView
-                        android:id="@+id/about_profile"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/spacing_tiny"
                         android:text="@string/lbl_author_name"
-                        app:drawableStartCompat="@drawable/ic_person_24"
-                        app:drawableTint="?attr/colorControlNormal"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses" />
-
-                    <TextView
-                        android:id="@+id/about_donate"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lbl_donate"
-                        app:drawableStartCompat="@drawable/ic_donate_24"
-                        app:drawableTint="?attr/colorControlNormal"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses" />
+                        android:textAppearance="?attr/textAppearanceBodySmall" />
 
                 </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-
-
-
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_medium">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:orientation="vertical"
-                    android:paddingBottom="@dimen/spacing_tiny">
-
-                    <TextView
-                        android:id="@+id/about_supporters"
-                        style="@style/Widget.Auxio.TextView.Header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lbl_supporters"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent" />
-
-                    <TextView
-                        android:id="@+id/about_supporters_bkkellyh"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/sup_bkkellyh"
-                        android:textAppearance="?attr/textAppearanceTitleMediumEmphasized"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses" />
-
-                    <TextView
-                        android:id="@+id/about_supporters_promo"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lng_supporters_promo"
-                        android:textStyle="italic"
-                        android:textAppearance="?attr/textAppearanceBodyMedium"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses" />
-
-                </LinearLayout>
-
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
@@ -260,65 +91,15 @@
 
                 <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:paddingBottom="@dimen/spacing_tiny">
 
                     <TextView
-                        android:id="@+id/about_feedback"
                         style="@style/Widget.Auxio.TextView.Header"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/lbl_feedback"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent" />
-
-                    <TextView
-                        android:id="@+id/about_feedback_github"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lbl_github"
-                        app:drawableStartCompat="@drawable/ic_feature_request_24"
-                        app:drawableTint="?attr/colorControlNormal"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses" />
-
-                    <TextView
-                        android:id="@+id/about_feedback_email"
-                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lbl_email"
-                        app:drawableStartCompat="@drawable/ic_email_24"
-                        app:drawableTint="?attr/colorControlNormal"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses" />
-
-                </LinearLayout>
-
-            </com.google.android.material.card.MaterialCardView>
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_medium">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:orientation="vertical"
-                    android:paddingBottom="@dimen/spacing_tiny">
-
-                    <TextView
-                        android:id="@+id/about_library_counts"
-                        style="@style/Widget.Auxio.TextView.Header"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/lbl_library_counts"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent" />
+                        android:text="@string/lbl_library_counts" />
 
                     <TextView
                         android:id="@+id/about_song_count"
@@ -326,10 +107,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         app:drawableStartCompat="@drawable/ic_song_24"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses"
-                        tools:text="Songs Loaded: 1616" />
+                        tools:text="1,462 songs" />
 
                     <TextView
                         android:id="@+id/about_album_count"
@@ -337,10 +115,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         app:drawableStartCompat="@drawable/ic_album_24"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses"
-                        tools:text="Albums Loaded: 1616" />
+                        tools:text="785 albums" />
 
                     <TextView
                         android:id="@+id/about_artist_count"
@@ -348,10 +123,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         app:drawableStartCompat="@drawable/ic_artist_24"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses"
-                        tools:text="Artists Loaded: 1616" />
+                        tools:text="780 artists" />
 
                     <TextView
                         android:id="@+id/about_genre_count"
@@ -359,10 +131,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         app:drawableStartCompat="@drawable/ic_genre_24"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses"
-                        tools:text="Genres Loaded: 1616" />
+                        tools:text="42 genres" />
 
                     <TextView
                         android:id="@+id/about_total_duration"
@@ -370,10 +139,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         app:drawableStartCompat="@drawable/ic_time_24"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses"
-                        tools:text="Total duration: 16:16:16" />
+                        tools:text="96 hours" />
 
                     <TextView
                         android:id="@+id/about_total_size"
@@ -381,13 +147,12 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         app:drawableStartCompat="@drawable/ic_file_24"
-                        app:layout_constraintEnd_toEndOf="parent"
-                        app:layout_constraintStart_toStartOf="parent"
-                        app:layout_constraintTop_toBottomOf="@+id/about_licenses"
-                        tools:text="Total size: 1.2 GB" />
+                        tools:text="18 GB" />
 
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
+
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

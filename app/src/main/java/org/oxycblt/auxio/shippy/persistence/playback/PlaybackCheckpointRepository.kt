@@ -1,4 +1,20 @@
-/* Copyright (c) 2026 Shippy contributors */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * PlaybackCheckpointRepository.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.persistence.playback
 
 import androidx.room.Dao
@@ -34,7 +50,9 @@ data class CanonicalPlaybackCheckpoint(
 
 interface PlaybackCheckpointRepository {
     suspend fun replace(checkpoint: CanonicalPlaybackCheckpoint)
+
     suspend fun read(): CanonicalPlaybackCheckpoint?
+
     suspend fun clear()
 }
 
@@ -76,9 +94,7 @@ internal abstract class PlaybackCheckpointDao {
     abstract suspend fun checkpoint(slot: String = ACTIVE_SLOT): PlaybackCheckpointEntity?
 
     @Query("SELECT * FROM playback_checkpoint_item WHERE slot = :slot ORDER BY heapPosition")
-    abstract suspend fun items(
-        slot: String = ACTIVE_SLOT
-    ): List<PlaybackCheckpointItemEntity>
+    abstract suspend fun items(slot: String = ACTIVE_SLOT): List<PlaybackCheckpointItemEntity>
 
     @Query("DELETE FROM playback_checkpoint WHERE slot = :slot")
     abstract suspend fun clear(slot: String = ACTIVE_SLOT)
@@ -109,10 +125,9 @@ constructor(
 ) : PlaybackCheckpointRepository {
     override suspend fun replace(checkpoint: CanonicalPlaybackCheckpoint) {
         if (!checkpoint.valid()) return clear()
-        checkpoint.heap
-            .map(QueueItem::track)
-            .distinctBy(Track::id)
-            .forEach { tracks.upsert(sanitizeCheckpointTrack(it)) }
+        checkpoint.heap.map(QueueItem::track).distinctBy(Track::id).forEach {
+            tracks.upsert(sanitizeCheckpointTrack(it))
+        }
         dao.replace(
             PlaybackCheckpointEntity(
                 positionMs = checkpoint.positionMs,
@@ -141,9 +156,9 @@ constructor(
                 checkpoint.shuffledMapping
                     .takeIf(String::isNotEmpty)
                     ?.split(',')
-                    ?.map(String::toInt)
-                    ?: emptyList()
-            if (items.map(PlaybackCheckpointItemEntity::heapPosition) != items.indices.toList()) return corrupt()
+                    ?.map(String::toInt) ?: emptyList()
+            if (items.map(PlaybackCheckpointItemEntity::heapPosition) != items.indices.toList())
+                return corrupt()
             val metadata = tracks.getByIds(items.map { TrackId(it.trackId) })
             if (metadata.size != items.map { it.trackId }.distinct().size) return corrupt()
             CanonicalPlaybackCheckpoint(
@@ -160,8 +175,7 @@ constructor(
                     checkpoint.positionMs,
                     RepeatMode.valueOf(checkpoint.repeatMode),
                 )
-                .takeIf(CanonicalPlaybackCheckpoint::valid)
-                ?: corrupt()
+                .takeIf(CanonicalPlaybackCheckpoint::valid) ?: corrupt()
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {

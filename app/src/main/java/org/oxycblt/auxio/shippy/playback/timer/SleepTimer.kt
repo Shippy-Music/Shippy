@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * SleepTimer.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * SleepTimer.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.playback.timer
 
 import android.os.Handler
@@ -54,7 +66,11 @@ internal class SleepTimerPolicy {
     private var deadlineElapsedMs: Long? = null
     private var finishItemId: QueueItemId? = null
 
-    fun arm(mode: SleepTimerMode, currentItemId: QueueItemId?, nowElapsedMs: Long): SleepTimerPresentation {
+    fun arm(
+        mode: SleepTimerMode,
+        currentItemId: QueueItemId?,
+        nowElapsedMs: Long,
+    ): SleepTimerPresentation {
         this.mode = mode
         deadlineElapsedMs = mode.durationMs?.let(nowElapsedMs::plus)
         finishItemId = if (mode == SleepTimerMode.FINISH_CURRENT) currentItemId else null
@@ -96,13 +112,14 @@ private constructor(
     private val policy: SleepTimerPolicy,
 ) : PlaybackStateManager.Listener {
     @Inject
-    constructor(playbackManager: PlaybackStateManager) :
-        this(
-            SleepTimerPlaybackPort { playbackManager.playing(false) },
-            SleepTimerClock { SystemClock.elapsedRealtime() },
-            HandlerSleepTimerScheduler,
-            SleepTimerPolicy(),
-        )
+    constructor(
+        playbackManager: PlaybackStateManager
+    ) : this(
+        SleepTimerPlaybackPort { playbackManager.playing(false) },
+        SleepTimerClock { SystemClock.elapsedRealtime() },
+        HandlerSleepTimerScheduler,
+        SleepTimerPolicy(),
+    )
 
     internal constructor(
         playback: SleepTimerPlaybackPort,
@@ -195,7 +212,7 @@ private constructor(
     private fun currentItemId(): QueueItemId? = canonicalQueue.getOrNull(currentIndex)?.item?.id
 
     private companion object HandlerSleepTimerScheduler : SleepTimerScheduler {
-        private val handler = Handler(Looper.getMainLooper())
+        private val handler by lazy { Handler(Looper.getMainLooper()) }
 
         override fun schedule(delayMs: Long, task: () -> Unit): SleepTimerCancellation {
             val runnable = Runnable(task)

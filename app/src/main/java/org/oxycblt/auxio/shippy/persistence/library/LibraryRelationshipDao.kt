@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * LibraryRelationshipDao.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * LibraryRelationshipDao.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.persistence.library
 
 import androidx.room.Dao
@@ -36,6 +43,7 @@ internal data class UserPlaylistEntity(
     val name: String,
     val pinned: Boolean,
     val position: Int,
+    val artworkUri: String? = null,
 )
 
 @Entity(
@@ -70,6 +78,8 @@ internal data class StoredLibraryRelationship(
     val playlistMemberships: List<PlaylistMembershipEntity>,
 )
 
+internal data class PlaylistArtworkProjection(val playlistId: String, val artwork: String?)
+
 @Dao
 internal abstract class LibraryRelationshipDao {
     @Transaction
@@ -94,6 +104,17 @@ internal abstract class LibraryRelationshipDao {
 
     @Query(
         """
+        SELECT membership.playlistId AS playlistId, track.artwork AS artwork
+        FROM playlist_membership AS membership
+        INNER JOIN canonical_track AS track ON track.trackId = membership.trackId
+        WHERE track.artwork IS NOT NULL
+        ORDER BY membership.playlistId, membership.position
+        """
+    )
+    abstract fun observePlaylistArtwork(): Flow<List<PlaylistArtworkProjection>>
+
+    @Query(
+        """
         SELECT trackId FROM playlist_membership
         WHERE playlistId = :playlistId
         ORDER BY position, trackId
@@ -110,9 +131,7 @@ internal abstract class LibraryRelationshipDao {
     @Query("UPDATE library_relationship SET downloaded = :downloaded WHERE trackId = :trackId")
     protected abstract suspend fun updateDownloaded(trackId: String, downloaded: Boolean)
 
-    @Query(
-        "DELETE FROM playlist_membership WHERE trackId = :trackId AND playlistId = :playlistId"
-    )
+    @Query("DELETE FROM playlist_membership WHERE trackId = :trackId AND playlistId = :playlistId")
     protected abstract suspend fun deletePlaylistMembership(trackId: String, playlistId: String)
 
     @Query("DELETE FROM playlist_membership WHERE playlistId = :playlistId")
@@ -128,7 +147,9 @@ internal abstract class LibraryRelationshipDao {
         trackId: String
     ): List<PlaylistMembershipEntity>
 
-    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_membership WHERE playlistId = :playlistId")
+    @Query(
+        "SELECT COALESCE(MAX(position), -1) + 1 FROM playlist_membership WHERE playlistId = :playlistId"
+    )
     protected abstract suspend fun nextTrackPosition(playlistId: String): Int
 
     @Query("SELECT EXISTS(SELECT 1 FROM user_playlist WHERE playlistId = :playlistId)")
@@ -149,6 +170,12 @@ internal abstract class LibraryRelationshipDao {
     @Query("UPDATE user_playlist SET pinned = :pinned WHERE playlistId = :playlistId")
     protected abstract suspend fun updatePlaylistPinned(playlistId: String, pinned: Boolean): Int
 
+    @Query("UPDATE user_playlist SET artworkUri = :artworkUri WHERE playlistId = :playlistId")
+    protected abstract suspend fun updatePlaylistArtwork(
+        playlistId: String,
+        artworkUri: String?,
+    ): Int
+
     @Query("UPDATE user_playlist SET position = :position WHERE playlistId = :playlistId")
     protected abstract suspend fun updatePlaylistPosition(playlistId: String, position: Int)
 
@@ -168,10 +195,7 @@ internal abstract class LibraryRelationshipDao {
     }
 
     @Transaction
-    open suspend fun replacePlaylistMemberships(
-        trackId: String,
-        playlistIds: List<String>,
-    ) {
+    open suspend fun replacePlaylistMemberships(trackId: String, playlistIds: List<String>) {
         ensureRelationship(LibraryRelationshipEntity(trackId))
         check(playlistIds.all { playlistExists(it) }) { "User playlist does not exist" }
 
@@ -208,6 +232,7 @@ internal abstract class LibraryRelationshipDao {
                 name = name,
                 pinned = pinned,
                 position = nextPlaylistPosition(),
+                artworkUri = null,
             )
         )
     }
@@ -223,6 +248,11 @@ internal abstract class LibraryRelationshipDao {
     }
 
     @Transaction
+    open suspend fun setPlaylistArtwork(playlistId: String, artworkUri: String?) {
+        check(updatePlaylistArtwork(playlistId, artworkUri) == 1) { "User playlist does not exist" }
+    }
+
+    @Transaction
     open suspend fun replacePlaylistOrder(playlistIds: List<String>) {
         check(playlistIds.distinct().size == playlistIds.size) {
             "Playlist order cannot contain duplicate IDs"
@@ -231,6 +261,21 @@ internal abstract class LibraryRelationshipDao {
             "Playlist order must contain every user playlist exactly once"
         }
         playlistIds.forEachIndexed { position, playlistId ->
+            updatePlaylistPosition(playlistId, position)
+        }
+    }
+
+    @Transaction
+    open suspend fun replacePlaylistLayout(playlists: List<Pair<String, Boolean>>) {
+        val playlistIds = playlists.map(Pair<String, Boolean>::first)
+        check(playlistIds.distinct().size == playlistIds.size) {
+            "Playlist layout cannot contain duplicate IDs"
+        }
+        check(getPlaylistIds().toSet() == playlistIds.toSet()) {
+            "Playlist layout must contain every user playlist exactly once"
+        }
+        playlists.forEachIndexed { position, (playlistId, pinned) ->
+            updatePlaylistPinned(playlistId, pinned)
             updatePlaylistPosition(playlistId, position)
         }
     }

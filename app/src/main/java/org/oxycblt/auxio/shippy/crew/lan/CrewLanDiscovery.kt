@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewLanDiscovery.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewLanDiscovery.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.lan
 
 import android.content.Context
@@ -79,10 +86,8 @@ sealed interface CrewLanOperationState {
 
     data object Active : CrewLanOperationState
 
-    data class Failed(
-        val operation: CrewLanFailureOperation,
-        val platformCode: Int? = null,
-    ) : CrewLanOperationState
+    data class Failed(val operation: CrewLanFailureOperation, val platformCode: Int? = null) :
+        CrewLanOperationState
 
     data object Closed : CrewLanOperationState
 }
@@ -135,11 +140,8 @@ interface CrewLanDiscovery {
  * replaces the invitation proof or WebRTC DTLS transport.
  */
 @Singleton
-class NsdCrewLanDiscovery
-@Inject
-constructor(
-    @ApplicationContext context: Context,
-) : CrewLanDiscovery {
+class NsdCrewLanDiscovery @Inject constructor(@ApplicationContext context: Context) :
+    CrewLanDiscovery {
     private val applicationContext = context.applicationContext
     private val nsdManager = requireNotNull(context.getSystemService(NsdManager::class.java))
     private val executor: Executor = ContextCompat.getMainExecutor(context)
@@ -156,12 +158,7 @@ constructor(
     }
 
     override fun discover(invite: CrewInvite): CrewLanDiscoverySession =
-        Discovery(
-            applicationContext,
-            nsdManager,
-            executor,
-            invite.toLanIdentity(),
-        )
+        Discovery(applicationContext, nsdManager, executor, invite.toLanIdentity())
 }
 
 private class Advertisement(
@@ -172,7 +169,8 @@ private class Advertisement(
     signalingPort: Int,
 ) : CrewLanAdvertisement {
     private val closed = AtomicBoolean(false)
-    private val mutableState = MutableStateFlow<CrewLanOperationState>(CrewLanOperationState.Starting)
+    private val mutableState =
+        MutableStateFlow<CrewLanOperationState>(CrewLanOperationState.Starting)
     private val mutableService = MutableStateFlow<CrewLanAdvertisedService?>(null)
     private val multicastLock = acquireNsdMulticastLock(context)
     private val registrationRequested = AtomicBoolean(false)
@@ -186,10 +184,7 @@ private class Advertisement(
                 registrationRequested.set(false)
                 if (closed.get()) return
                 mutableState.value =
-                    CrewLanOperationState.Failed(
-                        CrewLanFailureOperation.REGISTRATION,
-                        errorCode,
-                    )
+                    CrewLanOperationState.Failed(CrewLanFailureOperation.REGISTRATION, errorCode)
                 releaseMulticastLock(multicastLock)
             }
 
@@ -224,8 +219,7 @@ private class Advertisement(
 
     init {
         if (multicastLock is MulticastLockResult.Failed) {
-            mutableState.value =
-                CrewLanOperationState.Failed(CrewLanFailureOperation.PERMISSION)
+            mutableState.value = CrewLanOperationState.Failed(CrewLanFailureOperation.PERMISSION)
         } else {
             val serviceInfo =
                 NsdServiceInfo().apply {
@@ -245,11 +239,7 @@ private class Advertisement(
                     )
                 } else {
                     @Suppress("DEPRECATION")
-                    nsdManager.registerService(
-                        serviceInfo,
-                        NsdManager.PROTOCOL_DNS_SD,
-                        listener,
-                    )
+                    nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, listener)
                 }
             } catch (_: SecurityException) {
                 registrationRequested.set(false)
@@ -294,7 +284,8 @@ private class Discovery(
 ) : CrewLanDiscoverySession {
     private val closed = AtomicBoolean(false)
     private val lock = Any()
-    private val mutableState = MutableStateFlow<CrewLanOperationState>(CrewLanOperationState.Starting)
+    private val mutableState =
+        MutableStateFlow<CrewLanOperationState>(CrewLanOperationState.Starting)
     private val mutableMatches = MutableStateFlow<List<CrewLanRendezvous>>(emptyList())
     private val multicastLock = acquireNsdMulticastLock(context)
     private val pendingResolutions = ArrayDeque<NsdServiceInfo>()
@@ -357,10 +348,7 @@ private class Discovery(
                 discoveryRequested.set(false)
                 if (closed.get()) return
                 mutableState.value =
-                    CrewLanOperationState.Failed(
-                        CrewLanFailureOperation.DISCOVERY,
-                        errorCode,
-                    )
+                    CrewLanOperationState.Failed(CrewLanFailureOperation.DISCOVERY, errorCode)
                 releaseMulticastLock(multicastLock)
             }
 
@@ -368,18 +356,14 @@ private class Discovery(
                 discoveryRequested.set(false)
                 if (!closed.get()) {
                     mutableState.value =
-                        CrewLanOperationState.Failed(
-                            CrewLanFailureOperation.DISCOVERY,
-                            errorCode,
-                        )
+                        CrewLanOperationState.Failed(CrewLanFailureOperation.DISCOVERY, errorCode)
                 }
             }
         }
 
     init {
         if (multicastLock is MulticastLockResult.Failed) {
-            mutableState.value =
-                CrewLanOperationState.Failed(CrewLanFailureOperation.PERMISSION)
+            mutableState.value = CrewLanOperationState.Failed(CrewLanFailureOperation.PERMISSION)
         } else {
             try {
                 discoveryRequested.set(true)
@@ -406,8 +390,7 @@ private class Discovery(
                 releaseMulticastLock(multicastLock)
             } catch (_: RuntimeException) {
                 discoveryRequested.set(false)
-                mutableState.value =
-                    CrewLanOperationState.Failed(CrewLanFailureOperation.DISCOVERY)
+                mutableState.value = CrewLanOperationState.Failed(CrewLanFailureOperation.DISCOVERY)
                 releaseMulticastLock(multicastLock)
             }
         }
@@ -434,18 +417,14 @@ private class Discovery(
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 nsdManager.resolveService(serviceInfo, executor, listener)
             } else {
-                @Suppress("DEPRECATION")
-                nsdManager.resolveService(serviceInfo, listener)
+                @Suppress("DEPRECATION") nsdManager.resolveService(serviceInfo, listener)
             }
         } catch (_: RuntimeException) {
             finishResolution(serviceInfo, null)
         }
     }
 
-    private fun finishResolution(
-        serviceInfo: NsdServiceInfo,
-        rendezvous: CrewLanRendezvous?,
-    ) {
+    private fun finishResolution(serviceInfo: NsdServiceInfo, rendezvous: CrewLanRendezvous?) {
         val continueResolving =
             synchronized(lock) {
                 resolutionActive = false
@@ -472,31 +451,20 @@ private class Discovery(
         val identity = CrewLanTxtCodec.decode(attributes) ?: return null
         val addresses =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                hostAddresses
-            } else {
-                @Suppress("DEPRECATION")
-                listOfNotNull(host)
-            }
+                    hostAddresses
+                } else {
+                    @Suppress("DEPRECATION") listOfNotNull(host)
+                }
                 .filterNot { it.isAnyLocalAddress }
                 .distinct()
         if (addresses.isEmpty() || port !in 1..65535) return null
         val resolvedNetwork =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) network else null
-        return CrewLanRendezvous(
-            identity,
-            serviceName,
-            addresses,
-            port,
-            resolvedNetwork,
-        )
+        return CrewLanRendezvous(identity, serviceName, addresses, port, resolvedNetwork)
     }
 
     private fun publishMatchesLocked() {
-        mutableMatches.value =
-            resolvedByServiceKey
-                .toSortedMap()
-                .values
-                .toList()
+        mutableMatches.value = resolvedByServiceKey.toSortedMap().values.toList()
     }
 
     override fun close() {
@@ -570,9 +538,7 @@ private fun releaseMulticastLock(result: MulticastLockResult) {
 
 private fun Map<String, ByteArray>.requiredUtf8(key: String): String {
     val bytes = requireNotNull(this[key]) { "Crew LAN TXT key is missing" }
-    require(bytes.size in 1..MAX_TXT_VALUE_BYTES) {
-        "Crew LAN TXT value has invalid size"
-    }
+    require(bytes.size in 1..MAX_TXT_VALUE_BYTES) { "Crew LAN TXT value has invalid size" }
     return bytes.toString(StandardCharsets.UTF_8).also {
         require(it.toByteArray(StandardCharsets.UTF_8).contentEquals(bytes)) {
             "Crew LAN TXT value is not valid UTF-8"
@@ -580,8 +546,7 @@ private fun Map<String, ByteArray>.requiredUtf8(key: String): String {
     }
 }
 
-private fun CrewInvite.toLanIdentity() =
-    CrewLanIdentity(protocolVersion, sessionLocator, inviteId)
+private fun CrewInvite.toLanIdentity() = CrewLanIdentity(protocolVersion, sessionLocator, inviteId)
 
 private fun isCrewServiceType(value: String) =
     value.trimEnd('.').equals(CREW_SERVICE_TYPE.trimEnd('.'), ignoreCase = true)
@@ -592,6 +557,5 @@ private fun NsdServiceInfo.serviceKey() =
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class CrewLanModule {
-    @Binds
-    abstract fun discovery(implementation: NsdCrewLanDiscovery): CrewLanDiscovery
+    @Binds abstract fun discovery(implementation: NsdCrewLanDiscovery): CrewLanDiscovery
 }

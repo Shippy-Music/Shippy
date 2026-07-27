@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewClockSync.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewClockSync.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.sync
 
 import kotlin.math.abs
@@ -32,9 +39,7 @@ data class CrewClockProbe(
         require(coordinatorSentMs >= coordinatorReceivedMs) {
             "Coordinator send must not precede receive"
         }
-        require(clientReceivedMs >= clientSentMs) {
-            "Client receive must not precede send"
-        }
+        require(clientReceivedMs >= clientSentMs) { "Client receive must not precede send" }
     }
 
     fun sample(): CrewClockSample? {
@@ -81,10 +86,7 @@ data class CrewClockEstimate(
  * delayed response cannot shift the session clock.
  */
 object CrewClockEstimator {
-    fun estimate(
-        probes: List<CrewClockProbe>,
-        bestSampleLimit: Int = 3,
-    ): CrewClockEstimate? {
+    fun estimate(probes: List<CrewClockProbe>, bestSampleLimit: Int = 3): CrewClockEstimate? {
         require(bestSampleLimit > 0) { "Best-sample limit must be positive" }
         val best =
             probes

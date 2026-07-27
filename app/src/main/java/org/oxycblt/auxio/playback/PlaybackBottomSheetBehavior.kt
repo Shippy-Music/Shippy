@@ -15,16 +15,13 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback
 
 import android.content.Context
 import android.graphics.drawable.LayerDrawable
 import android.util.AttributeSet
-import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
-import androidx.coordinatorlayout.widget.CoordinatorLayout
 import com.google.android.material.R as MR
 import com.google.android.material.shape.MaterialShapeDrawable
 import com.google.android.material.shape.ShapeAppearanceModel
@@ -70,11 +67,6 @@ class PlaybackBottomSheetBehavior<V : View>(context: Context, attributeSet: Attr
 
     override fun getIdealBarHeight(context: Context) =
         context.getDimenPixels(R.dimen.size_touchable_large) + primaryNavigationHeight
-
-    // Hack around issue where the playback sheet will try to intercept nested scrolling events
-    // before the queue sheet.
-    override fun onInterceptTouchEvent(parent: CoordinatorLayout, child: V, event: MotionEvent) =
-        super.onInterceptTouchEvent(parent, child, event) && state != STATE_EXPANDED
 
     // Note: This is an extension to Auxio's vendored BottomSheetBehavior
     override fun isHideableWhenDragging() = false

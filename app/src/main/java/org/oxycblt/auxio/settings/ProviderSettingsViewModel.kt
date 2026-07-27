@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ProviderSettingsViewModel.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ProviderSettingsViewModel.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.settings
 
 import androidx.lifecycle.ViewModel
@@ -38,10 +50,10 @@ data class ProviderSettingsState(
 
 /** Presentation boundary for the small, user-facing provider priority surface. */
 @HiltViewModel
-class ProviderSettingsViewModel @Inject constructor(
-    private val registry: ProviderRegistry,
-    private val settings: ProviderSettings,
-) : ViewModel() {
+class ProviderSettingsViewModel
+@Inject
+constructor(private val registry: ProviderRegistry, private val settings: ProviderSettings) :
+    ViewModel() {
     private val mutableState = MutableStateFlow(ProviderSettingsState())
     val state: StateFlow<ProviderSettingsState> = mutableState.asStateFlow()
 
@@ -98,24 +110,26 @@ class ProviderSettingsViewModel @Inject constructor(
     }
 
     private fun enabledProviders() =
-        registry.descriptors().mapNotNull { registry.get(it.id) }.filter {
-            it.health() != ProviderHealth.DISABLED
-    }
+        registry
+            .descriptors()
+            .mapNotNull { registry.get(it.id) }
+            .filter { it.health() != ProviderHealth.DISABLED }
 
     private fun render(refreshing: Boolean = mutableState.value.refreshing) {
         val providers = enabledProviders()
         val selection = settings.selection(providers.map { it.descriptor.id }).priority
         mutableState.value =
             ProviderSettingsState(
-                providers = providers.map { provider ->
-                    val descriptor = provider.descriptor
-                    ProviderSettingsOption(
-                        descriptor.id,
-                        descriptor.displayName,
-                        healthById[descriptor.id] ?: provider.health(),
-                        checking = refreshing,
-                    )
-                },
+                providers =
+                    providers.map { provider ->
+                        val descriptor = provider.descriptor
+                        ProviderSettingsOption(
+                            descriptor.id,
+                            descriptor.displayName,
+                            healthById[descriptor.id] ?: provider.health(),
+                            checking = refreshing,
+                        )
+                    },
                 preferred = selection.firstOrNull(),
                 fallback = selection.getOrNull(1),
                 refreshing = refreshing,

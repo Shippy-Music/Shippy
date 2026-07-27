@@ -15,18 +15,21 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.queue
 
 import android.os.Bundle
 import android.view.LayoutInflater
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isInvisible
+import androidx.core.view.updatePadding
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import dagger.hilt.android.AndroidEntryPoint
+import kotlin.math.max
 import kotlin.math.min
 import org.oxycblt.auxio.databinding.FragmentQueueBinding
 import org.oxycblt.auxio.list.EditClickListListener
@@ -43,12 +46,12 @@ import timber.log.Timber as L
  */
 @AndroidEntryPoint
 class QueueFragment :
-    ViewBindingFragment<FragmentQueueBinding>(),
-    EditClickListListener<PlaybackDisplayItem> {
+    ViewBindingFragment<FragmentQueueBinding>(), EditClickListListener<PlaybackDisplayItem> {
     private val queueModel: QueueViewModel by viewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val queueAdapter = QueueAdapter(this)
     private var touchHelper: ItemTouchHelper? = null
+    private var scrollToCurrentPending = false
 
     override fun onCreateBinding(inflater: LayoutInflater) = FragmentQueueBinding.inflate(inflater)
 
@@ -59,10 +62,28 @@ class QueueFragment :
         binding.queueRecycler.apply {
             adapter = queueAdapter
             touchHelper =
-                ItemTouchHelper(QueueDragCallback(queueModel)).also {
+                ItemTouchHelper(QueueDragCallback(queueModel, queueAdapter)).also {
                     it.attachToRecyclerView(this)
                 }
         }
+
+        // QueueBottomSheetBehavior intentionally rewrites the inset it sends to descendants with
+        // its logical playback-bar offset. Queue rows only need the physical bottom system/gesture
+        // inset, otherwise the inherited offset becomes extra RecyclerView padding.
+        val initialQueuePaddingBottom = binding.queueRecycler.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(binding.queueRecycler) { recycler, _ ->
+            val rootInsets = ViewCompat.getRootWindowInsets(recycler)
+            val physicalBottomInset =
+                rootInsets?.let {
+                    max(
+                        it.getInsets(WindowInsetsCompat.Type.systemBars()).bottom,
+                        it.getInsets(WindowInsetsCompat.Type.mandatorySystemGestures()).bottom,
+                    )
+                } ?: 0
+            recycler.updatePadding(bottom = initialQueuePaddingBottom + physicalBottomInset)
+            WindowInsetsCompat.CONSUMED
+        }
+        binding.queueRecycler.requestApplyInsets()
 
         // Sometimes the scroll can change without the listener being updated, so we also
         // check for relayout events.
@@ -103,6 +124,29 @@ class QueueFragment :
         requireNotNull(touchHelper) { "ItemTouchHelper was not available" }.startDrag(viewHolder)
     }
 
+    /**
+     * Position the active queue item near the upper third of the sheet so it is immediately
+     * recognizable while preserving useful context for upcoming songs.
+     */
+    fun scrollToCurrent() {
+        scrollToCurrentPending = true
+        scrollToCurrentIfReady()
+    }
+
+    private fun scrollToCurrentIfReady() {
+        val binding = binding ?: return
+        val current = queueModel.index.value
+        if (current !in queueAdapter.currentList.indices) return
+
+        scrollToCurrentPending = false
+        binding.queueRecycler.post {
+            val recycler = binding.queueRecycler
+            val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return@post
+            val offset = (recycler.height * CURRENT_ITEM_OFFSET_RATIO).toInt()
+            layoutManager.scrollToPositionWithOffset(current, offset)
+        }
+    }
+
     private fun updateDivider() {
         val binding = requireBinding()
         binding.queueDivider.isInvisible =
@@ -110,15 +154,14 @@ class QueueFragment :
                 .findFirstCompletelyVisibleItemPosition() < 1
     }
 
-    private fun updateQueue(
-        queue: List<PlaybackDisplayItem>,
-        index: Int,
-        isPlaying: Boolean,
-    ) {
+    private fun updateQueue(queue: List<PlaybackDisplayItem>, index: Int, isPlaying: Boolean) {
         val binding = requireBinding()
 
         queueAdapter.update(queue, queueModel.queueInstructions.consume())
         queueAdapter.setPosition(index, isPlaying)
+        if (scrollToCurrentPending) {
+            scrollToCurrentIfReady()
+        }
 
         // If requested, scroll to a new item (occurs when the index moves)
         val scrollTo = queueModel.scrollTo.consume()
@@ -144,5 +187,9 @@ class QueueFragment :
                 binding.queueRecycler.scrollToPosition(min(queue.lastIndex, offset))
             }
         }
+    }
+
+    private companion object {
+        const val CURRENT_ITEM_OFFSET_RATIO = 0.28f
     }
 }

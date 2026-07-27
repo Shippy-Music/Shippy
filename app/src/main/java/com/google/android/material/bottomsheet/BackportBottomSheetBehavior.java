@@ -22,6 +22,7 @@ import static androidx.annotation.RestrictTo.Scope.LIBRARY_GROUP;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 
+import android.annotation.SuppressLint;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
@@ -92,6 +93,8 @@ import java.util.Map;
  * window-like. For BottomSheetDialog use {@link BottomSheetDialog#setTitle(int)}, and for
  * BottomSheetDialogFragment use {@link ViewCompat#setAccessibilityPaneTitle(View, CharSequence)}.
  */
+// This pinned Material backport intentionally uses Material's restricted compatibility APIs.
+@SuppressLint("RestrictedApi")
 public class BackportBottomSheetBehavior<V extends View> extends CoordinatorLayout.Behavior<V>
     implements MaterialBackHandler {
 
@@ -214,9 +217,9 @@ public class BackportBottomSheetBehavior<V extends View> extends CoordinatorLayo
 
   @VisibleForTesting static final int DEFAULT_SIGNIFICANT_VEL_THRESHOLD = 500;
 
-  private static final float HIDE_THRESHOLD = 0.5f;
+  private static final float HIDE_THRESHOLD = 0.35f;
 
-  private static final float HIDE_FRICTION = 0.1f;
+  private static final float HIDE_FRICTION = 0.12f;
 
   private static final int CORNER_ANIMATION_DURATION = 500;
 
@@ -2434,6 +2437,8 @@ public class BackportBottomSheetBehavior<V extends View> extends CoordinatorLayo
   private AccessibilityViewCommand createAccessibilityViewCommandForState(@State final int state) {
     return new AccessibilityViewCommand() {
       @Override
+      // Android lint loses the @State contract across this compatibility callback boundary.
+      @SuppressLint("WrongConstant")
       public boolean perform(@NonNull View view, @Nullable CommandArguments arguments) {
         setState(state);
         return true;

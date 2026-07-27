@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.detail
 
 import android.os.Bundle
@@ -237,7 +236,9 @@ class AlbumDetailFragment : DetailFragment<Album, Song>() {
                 is Menu.ForGenre,
                 is Menu.ForPlaylist -> error("Unexpected menu $menu")
             }
-        findNavController().navigateSafe(directions)
+        if (!findNavController().navigateSafe(directions)) {
+            listModel.menu.consume()
+        }
     }
 
     private fun updateSelection(selected: List<Music>) {

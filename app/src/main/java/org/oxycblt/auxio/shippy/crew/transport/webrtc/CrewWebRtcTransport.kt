@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewWebRtcTransport.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewWebRtcTransport.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.transport.webrtc
 
 import android.content.Context
@@ -18,8 +25,8 @@ import java.security.MessageDigest
 import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -61,16 +68,11 @@ private const val MAX_PENDING_REMOTE_ICE_CANDIDATES = 256
 private const val MIN_VERIFIED_TRANSCRIPT_BYTES = 32
 private val ICE_SERVER_PATTERN =
     Regex(
-        "^(stun|stuns|turn|turns):[A-Za-z0-9.-]+(?::([0-9]{1,5}))?" +
-            "(?:\\?transport=(udp|tcp))?$",
+        "^(stun|stuns|turn|turns):[A-Za-z0-9.-]+(?::([0-9]{1,5}))?" + "(?:\\?transport=(udp|tcp))?$"
     )
 
 /** STUN/TURN credentials are deliberately redacted from diagnostics. */
-class CrewIceServer(
-    urls: List<String>,
-    val username: String = "",
-    val credential: String = "",
-) {
+class CrewIceServer(urls: List<String>, val username: String = "", val credential: String = "") {
     val urls = urls.toList()
 
     init {
@@ -171,7 +173,8 @@ class CrewIceCandidate(
  * The digest binds the session, member identities, nonces, roles, and SDP fingerprints. The
  * transport deliberately cannot manufacture this proof from a claimed member ID.
  */
-class CrewAuthenticatedPeerBinding internal constructor(
+class CrewAuthenticatedPeerBinding
+internal constructor(
     val sessionId: CrewSessionId,
     val remoteMemberId: CrewMemberId,
     verifiedTranscriptHash: ByteArray,
@@ -187,8 +190,7 @@ class CrewAuthenticatedPeerBinding internal constructor(
         }
     }
 
-    internal fun matchesTranscript(other: ByteArray) =
-        MessageDigest.isEqual(transcriptHash, other)
+    internal fun matchesTranscript(other: ByteArray) = MessageDigest.isEqual(transcriptHash, other)
 
     override fun toString() =
         "CrewAuthenticatedPeerBinding(sessionId=$sessionId, remoteMemberId=$remoteMemberId, " +
@@ -287,13 +289,7 @@ class CrewWebRtcRuntime(context: Context) : Closeable, CrewRtcPeerFactory {
             }
         connection.setAudioPlayout(false)
         connection.setAudioRecording(false)
-        val peer =
-            CrewWebRtcPeer(
-                expectedSessionId,
-                claimedRemoteMemberId,
-                connection,
-                signalSink,
-            )
+        val peer = CrewWebRtcPeer(expectedSessionId, claimedRemoteMemberId, connection, signalSink)
         observer.delegate = peer
         peer.initialize(createsDataChannels)
         return peer
@@ -308,7 +304,8 @@ class CrewWebRtcRuntime(context: Context) : Closeable, CrewRtcPeerFactory {
     }
 }
 
-class CrewWebRtcPeer internal constructor(
+class CrewWebRtcPeer
+internal constructor(
     private val expectedSessionId: CrewSessionId,
     private val claimedRemoteMemberId: CrewMemberId,
     private val connection: PeerConnection,
@@ -345,7 +342,10 @@ class CrewWebRtcPeer internal constructor(
         mutableState.value = CrewTransportState.CONNECTING
         if (createsDataChannels) {
             CrewTransportChannel.entries.forEach { purpose ->
-                attachChannel(purpose, connection.createDataChannel(purpose.wireLabel, purpose.toInit()))
+                attachChannel(
+                    purpose,
+                    connection.createDataChannel(purpose.wireLabel, purpose.toInit()),
+                )
             }
         }
     }
@@ -381,14 +381,15 @@ class CrewWebRtcPeer internal constructor(
                     throw IllegalArgumentException("Stale Crew session description")
             }
             val completion = CompletableDeferred<Unit>()
-            connection.setRemoteDescription(SetDescriptionObserver(completion), description.toNative())
+            connection.setRemoteDescription(
+                SetDescriptionObserver(completion),
+                description.toNative(),
+            )
             completion.await()
             val pending =
                 synchronized(negotiationLock) {
                     remoteDescriptionSet = true
-                    pendingRemoteIceCandidates.toList().also {
-                        pendingRemoteIceCandidates.clear()
-                    }
+                    pendingRemoteIceCandidates.toList().also { pendingRemoteIceCandidates.clear() }
                 }
             check(pending.all { connection.addIceCandidate(it.toNative()) }) {
                 "WebRTC rejected a queued remote ICE candidate"
@@ -426,12 +427,8 @@ class CrewWebRtcPeer internal constructor(
             requireAuthentication = false,
         )
 
-    /**
-     * Opens the ordinary Crew frame surface only after a verified join transcript is supplied.
-     */
-    override fun completeAuthentication(
-        binding: CrewAuthenticatedPeerBinding,
-    ): CrewPeerTransport {
+    /** Opens the ordinary Crew frame surface only after a verified join transcript is supplied. */
+    override fun completeAuthentication(binding: CrewAuthenticatedPeerBinding): CrewPeerTransport {
         check(!closed.get()) { "Crew peer is closed" }
         require(binding.sessionId == expectedSessionId) {
             "Authenticated session does not match the negotiated Crew"
@@ -456,7 +453,8 @@ class CrewWebRtcPeer internal constructor(
             if (requireAuthentication && authenticatedBinding == null) {
                 return@synchronized CrewSendResult.ChannelNotOpen
             }
-            val channel = channels[frame.channel] ?: return@synchronized CrewSendResult.ChannelNotOpen
+            val channel =
+                channels[frame.channel] ?: return@synchronized CrewSendResult.ChannelNotOpen
             if (channel.state() != DataChannel.State.OPEN) {
                 return@synchronized CrewSendResult.ChannelNotOpen
             }
@@ -527,7 +525,7 @@ class CrewWebRtcPeer internal constructor(
                     candidate.sdpMid,
                     candidate.sdpMLineIndex,
                     candidate.sdp,
-                ),
+                )
             )
         }
     }
@@ -590,7 +588,9 @@ class CrewWebRtcPeer internal constructor(
                     if (!authenticated) {
                         if (
                             purpose != CrewTransportChannel.CONTROL ||
-                                authenticationFrames.trySend(CrewAuthenticationFrame(payload)).isFailure
+                                authenticationFrames
+                                    .trySend(CrewAuthenticationFrame(payload))
+                                    .isFailure
                         ) {
                             failAndClose()
                         }
@@ -607,7 +607,7 @@ class CrewWebRtcPeer internal constructor(
                                         purpose,
                                         frame.size,
                                         CrewTransportDropReason.TRANSIENT_CHANNEL_FULL,
-                                    ),
+                                    )
                                 )
                             CrewTransportChannel.MEDIA ->
                                 mutableDrops.tryEmit(
@@ -615,12 +615,12 @@ class CrewWebRtcPeer internal constructor(
                                         purpose,
                                         frame.size,
                                         CrewTransportDropReason.MEDIA_WINDOW_FULL,
-                                    ),
+                                    )
                                 )
                         }
                     }
                 }
-            },
+            }
         )
         updateChannelReadiness()
     }
@@ -647,8 +647,7 @@ class CrewWebRtcPeer internal constructor(
         val completion = CompletableDeferred<SessionDescription>()
         val observer = CreateDescriptionObserver(completion)
         when (type) {
-            CrewSessionDescriptionType.OFFER ->
-                connection.createOffer(observer, MediaConstraints())
+            CrewSessionDescriptionType.OFFER -> connection.createOffer(observer, MediaConstraints())
             CrewSessionDescriptionType.ANSWER ->
                 connection.createAnswer(observer, MediaConstraints())
         }
@@ -669,9 +668,7 @@ class CrewWebRtcPeer internal constructor(
         if (!closed.compareAndSet(false, true)) return
         mutableState.value = finalState
         val ownedChannels =
-            synchronized(channelLock) {
-                channels.values.toList().also { channels.clear() }
-            }
+            synchronized(channelLock) { channels.values.toList().also { channels.clear() } }
         incomingChannels.values.forEach { it.close() }
         authenticationFrames.close()
         ownedChannels.forEach { channel ->
@@ -695,15 +692,12 @@ class CrewWebRtcPeer internal constructor(
         }
     }
 
-    private fun currentGeneration() =
-        synchronized(negotiationLock) { currentNegotiationGeneration }
+    private fun currentGeneration() = synchronized(negotiationLock) { currentNegotiationGeneration }
 
-    private fun isRemoteDescriptionSet() =
-        synchronized(negotiationLock) { remoteDescriptionSet }
+    private fun isRemoteDescriptionSet() = synchronized(negotiationLock) { remoteDescriptionSet }
 
-    private inner class AuthenticatedPeerTransport(
-        binding: CrewAuthenticatedPeerBinding,
-    ) : CrewPeerTransport {
+    private inner class AuthenticatedPeerTransport(binding: CrewAuthenticatedPeerBinding) :
+        CrewPeerTransport {
         override val remoteMemberId = binding.remoteMemberId
         override val state: StateFlow<CrewTransportState> = negotiationState
         override val incoming: Flow<CrewTransportFrame> =
@@ -718,8 +712,7 @@ class CrewWebRtcPeer internal constructor(
         override fun trySend(frame: CrewTransportFrame) =
             trySendFrame(frame, requireAuthentication = true)
 
-        override fun bufferedBytes(channel: CrewTransportChannel) =
-            bufferedBytesInternal(channel)
+        override fun bufferedBytes(channel: CrewTransportChannel) = bufferedBytesInternal(channel)
 
         override fun close() = this@CrewWebRtcPeer.close()
     }
@@ -764,7 +757,7 @@ private class PeerObserverBridge : PeerConnection.Observer {
 }
 
 private class CreateDescriptionObserver(
-    private val completion: CompletableDeferred<SessionDescription>,
+    private val completion: CompletableDeferred<SessionDescription>
 ) : SdpObserver {
     override fun onCreateSuccess(description: SessionDescription) {
         completion.complete(description)
@@ -779,9 +772,8 @@ private class CreateDescriptionObserver(
     override fun onSetFailure(error: String) = Unit
 }
 
-private class SetDescriptionObserver(
-    private val completion: CompletableDeferred<Unit>,
-) : SdpObserver {
+private class SetDescriptionObserver(private val completion: CompletableDeferred<Unit>) :
+    SdpObserver {
     override fun onCreateSuccess(description: SessionDescription) = Unit
 
     override fun onCreateFailure(error: String) = Unit

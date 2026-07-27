@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewOptimisticActionsTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewOptimisticActionsTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.session
 
 import org.junit.Assert.assertEquals
@@ -29,10 +36,7 @@ class CrewOptimisticActionsTest {
         val tracker = CrewOptimisticActionTracker()
         val request = fixture.request("request", CrewAction.ShuffleChanged(true))
 
-        assertEquals(
-            CrewOptimisticSubmitResult.Pending(request),
-            tracker.submit(request, 100),
-        )
+        assertEquals(CrewOptimisticSubmitResult.Pending(request), tracker.submit(request, 100))
         val result = tracker.reconcile(fixture.event(request))
 
         assertTrue(result is CrewOptimisticReconcileResult.Accepted)
@@ -47,9 +51,7 @@ class CrewOptimisticActionsTest {
         tracker.submit(request, 100)
 
         val conflicting =
-            fixture.event(
-                request.copy(action = CrewAction.RepeatChanged(fixture.repeatMode)),
-            )
+            fixture.event(request.copy(action = CrewAction.RepeatChanged(fixture.repeatMode)))
 
         assertTrue(tracker.reconcile(conflicting) is CrewOptimisticReconcileResult.Conflict)
         assertTrue(tracker.pendingRequests().isEmpty())
@@ -84,12 +86,7 @@ class CrewOptimisticActionsTest {
             tracker.expire(1_100),
         )
         assertEquals(
-            listOf(
-                CrewOptimisticRejection(
-                    second,
-                    CrewOptimisticRejectionReason.SESSION_CHANGED,
-                ),
-            ),
+            listOf(CrewOptimisticRejection(second, CrewOptimisticRejectionReason.SESSION_CHANGED)),
             tracker.clearForSessionChange(),
         )
         assertTrue(tracker.pendingRequests().isEmpty())
@@ -102,10 +99,8 @@ class CrewOptimisticActionsTest {
         private val memberId = CrewMemberId("member", protocol)
         val repeatMode = org.oxycblt.auxio.shippy.crew.core.CrewRepeatMode.ALL
 
-        fun request(
-            id: String,
-            action: CrewAction,
-        ) = CrewActionRequest(DurableEventId(id), memberId, 50, action)
+        fun request(id: String, action: CrewAction) =
+            CrewActionRequest(DurableEventId(id), memberId, 50, action)
 
         fun event(request: CrewActionRequest) =
             DurableCrewEvent(

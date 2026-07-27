@@ -1,16 +1,25 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ShippyPlaybackController.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ShippyPlaybackController.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.playback
 
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.playback.state.PlaybackCommandFactoryImpl
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
@@ -18,12 +27,13 @@ import org.oxycblt.auxio.shippy.domain.PlaybackResolutionCoordinator
 import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.domain.QueueItemFactory
 import org.oxycblt.auxio.shippy.domain.QueueItemId
-import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.shippy.domain.ResolutionPolicy
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderSettings
+import org.oxycblt.auxio.shippy.provider.StreamConstraints
 
 sealed interface PlaybackStartResult {
     data class Started(val queueItemId: QueueItemId) : PlaybackStartResult
@@ -70,29 +80,25 @@ constructor(
         shuffled: Boolean = false,
     ): PlaybackStartResult {
         val prepared =
-            when (
-                val result =
-                    prepareQueue(
-                        tracks,
-                        selectedIndex,
-                        contextId,
-                        contributorId,
-                        pushPullEnabled,
-                    )
-            ) {
-                is PreparedPlaybackQueue.Ready -> result
-                is PreparedPlaybackQueue.Failed ->
-                    return PlaybackStartResult.Failed(result.failure)
+            withContext(Dispatchers.Default) {
+                prepareQueue(tracks, selectedIndex, contextId, contributorId, pushPullEnabled)
             }
-        playbackManager.play(
-            PlaybackCommandFactoryImpl.PlaybackCommandImpl(
-                selectedItemId = prepared.plan.selectedItemId,
-                queue = prepared.items,
-                parent = null,
-                shuffled = shuffled,
-            )
-        )
-        return PlaybackStartResult.Started(prepared.plan.selectedItemId)
+        when (prepared) {
+            is PreparedPlaybackQueue.Failed -> return PlaybackStartResult.Failed(prepared.failure)
+            is PreparedPlaybackQueue.Ready -> {
+                withContext(Dispatchers.Main.immediate) {
+                    playbackManager.play(
+                        PlaybackCommandFactoryImpl.PlaybackCommandImpl(
+                            selectedItemId = prepared.plan.selectedItemId,
+                            queue = prepared.items,
+                            parent = null,
+                            shuffled = shuffled,
+                        )
+                    )
+                }
+                return PlaybackStartResult.Started(prepared.plan.selectedItemId)
+            }
+        }
     }
 
     /** Resolves atomically, then inserts source-aware tracks immediately after the current item. */
@@ -136,8 +142,7 @@ constructor(
                     )
             ) {
                 is PreparedPlaybackQueue.Ready -> result
-                is PreparedPlaybackQueue.Failed ->
-                    return PlaybackStartResult.Failed(result.failure)
+                is PreparedPlaybackQueue.Failed -> return PlaybackStartResult.Failed(result.failure)
             }
         mutation(prepared.items)
         return PlaybackStartResult.Started(prepared.plan.selectedItemId)
@@ -150,25 +155,34 @@ constructor(
         contributorId: String?,
         pushPullEnabled: Boolean,
     ): PreparedPlaybackQueue {
-        val plan = queuePlaybackPlan(queueItemFactory, tracks, selectedIndex, contextId, contributorId)
+        val plan =
+            queuePlaybackPlan(queueItemFactory, tracks, selectedIndex, contextId, contributorId)
         val policy =
             ResolutionPolicy(
                 providerPriority =
                     providerSettings
                         .selection(
-                            providerRegistry
-                                .supporting(ProviderCapability.STREAM)
-                                .map { it.descriptor.id }
+                            providerRegistry.supporting(ProviderCapability.STREAM).map {
+                                it.descriptor.id
+                            }
                         )
                         .priority,
                 pushPullEnabled = pushPullEnabled,
             )
         val items = mutableListOf<ResolvedQueueItem>()
         for (item in plan.items) {
-            when (val preparation = resolutionCoordinator.prepare(item, policy)) {
+            when (
+                val preparation =
+                    resolutionCoordinator.prepare(
+                        item,
+                        policy,
+                        StreamConstraints(
+                            preferredBitrateBps = providerSettings.streamingBitrateBps()
+                        ),
+                    )
+            ) {
                 is PlaybackPreparation.Ready -> items += preparation.value
-                is PlaybackPreparation.Failed ->
-                    return PreparedPlaybackQueue.Failed(preparation)
+                is PlaybackPreparation.Failed -> return PreparedPlaybackQueue.Failed(preparation)
             }
         }
         return PreparedPlaybackQueue.Ready(plan, items)
@@ -176,18 +190,13 @@ constructor(
 }
 
 private sealed interface PreparedPlaybackQueue {
-    data class Ready(
-        val plan: QueuePlaybackPlan,
-        val items: List<ResolvedQueueItem>,
-    ) : PreparedPlaybackQueue
+    data class Ready(val plan: QueuePlaybackPlan, val items: List<ResolvedQueueItem>) :
+        PreparedPlaybackQueue
 
     data class Failed(val failure: PlaybackPreparation.Failed) : PreparedPlaybackQueue
 }
 
-internal data class QueuePlaybackPlan(
-    val items: List<QueueItem>,
-    val selectedItemId: QueueItemId,
-)
+internal data class QueuePlaybackPlan(val items: List<QueueItem>, val selectedItemId: QueueItemId)
 
 internal fun queuePlaybackPlan(
     queueItemFactory: QueueItemFactory,

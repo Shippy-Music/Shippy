@@ -15,14 +15,18 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.queue
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.playback.PlaybackDisplayItem
 import org.oxycblt.auxio.playback.PlaybackDisplayMapper
@@ -45,8 +49,8 @@ class QueueViewModel
 constructor(
     private val playbackManager: PlaybackStateManager,
     private val playbackDisplayMapper: PlaybackDisplayMapper,
-) :
-    ViewModel(), PlaybackStateManager.Listener {
+) : ViewModel(), PlaybackStateManager.Listener {
+    private var queueMappingJob: Job? = null
 
     private val _queue = MutableStateFlow(listOf<PlaybackDisplayItem>())
     /** The current queue. */
@@ -81,8 +85,7 @@ constructor(
     ) {
         // Queue changed trivially due to item mo -> Diff queue, stay at current index.
         L.d("Updating queue display")
-        _queueInstructions.put(change.instructions)
-        _queue.value = queue.map(playbackDisplayMapper::map)
+        updateQueueAsync(queue, change.instructions)
         if (change.type != QueueChange.Type.MAPPING) {
             // Index changed, make sure it remains updated without actually scrolling to it.
             L.d("Index changed with queue, synchronizing new position")
@@ -97,10 +100,9 @@ constructor(
     ) {
         // Queue changed completely -> Replace queue, update index
         L.d("Queue changed completely, replacing queue and position")
-        _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
-        _queue.value = queue.map(playbackDisplayMapper::map)
         _index.value = index
+        updateQueueAsync(queue, UpdateInstructions.Replace(0))
     }
 
     override fun onCanonicalNewPlayback(
@@ -111,10 +113,21 @@ constructor(
     ) {
         // Entirely new queue -> Replace queue, update index
         L.d("New playback, replacing queue and position")
-        _queueInstructions.put(UpdateInstructions.Replace(0))
         _scrollTo.put(index)
-        _queue.value = queue.map(playbackDisplayMapper::map)
         _index.value = index
+        updateQueueAsync(queue, UpdateInstructions.Replace(0))
+    }
+
+    private fun updateQueueAsync(queue: List<ResolvedQueueItem>, instructions: UpdateInstructions) {
+        queueMappingJob?.cancel()
+        queueMappingJob =
+            viewModelScope.launch {
+                val displayQueue =
+                    withContext(Dispatchers.Default) { queue.map(playbackDisplayMapper::map) }
+                _queueInstructions.put(instructions)
+                _queue.value = displayQueue
+                _index.value = playbackManager.index
+            }
     }
 
     override fun onCleared() {

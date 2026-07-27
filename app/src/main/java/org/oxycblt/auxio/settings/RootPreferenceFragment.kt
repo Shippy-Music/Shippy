@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.settings
 
 import android.content.Intent
@@ -29,8 +28,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
-import androidx.preference.Preference
 import androidx.preference.ListPreference
+import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -40,21 +39,22 @@ import com.google.android.material.transition.MaterialFadeThrough
 import com.google.android.material.transition.MaterialSharedAxis
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHealth
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHealthProbe
 import org.oxycblt.auxio.shippy.crew.settings.CrewRelayLocatorSettingInput
 import org.oxycblt.auxio.shippy.crew.settings.CrewRelayLocatorSettingResult
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
-import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHealth
-import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHealthProbe
+import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.download.DownloadDestinationReconciler
 import org.oxycblt.auxio.shippy.download.DownloadDestinationState
 import org.oxycblt.auxio.shippy.download.SafDownloadStorage
 import org.oxycblt.auxio.shippy.download.StorageResult
-import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.provider.ProviderHealth
 import org.oxycblt.auxio.util.navigateSafe
 import org.oxycblt.auxio.util.showToast
@@ -79,9 +79,9 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private val downloadDestinationLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
             if (uri != null) {
-                lifecycleScope.launch {
+                viewLifecycleOwner.lifecycleScope.launch {
                     when (downloadStorage.selectDestination(uri, null)) {
-                        is StorageResult.Success -> refreshDownloadDestination()
+                        is StorageResult.Success -> refreshDownloadDestinationSafely()
                         is StorageResult.Failure ->
                             requireContext().showToast(R.string.msg_download_destination_failed)
                     }
@@ -101,7 +101,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     override fun onResume() {
         super.onResume()
         providerSettingsModel.refresh(force = false)
-        lifecycleScope.launch { refreshDownloadDestination() }
+        viewLifecycleOwner.lifecycleScope.launch { refreshDownloadDestinationSafely() }
         probeCrewRelayHealth()
     }
 
@@ -114,8 +114,10 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 launch {
                     lastFmModel.events.collect { event ->
                         when (event) {
-                            LastFmSettingsEvent.ShowCredentialsDialog -> showLastFmCredentialsDialog()
-                            is LastFmSettingsEvent.OpenBrowser -> openLastFmAuthorization(event.authorizationUrl)
+                            LastFmSettingsEvent.ShowCredentialsDialog ->
+                                showLastFmCredentialsDialog()
+                            is LastFmSettingsEvent.OpenBrowser ->
+                                openLastFmAuthorization(event.authorizationUrl)
                         }
                     }
                 }
@@ -176,9 +178,8 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
 
     private suspend fun updateDownloadDestinationSummary() {
         val preference =
-            findPreference<Preference>(
-                getString(R.string.set_key_download_destination_picker)
-            ) ?: return
+            findPreference<Preference>(getString(R.string.set_key_download_destination_picker))
+                ?: return
         preference.summary =
             when (val state = downloadStorage.inspectDestination()) {
                 DownloadDestinationState.NotSelected ->
@@ -196,6 +197,17 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private suspend fun refreshDownloadDestination() {
         downloadDestinationReconciler.reconcile()
         updateDownloadDestinationSummary()
+    }
+
+    private suspend fun refreshDownloadDestinationSafely() {
+        try {
+            refreshDownloadDestination()
+        } catch (error: Exception) {
+            if (error is CancellationException) throw error
+            L.e(error, "Could not refresh the download destination")
+            findPreference<Preference>(getString(R.string.set_key_download_destination_picker))
+                ?.summary = getString(R.string.msg_download_destination_failed)
+        }
     }
 
     private fun probeCrewRelayHealth() {
@@ -216,15 +228,14 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                     is CrewRelayHealth.Healthy -> R.string.set_crew_relay_reachable
                     CrewRelayHealth.Unreachable,
                     CrewRelayHealth.InvalidResponse -> R.string.set_crew_relay_unreachable
-                }
-                    .let { result ->
-                        if (
-                            generation == crewRelayHealthGeneration &&
-                                crewSettings.relayLocator?.value == locator.value
-                        ) {
-                            preference.summary = getString(result, summary)
-                        }
+                }.let { result ->
+                    if (
+                        generation == crewRelayHealthGeneration &&
+                            crewSettings.relayLocator?.value == locator.value
+                    ) {
+                        preference.summary = getString(result, summary)
                     }
+                }
             }
     }
 
@@ -285,7 +296,8 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
             state.fallback?.let { providerSummary(state, it) }
                 ?: getString(R.string.set_provider_no_fallback)
         refresh.isEnabled = !state.refreshing && state.providers.isNotEmpty()
-        refresh.summary = if (state.refreshing) getString(R.string.set_provider_refreshing) else null
+        refresh.summary =
+            if (state.refreshing) getString(R.string.set_provider_refreshing) else null
     }
 
     private fun providerPreference(
@@ -324,7 +336,8 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private fun showLastFmCredentialsDialog() {
         val content = layoutInflater.inflate(R.layout.dialog_lastfm_credentials, null)
         val keyContainer = content.findViewById<TextInputLayout>(R.id.lastfm_api_key_container)
-        val secretContainer = content.findViewById<TextInputLayout>(R.id.lastfm_api_secret_container)
+        val secretContainer =
+            content.findViewById<TextInputLayout>(R.id.lastfm_api_secret_container)
         val key = content.findViewById<TextInputEditText>(R.id.lastfm_api_key)
         val secret = content.findViewById<TextInputEditText>(R.id.lastfm_api_secret)
         val dialog =
@@ -336,27 +349,33 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 .setPositiveButton(R.string.set_lastfm_connect, null)
                 .create()
         dialog.setOnShowListener {
-            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val apiKey = key.text?.toString().orEmpty()
-                val apiSecret = secret.text?.toString().orEmpty()
-                keyContainer.error = null
-                secretContainer.error = null
-                if (!LastFmSettingsInput.isValid(apiKey) || !LastFmSettingsInput.isValid(apiSecret)) {
-                    val message = getString(R.string.set_lastfm_invalid_input)
-                    if (!LastFmSettingsInput.isValid(apiKey)) keyContainer.error = message
-                    if (!LastFmSettingsInput.isValid(apiSecret)) secretContainer.error = message
-                    return@setOnClickListener
+            dialog
+                .getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener {
+                    val apiKey = key.text?.toString().orEmpty()
+                    val apiSecret = secret.text?.toString().orEmpty()
+                    keyContainer.error = null
+                    secretContainer.error = null
+                    if (
+                        !LastFmSettingsInput.isValid(apiKey) ||
+                            !LastFmSettingsInput.isValid(apiSecret)
+                    ) {
+                        val message = getString(R.string.set_lastfm_invalid_input)
+                        if (!LastFmSettingsInput.isValid(apiKey)) keyContainer.error = message
+                        if (!LastFmSettingsInput.isValid(apiSecret)) secretContainer.error = message
+                        return@setOnClickListener
+                    }
+                    dialog.dismiss()
+                    lastFmModel.beginAuthorization(apiKey, apiSecret)
                 }
-                dialog.dismiss()
-                lastFmModel.beginAuthorization(apiKey, apiSecret)
-            }
         }
         dialog.show()
     }
 
     private fun showCrewRelayDialog() {
         val content = layoutInflater.inflate(R.layout.dialog_crew_relay, null)
-        val endpointContainer = content.findViewById<TextInputLayout>(R.id.crew_relay_endpoint_container)
+        val endpointContainer =
+            content.findViewById<TextInputLayout>(R.id.crew_relay_endpoint_container)
         val endpoint = content.findViewById<TextInputEditText>(R.id.crew_relay_endpoint)
         endpoint.setText(crewSettings.relayLocator?.value.orEmpty())
         endpoint.setSelection(endpoint.length())
@@ -375,19 +394,21 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 probeCrewRelayHealth()
                 dialog.dismiss()
             }
-            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                endpointContainer.error = null
-                when (crewSettings.setRelayLocator(endpoint.text?.toString().orEmpty())) {
-                    is CrewRelayLocatorSettingResult.Configured,
-                    CrewRelayLocatorSettingResult.Cleared -> {
-                        probeCrewRelayHealth()
-                        dialog.dismiss()
-                    }
-                    CrewRelayLocatorSettingResult.Invalid -> {
-                        endpointContainer.error = getString(R.string.set_crew_relay_invalid)
+            dialog
+                .getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener {
+                    endpointContainer.error = null
+                    when (crewSettings.setRelayLocator(endpoint.text?.toString().orEmpty())) {
+                        is CrewRelayLocatorSettingResult.Configured,
+                        CrewRelayLocatorSettingResult.Cleared -> {
+                            probeCrewRelayHealth()
+                            dialog.dismiss()
+                        }
+                        CrewRelayLocatorSettingResult.Invalid -> {
+                            endpointContainer.error = getString(R.string.set_crew_relay_invalid)
+                        }
                     }
                 }
-            }
         }
         dialog.show()
     }
@@ -395,7 +416,12 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private fun showLastFmConnectedActions() {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.set_lastfm)
-            .setItems(arrayOf(getString(R.string.set_lastfm_reconnect), getString(R.string.set_lastfm_disconnect))) { _, index ->
+            .setItems(
+                arrayOf(
+                    getString(R.string.set_lastfm_reconnect),
+                    getString(R.string.set_lastfm_disconnect),
+                )
+            ) { _, index ->
                 if (index == 0) {
                     lastFmModel.reconnect()
                 } else {

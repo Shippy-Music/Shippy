@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewLanTxtCodecTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewLanTxtCodecTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.lan
 
 import java.net.InetAddress
@@ -42,24 +49,19 @@ class CrewLanTxtCodecTest {
                         ProtocolVersion(1),
                         CrewSessionLocator("session_locator_123"),
                         CrewInviteId("invite_12345678"),
-                    ),
+                    )
                 )
                 .mapValues { it.value.toByteArray(Charsets.UTF_8) }
 
         assertEquals(null, CrewLanTxtCodec.decode(valid - "iid"))
-        assertEquals(
-            null,
-            CrewLanTxtCodec.decode(valid + ("pv" to "zero".toByteArray())),
-        )
+        assertEquals(null, CrewLanTxtCodec.decode(valid + ("pv" to "zero".toByteArray())))
         assertEquals(
             null,
             CrewLanTxtCodec.decode(valid + ("sid" to ByteArray(129) { 'a'.code.toByte() })),
         )
         assertEquals(
             null,
-            CrewLanTxtCodec.decode(
-                valid + ("sid" to byteArrayOf(0xC3.toByte(), 0x28.toByte())),
-            ),
+            CrewLanTxtCodec.decode(valid + ("sid" to byteArrayOf(0xC3.toByte(), 0x28.toByte()))),
         )
     }
 

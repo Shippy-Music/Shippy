@@ -15,22 +15,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback
 
 import android.annotation.SuppressLint
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.media.audiofx.AudioEffect
 import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.Toolbar
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.constraintlayout.widget.ConstraintSet
@@ -51,7 +44,6 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
 import org.oxycblt.auxio.detail.DetailViewModel
-import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.queue.QueueViewModel
@@ -62,26 +54,22 @@ import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
 import org.oxycblt.auxio.playback.ui.swiper.CarouselTransformer
 import org.oxycblt.auxio.playback.ui.swiper.CoverPagerAdapter
 import org.oxycblt.auxio.playback.ui.swiper.UserAwarePagerCallback
-import org.oxycblt.auxio.shippy.lyrics.PlainLyrics
-import org.oxycblt.auxio.shippy.lyrics.SyncedLyrics
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
+import org.oxycblt.auxio.shippy.lyrics.PlainLyrics
+import org.oxycblt.auxio.shippy.lyrics.SyncedLyrics
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerMode
-import org.oxycblt.auxio.shippy.domain.Track
-import org.oxycblt.auxio.shippy.download.DownloadJobId
-import org.oxycblt.auxio.shippy.share.ProviderTrackSharing
+import org.oxycblt.auxio.shippy.provider.ui.ProviderTrackActionsSheet
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.dampen
 import org.oxycblt.auxio.util.recycler
-import org.oxycblt.auxio.util.showToast
 import org.oxycblt.auxio.util.smoothScrollByPageTo
 import org.oxycblt.auxio.util.systemBarInsetsCompat
 import org.oxycblt.musikr.MusicParent
-import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
@@ -98,16 +86,14 @@ class PlaybackPanelFragment :
     Toolbar.OnMenuItemClickListener,
     StyledSeekBar.Listener,
     StepperOverlay.Listener {
-    @Inject lateinit var sleepTimerController: SleepTimerController
     @Inject lateinit var activeCrewRuntime: ActiveCrewRuntime
     @Inject lateinit var crewSettings: CrewSettings
+    @Inject lateinit var sleepTimerController: SleepTimerController
     private val coverPagerAdapter = CoverPagerAdapter(this)
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
-    private val listModel: ListViewModel by activityViewModels()
     private val queueModel: QueueViewModel by viewModels()
     private val playerActionsModel: PlayerActionsViewModel by viewModels()
-    private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
     private var currentPagerPosition = 0
     private var renderedLyricsState: PlaybackLyricsState = PlaybackLyricsState.None
@@ -115,6 +101,11 @@ class PlaybackPanelFragment :
     private val reactionViews = mutableSetOf<View>()
     private var peerMediaDialog: androidx.appcompat.app.AlertDialog? = null
     private var promptedForCurrentPeerBlock = false
+    private var pendingShuffleTarget: Boolean? = null
+    private val commitShuffle = Runnable {
+        pendingShuffleTarget?.let(playbackModel::setShuffled)
+        pendingShuffleTarget = null
+    }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -125,25 +116,32 @@ class PlaybackPanelFragment :
     ) {
         super.onBindingCreated(binding, savedInstanceState)
 
-        // AudioEffect expects you to use startActivityForResult with the panel intent. There is no
-        // contract analogue for this intent, so the generic contract is used instead.
-        equalizerLauncher =
-            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-                // Nothing to do
-            }
-
         // --- UI SETUP ---
         binding.root.setOnApplyWindowInsetsListener { view, insets ->
             val bars = insets.systemBarInsetsCompat
             view.updatePadding(bottom = bars.bottom)
             insets
         }
+        binding.root.onCollapseGesture = {
+            // Preserve normal lyrics scrolling: collapse once the full-player scroll is at its top.
+            if (binding.playbackScroll?.canScrollVertically(-1) != true) {
+                playbackModel.openMain()
+            }
+        }
 
         binding.playbackToolbar.apply {
             setNavigationOnClickListener { playbackModel.openMain() }
             setOnMenuItemClickListener(this@PlaybackPanelFragment)
-            menu.findItem(R.id.action_open_lyrics)?.isVisible =
-                binding.playbackLyricsContainer == null
+        }
+        binding.playbackLyricsContainer?.apply {
+            setOnClickListener { LyricsDialog.show(parentFragmentManager) }
+            contentDescription = getString(R.string.desc_open_lyrics)
+        }
+        binding.playbackLyricsOpen?.setOnClickListener { LyricsDialog.show(parentFragmentManager) }
+        binding.playbackLyricsHint?.setOnClickListener {
+            binding.playbackScroll?.post {
+                binding.playbackScroll?.smoothScrollTo(0, binding.playbackLyricsContainer?.top ?: 0)
+            }
         }
 
         binding.playbackPager?.apply {
@@ -199,7 +197,19 @@ class PlaybackPanelFragment :
             setOnClickListener { playbackModel.togglePlaying() }
         }
         binding.playbackSkipNext.setOnClickListener { playbackModel.next() }
-        binding.playbackShuffle.setOnClickListener { playbackModel.toggleShuffled() }
+        binding.playbackShuffle.setOnClickListener {
+            val shuffle = binding.playbackShuffle
+            val target = !shuffle.isChecked
+            pendingShuffleTarget = target
+            shuffle.isChecked = target
+            shuffle.setIconResource(
+                if (target) R.drawable.ic_shuffle_on_24 else R.drawable.ic_shuffle_off_24
+            )
+            shuffle.removeCallbacks(commitShuffle)
+            // Preserve MaterialButtonGroup's expressive neighbor bounce, but let the release
+            // animation establish itself before the queue reorder does heavier playback work.
+            shuffle.postDelayed(commitShuffle, SHUFFLE_COMMIT_DELAY_MS)
+        }
         binding.playbackSave.setOnClickListener {
             val state = playerActionsModel.state.value
             if (state.liked || state.playlistIds.isNotEmpty()) {
@@ -209,19 +219,8 @@ class PlaybackPanelFragment :
             }
         }
         binding.playbackDownload.setOnClickListener { playerActionsModel.performDownloadAction() }
+        binding.playbackSleepTimer?.setOnClickListener { showSleepTimerDialog() }
         binding.playbackQueue.setOnClickListener { playbackModel.openQueue() }
-        binding.playbackMore?.setOnClickListener { anchor ->
-            val displayItem = playbackModel.displayItem.value ?: return@setOnClickListener
-            if (displayItem.localSong != null) {
-                listModel.openMenu(
-                    R.menu.playback_song,
-                    displayItem.localSong,
-                    PlaySong.ByItself,
-                )
-            } else {
-                showProviderOverflow(anchor, displayItem.queueItem.track)
-            }
-        }
 
         // --- VIEWMODEL SETUP --
         collectImmediately(playbackModel.displayItem, ::updateItem)
@@ -243,6 +242,17 @@ class PlaybackPanelFragment :
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 activeCrewRuntime.peerMediaBlocked.collect(::updatePeerMediaBlocked)
             }
+        }
+    }
+
+    /**
+     * Starts every mini-player expansion at the primary player content instead of restoring a
+     * previous lyrics scroll position.
+     */
+    fun resetScrollPosition() {
+        binding?.playbackScroll?.apply {
+            stopNestedScroll()
+            scrollTo(0, 0)
         }
     }
 
@@ -282,8 +292,12 @@ class PlaybackPanelFragment :
     //    }
 
     override fun onDestroyBinding(binding: FragmentPlaybackPanelBinding) {
-        equalizerLauncher = null
+        binding.root.onCollapseGesture = null
+        binding.playbackLyricsHint?.setOnClickListener(null)
         binding.playbackRepeat.clearPendingIcon()
+        binding.playbackShuffle.removeCallbacks(commitShuffle)
+        binding.playbackShuffle.clearPendingIcon()
+        pendingShuffleTarget = null
         binding.playbackSong.isSelected = false
         binding.playbackArtist.isSelected = false
         binding.playbackAlbum?.isSelected = false
@@ -303,35 +317,13 @@ class PlaybackPanelFragment :
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {
-        if (item.itemId == R.id.action_open_lyrics) {
-            LyricsDialog.show(parentFragmentManager)
-            return true
-        }
         if (item.itemId == R.id.action_crew_react) {
             showReactionPicker()
             return true
         }
-        if (item.itemId == R.id.action_sleep_timer) {
-            showSleepTimerDialog()
-            return true
-        }
-        if (item.itemId == R.id.action_open_equalizer) {
-            // Launch the system equalizer app, if possible.
-            L.d("Launching equalizer")
-            val equalizerIntent =
-                Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
-                    // Provide audio session ID so the equalizer can show options for this app
-                    // in particular.
-                    .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, playbackModel.currentAudioSessionId)
-                    // Signal music type so that the equalizer settings are appropriate for
-                    // music playback.
-                    .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
-            try {
-                requireNotNull(equalizerLauncher) { "Equalizer panel launcher was not available" }
-                    .launch(equalizerIntent)
-            } catch (e: ActivityNotFoundException) {
-                requireContext().showToast(R.string.err_no_app)
-            }
+        if (item.itemId == R.id.action_player_more) {
+            val track = playbackModel.displayItem.value?.queueItem?.track ?: return true
+            ProviderTrackActionsSheet.show(parentFragmentManager, track, playerContext = true)
             return true
         }
 
@@ -339,11 +331,8 @@ class PlaybackPanelFragment :
     }
 
     private fun updateCrewActions(state: ActiveCrewRuntimeState) {
-        requireBinding()
-            .playbackToolbar
-            .menu
-            .findItem(R.id.action_crew_react)
-            ?.isVisible = state is ActiveCrewRuntimeState.Active
+        requireBinding().playbackToolbar.menu.findItem(R.id.action_crew_react)?.isVisible =
+            state is ActiveCrewRuntimeState.Active
     }
 
     private fun showReactionPicker() {
@@ -401,14 +390,15 @@ class PlaybackPanelFragment :
         root.addView(
             reactionView,
             ConstraintLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                startToStart = ConstraintSet.PARENT_ID
-                endToEnd = ConstraintSet.PARENT_ID
-                bottomToBottom = ConstraintSet.PARENT_ID
-                bottomMargin = (112 * density).toInt()
-            },
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                )
+                .apply {
+                    startToStart = ConstraintSet.PARENT_ID
+                    endToEnd = ConstraintSet.PARENT_ID
+                    bottomToBottom = ConstraintSet.PARENT_ID
+                    bottomMargin = (112 * density).toInt()
+                },
         )
         reactionViews += reactionView
         reactionView
@@ -449,17 +439,18 @@ class PlaybackPanelFragment :
         val localSong = item.localSong
         L.d("Updating playback display: ${item.queueItem.id}")
         if (localSong != null) {
+            binding.playbackInfoCover?.bind(localSong)
             binding.playbackSong.text = localSong.name.resolve(context)
             binding.playbackArtist.text = localSong.artists.resolveNames(context)
             binding.playbackAlbum?.text = localSong.album.name.resolve(context)
         } else {
+            binding.playbackInfoCover?.bindArtwork(track.artwork, track.album ?: track.title)
             binding.playbackSong.text = track.title
             binding.playbackArtist.text = track.artists.joinToString(", ")
             binding.playbackAlbum?.text = track.album.orEmpty()
             binding.playbackToolbar.subtitle =
                 track.album?.takeIf(String::isNotBlank) ?: getString(R.string.lbl_search)
         }
-        binding.playbackMore?.isVisible = true
         binding.playbackSeekBar?.durationDs = (track.durationMs ?: 0L).msToDs()
     }
 
@@ -490,7 +481,12 @@ class PlaybackPanelFragment :
     }
 
     private fun updateShuffled(isShuffled: Boolean) {
-        requireBinding().playbackShuffle.isChecked = isShuffled
+        requireBinding().playbackShuffle.apply {
+            isChecked = isShuffled
+            setIconResource(
+                if (isShuffled) R.drawable.ic_shuffle_on_24 else R.drawable.ic_shuffle_off_24
+            )
+        }
     }
 
     private fun updateActions(state: PlayerActionsState) {
@@ -518,11 +514,11 @@ class PlaybackPanelFragment :
             when (presentation) {
                 PlayerDownloadPresentation.Hidden -> Unit
                 is PlayerDownloadPresentation.Ready -> {
-                    setIconResource(R.drawable.ic_down_24)
+                    setIconResource(R.drawable.ic_download_24)
                     contentDescription = getString(R.string.desc_download)
                 }
                 is PlayerDownloadPresentation.Working -> {
-                    setIconResource(R.drawable.ic_down_24)
+                    setIconResource(R.drawable.ic_download_24)
                     contentDescription = getString(R.string.desc_downloading)
                 }
                 is PlayerDownloadPresentation.Paused -> {
@@ -549,6 +545,7 @@ class PlaybackPanelFragment :
         val body = binding.playbackLyricsBody ?: return
         val retry = binding.playbackLyricsRetry ?: return
         container.isVisible = state !is PlaybackLyricsState.None
+        binding.playbackLyricsHint?.isVisible = state !is PlaybackLyricsState.None
         val stateChanged = state != renderedLyricsState
         if (stateChanged) {
             renderedLyricsState = state
@@ -573,8 +570,6 @@ class PlaybackPanelFragment :
                         val activeIndex = activeLyricIndex(lyrics, positionMs)
                         if (stateChanged) {
                             title.setText(R.string.lbl_lyrics)
-                            body.text = lyrics.plainText
-                            body.contentDescription = lyrics.plainText
                         }
                         if (activeIndex != renderedLyricsLineIndex) {
                             renderedLyricsLineIndex = activeIndex
@@ -585,6 +580,12 @@ class PlaybackPanelFragment :
                                     ?.text
                                     ?.let { getString(R.string.desc_current_lyric, it) }
                                     .orEmpty()
+                            val previewStart = (activeIndex + 1).coerceAtLeast(0)
+                            body.text =
+                                lyrics.lines.drop(previewStart).take(4).joinToString("\n") {
+                                    it.text
+                                }
+                            body.contentDescription = lyrics.plainText
                         }
                     }
                     is PlainLyrics -> {
@@ -623,78 +624,11 @@ class PlaybackPanelFragment :
         }
     }
 
-    private fun showProviderOverflow(anchor: View, track: Track) {
-        val availableJobId =
-            (playerActionsModel.state.value.download as? PlayerDownloadPresentation.Available)
-                ?.jobId
-        PopupMenu(requireContext(), anchor).apply {
-            inflate(R.menu.playback_provider)
-            val originalLink = ProviderTrackSharing.originalLink(track)
-            val shippyLink = ProviderTrackSharing.shippyLink(track)
-            menu.findItem(R.id.action_share_original_link).isVisible = originalLink != null
-            menu.findItem(R.id.action_share_with_shippy).isVisible = shippyLink != null
-            menu.findItem(R.id.action_remove_download).isVisible = availableJobId != null
-            setOnMenuItemClickListener { item ->
-                when (item.itemId) {
-                    R.id.action_open_queue -> {
-                        playbackModel.openQueue()
-                        true
-                    }
-                    R.id.action_provider_track_info -> {
-                        showProviderTrackInfo(track)
-                        true
-                    }
-                    R.id.action_share_original_link -> {
-                        originalLink?.let(::shareProviderText)
-                        true
-                    }
-                    R.id.action_share_with_shippy -> {
-                        shippyLink?.let(::shareProviderText)
-                        true
-                    }
-                    R.id.action_remove_download -> {
-                        availableJobId?.let(::confirmRemoveDownload)
-                        true
-                    }
-                    else -> false
-                }
-            }
-            show()
-        }
-    }
-
-    private fun showSleepTimerDialog() {
-        val modes = SleepTimerMode.entries
-        val labels = modes.map(::sleepTimerLabel).toTypedArray()
-        val selected = modes.indexOf(sleepTimerController.state.value.mode).coerceAtLeast(0)
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.lbl_sleep_timer)
-            .setSingleChoiceItems(labels, selected) { dialog, which ->
-                sleepTimerController.select(modes[which])
-                dialog.dismiss()
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun sleepTimerLabel(mode: SleepTimerMode): String =
-        getString(
-            when (mode) {
-                SleepTimerMode.OFF -> R.string.lbl_sleep_timer_off
-                SleepTimerMode.FINISH_CURRENT -> R.string.lbl_sleep_timer_finish_current
-                SleepTimerMode.MINUTES_15 -> R.string.lbl_sleep_timer_15_minutes
-                SleepTimerMode.MINUTES_30 -> R.string.lbl_sleep_timer_30_minutes
-                SleepTimerMode.MINUTES_45 -> R.string.lbl_sleep_timer_45_minutes
-                SleepTimerMode.MINUTES_60 -> R.string.lbl_sleep_timer_60_minutes
-            }
-        )
-
     private fun showSavedDestinations(state: PlayerActionsState) {
-        val labels =
-            buildList {
-                add(getString(R.string.lbl_liked))
-                state.playlists.forEach { add(it.displayName) }
-            }
+        val labels = buildList {
+            add(getString(R.string.lbl_liked))
+            state.playlists.forEach { add(it.displayName) }
+        }
         val checked =
             BooleanArray(labels.size) { index ->
                 if (index == 0) {
@@ -721,48 +655,32 @@ class PlaybackPanelFragment :
             .show()
     }
 
-    private fun confirmRemoveDownload(jobId: DownloadJobId) {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.lbl_remove_download)
-            .setMessage(R.string.lng_remove_download_confirmation)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.lbl_remove_download) { _, _ ->
-                playerActionsModel.removeDownload(jobId)
-            }
-            .show()
-    }
-
-    private fun showProviderTrackInfo(track: Track) {
-        val sourceNames =
-            track.candidates
-                .mapNotNull { candidate -> candidate.providerId?.value ?: candidate.sourceId }
-                .distinct()
-                .joinToString(", ")
-        val details =
-            buildList {
-                    add(track.artists.joinToString(", "))
-                    track.album?.takeIf(String::isNotBlank)?.let(::add)
-                    if (sourceNames.isNotBlank()) {
-                        add(getString(R.string.fmt_provider_sources, sourceNames))
-                    }
+    private fun showSleepTimerDialog() {
+        val modes = SleepTimerMode.entries
+        val labels =
+            modes
+                .map { mode ->
+                    getString(
+                        when (mode) {
+                            SleepTimerMode.OFF -> R.string.lbl_sleep_timer_off
+                            SleepTimerMode.FINISH_CURRENT -> R.string.lbl_sleep_timer_finish_current
+                            SleepTimerMode.MINUTES_15 -> R.string.lbl_sleep_timer_15_minutes
+                            SleepTimerMode.MINUTES_30 -> R.string.lbl_sleep_timer_30_minutes
+                            SleepTimerMode.MINUTES_45 -> R.string.lbl_sleep_timer_45_minutes
+                            SleepTimerMode.MINUTES_60 -> R.string.lbl_sleep_timer_60_minutes
+                        }
+                    )
                 }
-                .joinToString("\n")
+                .toTypedArray()
+        val selected = modes.indexOf(sleepTimerController.state.value.mode).coerceAtLeast(0)
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle(track.title)
-            .setMessage(details)
-            .setPositiveButton(android.R.string.ok, null)
+            .setTitle(R.string.lbl_sleep_timer)
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                sleepTimerController.select(modes[which])
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
-    }
-
-    private fun shareProviderText(text: String) {
-        startActivity(
-            Intent.createChooser(
-                Intent(Intent.ACTION_SEND)
-                    .setType("text/plain")
-                    .putExtra(Intent.EXTRA_TEXT, text),
-                getString(R.string.lbl_share),
-            )
-        )
     }
 
     private fun updatePager(queue: PagerQueue) {
@@ -865,10 +783,10 @@ class PlaybackPanelFragment :
         }
     }
 
-    private companion object {}
+    private companion object {
+        const val SHUFFLE_COMMIT_DELAY_MS = 120L
+    }
 }
 
-internal fun activeLyricIndex(
-    lyrics: SyncedLyrics,
-    positionMs: Long,
-): Int = lyrics.lines.indexOfLast { it.startMs <= positionMs }
+internal fun activeLyricIndex(lyrics: SyncedLyrics, positionMs: Long): Int =
+    lyrics.lines.indexOfLast { it.startMs <= positionMs }

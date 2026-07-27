@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewLanSignalingTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewLanSignalingTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.lan
 
 import java.net.InetAddress
@@ -30,7 +37,7 @@ import org.oxycblt.auxio.shippy.crew.signaling.CrewSignalMessage
 
 class CrewLanSignalingTest {
     @Test
-    fun `authenticated loopback peers exchange encrypted signals in both directions`() =
+    fun `authenticated loopback peers exchange encrypted signals in both directions`() {
         runBlocking {
             val fixture = Fixture()
             val host =
@@ -65,8 +72,7 @@ class CrewLanSignalingTest {
                     assertEquals(CrewSignalSendResult.Sent, clientPeer.send(fromClient))
                     assertEquals(fromClient, withTimeout(5_000) { hostPeer.incoming.first() })
 
-                    val fromHost =
-                        CrewSignalMessage.Close(CrewSignalCloseReason.SESSION_ENDED)
+                    val fromHost = CrewSignalMessage.Close(CrewSignalCloseReason.SESSION_ENDED)
                     assertEquals(CrewSignalSendResult.Sent, hostPeer.send(fromHost))
                     assertEquals(fromHost, withTimeout(5_000) { clientPeer.incoming.first() })
                 } finally {
@@ -77,9 +83,10 @@ class CrewLanSignalingTest {
                 host.close()
             }
         }
+    }
 
     @Test
-    fun `wrong invitation secret cannot establish a signaling peer`() =
+    fun `wrong invitation secret cannot establish a signaling peer`() {
         runBlocking {
             val fixture = Fixture()
             val host =
@@ -95,7 +102,7 @@ class CrewLanSignalingTest {
                     CrewLanSignalingClient.connect(
                         fixture.rendezvous(host.port),
                         fixture.invite.copy(
-                            secret = CrewInviteSecret("wrong_secret_12345678901234567890"),
+                            secret = CrewInviteSecret("wrong_secret_12345678901234567890")
                         ),
                         fixture.joinerMemberId,
                         fixture.joinerDisplayName,
@@ -104,7 +111,7 @@ class CrewLanSignalingTest {
 
                 assertEquals(
                     CrewLanSignalConnectResult.Failed(
-                        CrewLanSignalConnectFailure.AUTHENTICATION_FAILED,
+                        CrewLanSignalConnectFailure.AUTHENTICATION_FAILED
                     ),
                     result,
                 )
@@ -112,6 +119,7 @@ class CrewLanSignalingTest {
                 host.close()
             }
         }
+    }
 
     @Test(expected = IllegalArgumentException::class)
     fun `host rejects an invitation that is not short lived`() {
@@ -138,15 +146,17 @@ class CrewLanSignalingTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
-    fun `client rejects an oversized display name`() = runBlocking {
-        val fixture = Fixture()
-        CrewLanSignalingClient.connect(
-            fixture.rendezvous(1),
-            fixture.invite,
-            fixture.joinerMemberId,
-            "a".repeat(81),
-            fixture.now,
-        )
+    fun `client rejects an oversized display name`() {
+        runBlocking {
+            val fixture = Fixture()
+            CrewLanSignalingClient.connect(
+                fixture.rendezvous(1),
+                fixture.invite,
+                fixture.joinerMemberId,
+                "a".repeat(81),
+                fixture.now,
+            )
+        }
     }
 
     private class Fixture {
@@ -169,11 +179,7 @@ class CrewLanSignalingTest {
 
         fun rendezvous(port: Int) =
             CrewLanRendezvous(
-                CrewLanIdentity(
-                    invite.protocolVersion,
-                    invite.sessionLocator,
-                    invite.inviteId,
-                ),
+                CrewLanIdentity(invite.protocolVersion, invite.sessionLocator, invite.inviteId),
                 "Shippy test",
                 listOf(InetAddress.getLoopbackAddress()),
                 port,

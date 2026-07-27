@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.service
 
 import android.annotation.SuppressLint
@@ -34,6 +33,13 @@ import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.ForegroundListener
 import org.oxycblt.auxio.ForegroundServiceNotification
@@ -98,6 +104,8 @@ private constructor(
 
     private val _notification = PlaybackNotification(context, mediaSession.sessionToken)
     private var metadataRevision = 0L
+    private val queueScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var queueJob: Job? = null
     val notification: ForegroundServiceNotification
         get() = _notification
 
@@ -119,6 +127,7 @@ private constructor(
      * the [PlaybackNotification].
      */
     fun release() {
+        queueScope.cancel()
         bitmapProvider.release()
         playbackManager.removeListener(this)
         imageSettings.unregisterListener(this)
@@ -232,11 +241,7 @@ private constructor(
      * @param parent The current [MusicParent] to create the [MediaMetadataCompat] from, or null if
      *   playback is currently occuring from all songs.
      */
-    private fun updateMediaMetadata(
-        item: QueueItem?,
-        localSong: Song?,
-        parent: MusicParent?,
-    ) {
+    private fun updateMediaMetadata(item: QueueItem?, localSong: Song?, parent: MusicParent?) {
         val revision = ++metadataRevision
         L.d("Updating media metadata to ${item?.id} with $parent")
         if (item == null) {
@@ -272,7 +277,7 @@ private constructor(
                 .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, track.durationMs ?: 0L)
                 .putText(
                     PlaybackNotification.KEY_PARENT,
-                    track.album ?: context.getString(R.string.app_name),
+                    track.album ?: context.getString(R.string.info_app_name),
                 )
                 .apply {
                     artwork?.let {
@@ -303,11 +308,7 @@ private constructor(
         }
     }
 
-    private fun updateLocalMetadata(
-        song: Song,
-        parent: MusicParent?,
-        revision: Long,
-    ) {
+    private fun updateLocalMetadata(song: Song, parent: MusicParent?, revision: Long) {
         // Populate MediaMetadataCompat. For efficiency, cache some fields that are re-used
         // several times.
         val title = song.name.resolve(context)
@@ -390,41 +391,47 @@ private constructor(
      * @param queue The current queue to upload.
      */
     private fun updateQueue(queue: List<ResolvedQueueItem>) {
-        val queueItems =
-            queue.mapIndexed { i, resolvedItem ->
-                val item = resolvedItem.item
-                val track = item.track
-                val localSong =
-                    playbackManager.queue.getOrNull(i).takeIf {
-                        playbackManager.resolvedQueue.getOrNull(i)?.item?.id == item.id
-                    }
-                val description =
-                    localSong?.toMediaDescription(
-                        context,
-                        { putInt(MediaSessionInterface.KEY_QUEUE_POS, i) },
-                    )
-                        ?: MediaDescriptionCompat.Builder()
-                            .setMediaId(item.id.value)
-                            .setTitle(track.title)
-                            .setSubtitle(track.artists.joinToString(", "))
-                            .setDescription(track.album)
-                            .setIconUri(
-                                track.artwork
-                                    ?.takeIf(String::isNotBlank)
-                                    ?.let(Uri::parse)
-                            )
-                            .setExtras(
-                                Bundle().apply {
-                                    putInt(MediaSessionInterface.KEY_QUEUE_POS, i)
+        val localQueue = playbackManager.queue
+        val resolvedQueue = playbackManager.resolvedQueue
+        queueJob?.cancel()
+        queueJob =
+            queueScope.launch {
+                val queueItems =
+                    withContext(Dispatchers.Default) {
+                        queue.mapIndexed { i, resolvedItem ->
+                            val item = resolvedItem.item
+                            val track = item.track
+                            val localSong =
+                                localQueue.getOrNull(i).takeIf {
+                                    resolvedQueue.getOrNull(i)?.item?.id == item.id
                                 }
-                            )
-                            .build()
-                // Store the item index so we can then use the analogous index in the
-                // playback state.
-                MediaSessionCompat.QueueItem(description, i.toLong())
+                            val description =
+                                localSong?.toMediaDescription(
+                                    context,
+                                    { putInt(MediaSessionInterface.KEY_QUEUE_POS, i) },
+                                )
+                                    ?: MediaDescriptionCompat.Builder()
+                                        .setMediaId(item.id.value)
+                                        .setTitle(track.title)
+                                        .setSubtitle(track.artists.joinToString(", "))
+                                        .setDescription(track.album)
+                                        .setIconUri(
+                                            track.artwork
+                                                ?.takeIf(String::isNotBlank)
+                                                ?.let(Uri::parse)
+                                        )
+                                        .setExtras(
+                                            Bundle().apply {
+                                                putInt(MediaSessionInterface.KEY_QUEUE_POS, i)
+                                            }
+                                        )
+                                        .build()
+                            MediaSessionCompat.QueueItem(description, i.toLong())
+                        }
+                    }
+                L.d("Uploading ${queueItems.size} songs to MediaSession queue")
+                mediaSession.setQueue(queueItems)
             }
-        L.d("Uploading ${queueItems.size} songs to MediaSession queue")
-        mediaSession.setQueue(queueItems)
     }
 
     /** Invalidate the current [MediaSessionCompat]'s [PlaybackStateCompat]. */

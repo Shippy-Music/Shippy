@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewReducer.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewReducer.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.core
 
 import org.oxycblt.auxio.shippy.domain.QueueItem
@@ -25,11 +32,14 @@ class CrewReducer {
         authenticatedPublisher: CrewMemberId,
         authenticatedElectionVotes: List<CrewElectionVote> = emptyList(),
     ): CrewSnapshotResult {
-        validateSnapshotEnvelope(state, snapshot, authenticatedPublisher)?.let { return it }
+        validateSnapshotEnvelope(state, snapshot, authenticatedPublisher)?.let {
+            return it
+        }
 
         if (
             snapshot.term.value < state.term.value ||
-                (snapshot.term == state.term && snapshot.lastSequence.value <= state.lastSequence.value)
+                (snapshot.term == state.term &&
+                    snapshot.lastSequence.value <= state.lastSequence.value)
         ) {
             return CrewSnapshotResult.StaleRejected(
                 currentTerm = state.term,
@@ -38,7 +48,9 @@ class CrewReducer {
                 receivedSequence = snapshot.lastSequence,
             )
         }
-        validateSnapshotAuthority(state, snapshot, authenticatedElectionVotes)?.let { return it }
+        validateSnapshotAuthority(state, snapshot, authenticatedElectionVotes)?.let {
+            return it
+        }
 
         val snapshotState =
             try {
@@ -98,7 +110,7 @@ class CrewReducer {
             return CrewEventResult.Rejected("Event belongs to a different Crew session")
         }
         if (
-                event.protocolVersion != state.protocolVersion ||
+            event.protocolVersion != state.protocolVersion ||
                 event.sessionId.protocolVersion != state.protocolVersion ||
                 event.publisherMemberId.protocolVersion != state.protocolVersion ||
                 authenticatedPublisher.protocolVersion != state.protocolVersion ||
@@ -110,10 +122,14 @@ class CrewReducer {
             return CrewEventResult.Rejected("Issuing member is not active in this Crew")
         }
         if (event.publisherMemberId != authenticatedPublisher) {
-            return CrewEventResult.Rejected("Event publisher does not match authenticated transport")
+            return CrewEventResult.Rejected(
+                "Event publisher does not match authenticated transport"
+            )
         }
         if (state.members.none { it.id == authenticatedPublisher }) {
-            return CrewEventResult.Rejected("Authenticated event publisher is not active in this Crew")
+            return CrewEventResult.Rejected(
+                "Authenticated event publisher is not active in this Crew"
+            )
         }
         if (authenticatedPublisher != state.coordinatorMemberId) {
             return CrewEventResult.Rejected("Only the current coordinator may publish Crew events")
@@ -133,7 +149,7 @@ class CrewReducer {
             return CrewSnapshotResult.Rejected("Snapshot belongs to a different Crew session")
         }
         if (
-                snapshot.protocolVersion != state.protocolVersion ||
+            snapshot.protocolVersion != state.protocolVersion ||
                 snapshot.sessionId.protocolVersion != state.protocolVersion ||
                 snapshot.publisherMemberId.protocolVersion != state.protocolVersion ||
                 authenticatedPublisher.protocolVersion != state.protocolVersion ||
@@ -142,7 +158,9 @@ class CrewReducer {
             return CrewSnapshotResult.Rejected("Snapshot protocol version is incompatible")
         }
         if (snapshot.publisherMemberId != authenticatedPublisher) {
-            return CrewSnapshotResult.Rejected("Snapshot publisher does not match authenticated transport")
+            return CrewSnapshotResult.Rejected(
+                "Snapshot publisher does not match authenticated transport"
+            )
         }
         return null
     }
@@ -180,7 +198,9 @@ class CrewReducer {
                     it.candidateMemberId.protocolVersion != state.protocolVersion
             }
         ) {
-            return CrewSnapshotResult.Rejected("Election certificate protocol version is incompatible")
+            return CrewSnapshotResult.Rejected(
+                "Election certificate protocol version is incompatible"
+            )
         }
         if (voters.any { voter -> state.members.none { it.id == voter } }) {
             return CrewSnapshotResult.Rejected("Election certificate contains a non-member voter")
@@ -197,7 +217,9 @@ class CrewReducer {
         val candidates =
             authenticatedElectionVotes.map(CrewElectionVote::candidateMemberId).distinct()
         if (candidates.size != 1) {
-            return CrewSnapshotResult.Rejected("Election certificate does not agree on one candidate")
+            return CrewSnapshotResult.Rejected(
+                "Election certificate does not agree on one candidate"
+            )
         }
         if (voters.size <= state.members.size / 2) {
             return CrewSnapshotResult.Rejected("Election certificate does not contain a majority")
@@ -209,10 +231,14 @@ class CrewReducer {
             )
         }
         if (snapshot.publisherMemberId != elected || snapshot.coordinatorMemberId != elected) {
-            return CrewSnapshotResult.Rejected("Higher-term snapshot publisher is not the elected coordinator")
+            return CrewSnapshotResult.Rejected(
+                "Higher-term snapshot publisher is not the elected coordinator"
+            )
         }
         if (snapshot.members.any { it.id == state.coordinatorMemberId }) {
-            return CrewSnapshotResult.Rejected("Higher-term snapshot still contains the old coordinator")
+            return CrewSnapshotResult.Rejected(
+                "Higher-term snapshot still contains the old coordinator"
+            )
         }
         val expectedMembers = state.members.map(CrewMember::id).toSet() - state.coordinatorMemberId
         if (snapshot.members.map(CrewMember::id).toSet() != expectedMembers) {
@@ -255,10 +281,7 @@ class CrewReducer {
         )
     }
 
-    private fun applyOrderedAction(
-        state: CrewState,
-        event: DurableCrewEvent,
-    ): CrewEventResult {
+    private fun applyOrderedAction(state: CrewState, event: DurableCrewEvent): CrewEventResult {
         if (event.term.value > state.term.value) {
             return snapshotRequired(state, event)
         }
@@ -304,7 +327,8 @@ class CrewReducer {
                     )
                 is CrewAction.ShuffleChanged ->
                     StateUpdate.Accepted(state.copy(shuffleEnabled = action.enabled))
-                is CrewAction.RepeatChanged -> StateUpdate.Accepted(state.copy(repeatMode = action.mode))
+                is CrewAction.RepeatChanged ->
+                    StateUpdate.Accepted(state.copy(repeatMode = action.mode))
                 is CrewAction.CoordinatorTransferred ->
                     error("Coordinator transfer is handled before ordered actions")
                 CrewAction.SessionEnded ->
@@ -319,10 +343,7 @@ class CrewReducer {
         }
     }
 
-    private fun joinMember(
-        state: CrewState,
-        action: CrewAction.MemberJoined,
-    ): StateUpdate {
+    private fun joinMember(state: CrewState, action: CrewAction.MemberJoined): StateUpdate {
         if (action.member.id.protocolVersion != state.protocolVersion) {
             return StateUpdate.Rejected("Joined member protocol version is incompatible")
         }
@@ -332,10 +353,7 @@ class CrewReducer {
         return StateUpdate.Accepted(state.copy(members = state.members + action.member))
     }
 
-    private fun updateMember(
-        state: CrewState,
-        action: CrewAction.MemberUpdated,
-    ): StateUpdate {
+    private fun updateMember(state: CrewState, action: CrewAction.MemberUpdated): StateUpdate {
         if (action.member.id.protocolVersion != state.protocolVersion) {
             return StateUpdate.Rejected("Updated member protocol version is incompatible")
         }
@@ -350,10 +368,7 @@ class CrewReducer {
         )
     }
 
-    private fun leaveMember(
-        state: CrewState,
-        action: CrewAction.MemberLeft,
-    ): StateUpdate {
+    private fun leaveMember(state: CrewState, action: CrewAction.MemberLeft): StateUpdate {
         if (action.memberId == state.coordinatorMemberId) {
             return StateUpdate.Rejected("Coordinator must transfer before leaving Crew")
         }
@@ -369,10 +384,7 @@ class CrewReducer {
         )
     }
 
-    private fun replaceQueue(
-        state: CrewState,
-        action: CrewAction.QueueReplaced,
-    ): StateUpdate {
+    private fun replaceQueue(state: CrewState, action: CrewAction.QueueReplaced): StateUpdate {
         if (!hasUniqueIds(action.items)) {
             return StateUpdate.Rejected("Replacement queue item IDs must be unique")
         }
@@ -417,10 +429,7 @@ class CrewReducer {
         return StateUpdate.Accepted(state.copy(queue = queue, playback = playback))
     }
 
-    private fun moveQueueItem(
-        state: CrewState,
-        action: CrewAction.QueueItemMoved,
-    ): StateUpdate {
+    private fun moveQueueItem(state: CrewState, action: CrewAction.QueueItemMoved): StateUpdate {
         val oldIndex = state.queue.indexOfFirst { it.id == action.itemId }
         if (oldIndex == -1) {
             return StateUpdate.Rejected("Queue item does not exist")
@@ -506,10 +515,7 @@ class CrewReducer {
         )
     }
 
-    private fun applied(
-        state: CrewState,
-        event: DurableCrewEvent,
-    ) =
+    private fun applied(state: CrewState, event: DurableCrewEvent) =
         CrewEventResult.Applied(
             state.copy(
                 lastSequence = event.sequence,
@@ -517,10 +523,7 @@ class CrewReducer {
             )
         )
 
-    private fun snapshotRequired(
-        state: CrewState,
-        event: DurableCrewEvent,
-    ) =
+    private fun snapshotRequired(state: CrewState, event: DurableCrewEvent) =
         CrewEventResult.SnapshotRequired(
             currentTerm = state.term,
             expectedSequence =
@@ -535,8 +538,7 @@ class CrewReducer {
     private fun retainEventId(
         existing: List<DurableEventId>,
         eventId: DurableEventId,
-    ): List<DurableEventId> =
-        (existing + eventId).takeLast(CrewState.MAX_APPLIED_EVENT_IDS)
+    ): List<DurableEventId> = (existing + eventId).takeLast(CrewState.MAX_APPLIED_EVENT_IDS)
 
     private sealed interface StateUpdate {
         data class Accepted(val state: CrewState) : StateUpdate

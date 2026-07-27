@@ -1,4 +1,20 @@
-/* Copyright (c) 2026 Shippy contributors */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * CanonicalTrackMetadataRepository.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.persistence.library
 
 import androidx.room.Dao
@@ -24,11 +40,14 @@ import org.oxycblt.auxio.shippy.domain.TrackCandidate
 import org.oxycblt.auxio.shippy.domain.TrackId
 import org.oxycblt.auxio.shippy.domain.TrackRealm
 import org.oxycblt.auxio.shippy.domain.TrackVersion
+import timber.log.Timber as L
 
 /** Durable canonical metadata for relationship-backed library rows, independent of downloads. */
 interface CanonicalTrackMetadataRepository {
     fun observeAll(): Flow<List<Track>>
+
     suspend fun getByIds(ids: List<TrackId>): Map<TrackId, Track>
+
     suspend fun upsert(track: Track)
 }
 
@@ -100,9 +119,7 @@ internal abstract class CanonicalTrackMetadataDao {
     protected abstract suspend fun deleteCandidates(trackId: String)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
-    protected abstract suspend fun insertCandidates(
-        candidates: List<CanonicalTrackCandidateEntity>
-    )
+    protected abstract suspend fun insertCandidates(candidates: List<CanonicalTrackCandidateEntity>)
 
     @Transaction
     open suspend fun upsert(
@@ -120,13 +137,14 @@ internal class RoomCanonicalTrackMetadataRepository
 @Inject
 constructor(private val dao: CanonicalTrackMetadataDao) : CanonicalTrackMetadataRepository {
     override fun observeAll(): Flow<List<Track>> =
-        dao.observeAll().map { it.map(StoredCanonicalTrack::toDomain) }
+        dao.observeAll().map { stored -> stored.mapNotNull(StoredCanonicalTrack::toDomainOrNull) }
 
     override suspend fun getByIds(ids: List<TrackId>): Map<TrackId, Track> =
         ids.distinct()
             .chunked(ROOM_QUERY_ID_CHUNK_SIZE)
             .flatMap { chunk -> dao.getByIds(chunk.map(TrackId::value)) }
-            .map(StoredCanonicalTrack::toDomain).associateBy(Track::id)
+            .mapNotNull(StoredCanonicalTrack::toDomainOrNull)
+            .associateBy(Track::id)
 
     override suspend fun upsert(track: Track) =
         dao.upsert(
@@ -170,30 +188,38 @@ private fun TrackCandidate.toEntity(trackId: TrackId, position: Int) =
         media?.contentLength,
     )
 
-private fun StoredCanonicalTrack.toDomain() =
-    Track(
-        TrackId(track.trackId),
-        TrackRealm.valueOf(track.realm),
-        track.title,
-        track.artists.decode(),
-        track.album,
-        track.durationMs,
-        TrackVersion(track.versionLabel, track.explicit, track.live, track.remix),
-        track.artwork,
-        candidates.sortedBy { it.position }.map { candidate ->
-            TrackCandidate(
-                CandidateId(candidate.candidateId),
+private fun StoredCanonicalTrack.toDomainOrNull(): Track? =
+    runCatching {
+            Track(
                 TrackId(track.trackId),
-                CandidateKind.valueOf(candidate.kind),
-                candidate.sourceId,
-                candidate.sourceItemId,
-                CandidateAvailability.valueOf(candidate.availability),
-                candidate.locator,
-                candidate.providerId?.let(::ProviderId),
-                candidate.toMediaDescriptor(),
+                TrackRealm.valueOf(track.realm),
+                track.title,
+                track.artists.decode(),
+                track.album,
+                track.durationMs,
+                TrackVersion(track.versionLabel, track.explicit, track.live, track.remix),
+                track.artwork,
+                candidates
+                    .sortedBy { it.position }
+                    .map { candidate ->
+                        TrackCandidate(
+                            CandidateId(candidate.candidateId),
+                            TrackId(track.trackId),
+                            CandidateKind.valueOf(candidate.kind),
+                            candidate.sourceId,
+                            candidate.sourceItemId,
+                            CandidateAvailability.valueOf(candidate.availability),
+                            candidate.locator,
+                            candidate.providerId?.let(::ProviderId),
+                            candidate.toMediaDescriptor(),
+                        )
+                    },
             )
-        },
-    )
+        }
+        .onFailure { error ->
+            L.e(error, "Ignoring invalid canonical track metadata for ${track.trackId}")
+        }
+        .getOrNull()
 
 private fun CanonicalTrackCandidateEntity.toMediaDescriptor(): MediaDescriptor? =
     if (mimeType == null && container == null && bitrateBps == null && contentLength == null) {
@@ -204,16 +230,15 @@ private fun CanonicalTrackCandidateEntity.toMediaDescriptor(): MediaDescriptor? 
 
 private fun List<String>.encode() = joinToString(separator = "") { "${it.length}:$it" }
 
-private fun String.decode(): List<String> =
-    buildList {
-        var cursor = 0
-        while (cursor < length) {
-            val separator = indexOf(':', cursor)
-            require(separator > cursor)
-            val size = substring(cursor, separator).toInt()
-            val start = separator + 1
-            require(start + size <= length)
-            add(substring(start, start + size))
-            cursor = start + size
-        }
+private fun String.decode(): List<String> = buildList {
+    var cursor = 0
+    while (cursor < length) {
+        val separator = indexOf(':', cursor)
+        require(separator > cursor)
+        val size = substring(cursor, separator).toInt()
+        val start = separator + 1
+        require(start + size <= length)
+        add(substring(start, start + size))
+        cursor = start + size
     }
+}

@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewDirectPeerConnection.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewDirectPeerConnection.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.connection
 
 import java.io.Closeable
@@ -130,10 +137,7 @@ class CrewDirectPeerConnection(
                 require(invite.protocolVersion == signalingPeer.sessionId.protocolVersion) {
                     "Crew invitation and signaling session protocols must match"
                 }
-                require(
-                    invite.protocolVersion ==
-                        signalingPeer.remoteMemberClaim.protocolVersion,
-                ) {
+                require(invite.protocolVersion == signalingPeer.remoteMemberClaim.protocolVersion) {
                     "Crew invitation and remote member protocols must match"
                 }
                 require(invite.protocolVersion == localMemberId.protocolVersion) {
@@ -147,10 +151,7 @@ class CrewDirectPeerConnection(
                 role == CrewDirectPeerRole.INITIATOR,
                 object : CrewRtcSignalSink {
                     override fun onLocalIceCandidate(candidate: CrewIceCandidate) {
-                        if (
-                            !closed.get() &&
-                                localIceCandidates.trySend(candidate).isFailure
-                        ) {
+                        if (!closed.get() && localIceCandidates.trySend(candidate).isFailure) {
                             signalCallbackFailed.set(true)
                             if (started.get()) {
                                 scope.launch { fail(CrewDirectPeerFailure.SIGNALING) }
@@ -159,10 +160,7 @@ class CrewDirectPeerConnection(
                     }
 
                     override fun onRenegotiationNeeded() {
-                        if (
-                            !closed.get() &&
-                                mutableState.value is CrewDirectPeerState.Connected
-                        ) {
+                        if (!closed.get() && mutableState.value is CrewDirectPeerState.Connected) {
                             renegotiationRequests.trySend(Unit)
                         }
                     }
@@ -272,7 +270,7 @@ class CrewDirectPeerConnection(
                             description.generation == generation.get()
                         } else {
                             description.generation > generation.get()
-                        },
+                        }
                     ) {
                         "Crew offer generation is stale"
                     }
@@ -314,10 +312,7 @@ class CrewDirectPeerConnection(
         }
     }
 
-    private suspend fun createAndSendOffer(
-        nextGeneration: Long,
-        restartIce: Boolean,
-    ) {
+    private suspend fun createAndSendOffer(nextGeneration: Long, restartIce: Boolean) {
         negotiationMutex.withLock {
             if (restartIce) {
                 if (remoteDescription == null) return@withLock
@@ -426,14 +421,11 @@ class CrewDirectPeerConnection(
 
     private fun handleInitiatorAuthentication(message: CrewJoinMessage) {
         val authenticator =
-            checkNotNull(initiatorAuthenticator) {
-                "Crew initiator authentication has not started"
-            }
+            checkNotNull(initiatorAuthenticator) { "Crew initiator authentication has not started" }
         when (message) {
             is CrewJoinMessage.ResponderChallenge -> {
                 when (val result = authenticator.accept(message)) {
-                    is CrewInitiatorChallengeResult.Accepted ->
-                        sendAuthentication(result.response)
+                    is CrewInitiatorChallengeResult.Accepted -> sendAuthentication(result.response)
                     is CrewInitiatorChallengeResult.Rejected ->
                         fail(CrewDirectPeerFailure.AUTHENTICATION)
                 }
@@ -452,14 +444,11 @@ class CrewDirectPeerConnection(
 
     private fun handleResponderAuthentication(message: CrewJoinMessage) {
         val authenticator =
-            checkNotNull(responderAuthenticator) {
-                "Crew responder authentication has not started"
-            }
+            checkNotNull(responderAuthenticator) { "Crew responder authentication has not started" }
         when (message) {
             is CrewJoinMessage.InitiatorHello -> {
                 when (val result = authenticator.accept(message)) {
-                    is CrewResponderHelloResult.Accepted ->
-                        sendAuthentication(result.challenge)
+                    is CrewResponderHelloResult.Accepted -> sendAuthentication(result.challenge)
                     is CrewResponderHelloResult.Rejected ->
                         fail(CrewDirectPeerFailure.AUTHENTICATION)
                 }
@@ -482,7 +471,7 @@ class CrewDirectPeerConnection(
     private fun sendAuthentication(message: CrewJoinMessage): Boolean {
         val result =
             rtcPeer.trySendAuthentication(
-                CrewAuthenticationFrame(CrewJoinMessageCodec.encode(message)),
+                CrewAuthenticationFrame(CrewJoinMessageCodec.encode(message))
             )
         return if (result is CrewSendResult.Sent) {
             true
@@ -492,9 +481,7 @@ class CrewDirectPeerConnection(
         }
     }
 
-    private fun installAuthenticatedTransport(
-        binding: CrewAuthenticatedPeerBinding,
-    ) {
+    private fun installAuthenticatedTransport(binding: CrewAuthenticatedPeerBinding) {
         if (!authenticated.compareAndSet(false, true)) {
             fail(CrewDirectPeerFailure.AUTHENTICATION)
             return
@@ -516,10 +503,7 @@ class CrewDirectPeerConnection(
         closeInternal(CrewDirectPeerState.Closed, sendClose = true)
     }
 
-    private fun closeInternal(
-        finalState: CrewDirectPeerState,
-        sendClose: Boolean,
-    ) {
+    private fun closeInternal(finalState: CrewDirectPeerState, sendClose: Boolean) {
         if (!closed.compareAndSet(false, true)) return
         mutableState.value = finalState
         if (sendClose && signalingPeer.state.value == CrewSignalConnectionState.CONNECTED) {
@@ -531,8 +515,8 @@ class CrewDirectPeerConnection(
                                 CrewSignalCloseReason.PROTOCOL_ERROR
                             } else {
                                 CrewSignalCloseReason.NORMAL
-                            },
-                        ),
+                            }
+                        )
                     )
                 }
                 releaseResources()

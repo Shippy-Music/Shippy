@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.ui
 
 import android.content.Context
@@ -131,7 +130,10 @@ abstract class ViewBindingBottomSheetDialogFragment<VB : ViewBinding> :
                     context.getDimenPixels(
                         com.google.android.material.R.dimen.design_bottom_sheet_peek_height_min
                     )
-            behavior.skipCollapsed = avoidUnusableCollapsedState
+            // Dialog sheets have no useful persistent collapsed state. Going expanded -> hidden
+            // directly makes short downward swipes dismiss menus instead of leaving a stubborn
+            // sliver that needs a second gesture.
+            behavior.skipCollapsed = true
         }
 
         override fun onStart() {

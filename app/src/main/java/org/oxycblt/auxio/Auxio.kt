@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio
 
 import android.app.Application
@@ -54,8 +53,8 @@ class Auxio : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var downloadDestinationReconciler: DownloadDestinationReconciler
 
-    override fun getWorkManagerConfiguration(): Configuration =
-        Configuration.Builder().setWorkerFactory(workerFactory).build()
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
 
     override fun onCreate() {
         super.onCreate()

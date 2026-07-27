@@ -15,14 +15,15 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.replaygain
 
+import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Player
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
+import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import javax.inject.Inject
 import kotlin.math.pow
@@ -44,6 +45,7 @@ import timber.log.Timber as L
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
+@OptIn(UnstableApi::class)
 class ReplayGainAudioProcessor
 @Inject
 constructor(

@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CompositeFSTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CompositeFSTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -9,13 +9,16 @@
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.musikr.fs
 
 import android.net.Uri
+import io.mockk.mockk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.channels.Channel
@@ -29,6 +32,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CompositeFSTest {
+    private val testUri = mockk<Uri>()
+
     @Test
     fun explore_primaryWinsExactPathDuplicates() = runTest {
         val duplicate = file("duplicate.mp3")
@@ -53,11 +58,7 @@ class CompositeFSTest {
     @Test
     fun explore_secondaryFailurePropagatesAndClosesOutput() = runTest {
         val output = Channel<File>(Channel.UNLIMITED)
-        val fs =
-            CompositeFS(
-                FakeFS(),
-                FakeFS(failure = IllegalStateException("secondary failed")),
-            )
+        val fs = CompositeFS(FakeFS(), FakeFS(failure = IllegalStateException("secondary failed")))
 
         val result = fs.explore(output).await()
 
@@ -80,8 +81,8 @@ class CompositeFSTest {
 
     private fun file(name: String) =
         File(
-            uri = Uri.EMPTY,
-            path = Path(Volume.ThirdParty(Uri.EMPTY), Components.parseUnix(name)),
+            uri = testUri,
+            path = Path(Volume.ThirdParty(testUri), Components.parseUnix(name)),
             addedMs = NullAddedMs,
             modifiedMs = 0,
             mimeType = "audio/mpeg",

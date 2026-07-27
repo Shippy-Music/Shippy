@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * DownloadWorkCoordinator.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * DownloadWorkCoordinator.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.download
 
 import android.content.Context
@@ -23,9 +30,9 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -106,10 +113,7 @@ constructor(
             }
         }
 
-    suspend fun pause(
-        jobId: DownloadJobId,
-        nowEpochMs: Long = System.currentTimeMillis(),
-    ) {
+    suspend fun pause(jobId: DownloadJobId, nowEpochMs: Long = System.currentTimeMillis()) {
         if (jobs.get(jobId) == null) return
         val transition = jobs.apply(jobId, DownloadEvent.Pause, nowEpochMs)
         if (transition !is DownloadTransition.Applied) return
@@ -118,42 +122,23 @@ constructor(
         jobs.setPendingDocument(jobId, null, nowEpochMs)
     }
 
-    suspend fun resume(
-        jobId: DownloadJobId,
-        nowEpochMs: Long = System.currentTimeMillis(),
-    ) {
+    suspend fun resume(jobId: DownloadJobId, nowEpochMs: Long = System.currentTimeMillis()) {
         val stored = jobs.get(jobId) ?: return
         val transition = jobs.apply(jobId, DownloadEvent.Resume, nowEpochMs)
         if (transition is DownloadTransition.Applied) {
-            enqueue(
-                jobId,
-                stored.track,
-                stored.job.candidateId,
-                ExistingWorkPolicy.REPLACE,
-            )
+            enqueue(jobId, stored.track, stored.job.candidateId, ExistingWorkPolicy.REPLACE)
         }
     }
 
-    suspend fun retry(
-        jobId: DownloadJobId,
-        nowEpochMs: Long = System.currentTimeMillis(),
-    ) {
+    suspend fun retry(jobId: DownloadJobId, nowEpochMs: Long = System.currentTimeMillis()) {
         val stored = jobs.get(jobId) ?: return
         val transition = jobs.apply(jobId, DownloadEvent.Retry, nowEpochMs)
         if (transition is DownloadTransition.Applied) {
-            enqueue(
-                jobId,
-                stored.track,
-                stored.job.candidateId,
-                ExistingWorkPolicy.REPLACE,
-            )
+            enqueue(jobId, stored.track, stored.job.candidateId, ExistingWorkPolicy.REPLACE)
         }
     }
 
-    suspend fun cancel(
-        jobId: DownloadJobId,
-        nowEpochMs: Long = System.currentTimeMillis(),
-    ) {
+    suspend fun cancel(jobId: DownloadJobId, nowEpochMs: Long = System.currentTimeMillis()) {
         if (jobs.get(jobId) == null) return
         val transition = jobs.apply(jobId, DownloadEvent.Cancel, nowEpochMs)
         if (transition !is DownloadTransition.Applied) return
@@ -173,10 +158,7 @@ constructor(
             if (!storage.delete(artifact.contentUri)) return@run false
             val transition = jobs.apply(jobId, DownloadEvent.Remove, nowEpochMs)
             if (transition !is DownloadTransition.Applied) return@run false
-            relationships.setDownloaded(
-                stored.track.id,
-                jobs.hasAvailableForTrack(stored.track.id),
-            )
+            relationships.setDownloaded(stored.track.id, jobs.hasAvailableForTrack(stored.track.id))
             true
         }
 
@@ -193,8 +175,7 @@ constructor(
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(
-                            if (requiresNetwork) NetworkType.CONNECTED
-                            else NetworkType.NOT_REQUIRED
+                            if (requiresNetwork) NetworkType.CONNECTED else NetworkType.NOT_REQUIRED
                         )
                         .build()
                 )
@@ -212,10 +193,7 @@ constructor(
     }
 }
 
-internal fun downloadRequiresNetwork(
-    track: Track,
-    candidateId: CandidateId,
-): Boolean {
+internal fun downloadRequiresNetwork(track: Track, candidateId: CandidateId): Boolean {
     val candidate = track.candidates.firstOrNull { it.id == candidateId } ?: return true
     return candidate.kind == CandidateKind.PROVIDER ||
         candidate.locator?.substringBefore(':') !in setOf("content", "file")

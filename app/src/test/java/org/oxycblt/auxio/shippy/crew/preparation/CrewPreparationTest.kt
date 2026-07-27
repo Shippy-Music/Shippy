@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewPreparationTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewPreparationTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.preparation
 
 import org.junit.Assert.assertEquals
@@ -27,7 +34,8 @@ class CrewPreparationTest {
         val item = item("one")
         val alpha = member("alpha")
         val bravo = member("bravo")
-        val summary = summary(item, alpha to CrewAvailability.DOWNLOAD, bravo to CrewAvailability.PEER_ONLY)
+        val summary =
+            summary(item, alpha to CrewAvailability.DOWNLOAD, bravo to CrewAvailability.PEER_ONLY)
 
         assertEquals(
             SupplierDecision.PushPullDisabled,
@@ -35,7 +43,7 @@ class CrewPreparationTest {
         )
         assertEquals(
             CrewStartDecision.Unavailable(
-                listOf(CrewReadinessProblem(bravo, CrewReadinessProblemReason.PUSH_PULL_DISABLED)),
+                listOf(CrewReadinessProblem(bravo, CrewReadinessProblemReason.PUSH_PULL_DISABLED))
             ),
             CrewReadinessPlanner.decide(
                 summary,
@@ -53,12 +61,13 @@ class CrewPreparationTest {
         val alpha = member("alpha")
         val bravo = member("bravo")
         val charlie = member("charlie")
-        val summary = summary(
-            item,
-            alpha to CrewAvailability.PEER_ONLY,
-            bravo to CrewAvailability.PREFERRED_PROVIDER,
-            charlie to CrewAvailability.DOWNLOAD,
-        )
+        val summary =
+            summary(
+                item,
+                alpha to CrewAvailability.PEER_ONLY,
+                bravo to CrewAvailability.PREFERRED_PROVIDER,
+                charlie to CrewAvailability.DOWNLOAD,
+            )
 
         assertEquals(
             SupplierDecision.Selected(charlie, PeerSupplySource.DOWNLOAD),
@@ -83,13 +92,14 @@ class CrewPreparationTest {
         val bravo = member("bravo")
         val charlie = member("charlie")
         val delta = member("delta")
-        val summary = summary(
-            item,
-            alpha to CrewAvailability.PEER_ONLY,
-            bravo to CrewAvailability.DOWNLOAD,
-            charlie to CrewAvailability.DOWNLOAD,
-            delta to CrewAvailability.LOCAL_EXACT,
-        )
+        val summary =
+            summary(
+                item,
+                alpha to CrewAvailability.PEER_ONLY,
+                bravo to CrewAvailability.DOWNLOAD,
+                charlie to CrewAvailability.DOWNLOAD,
+                delta to CrewAvailability.LOCAL_EXACT,
+            )
 
         assertEquals(
             SupplierDecision.Selected(delta, PeerSupplySource.LOCAL_EXACT),
@@ -105,8 +115,13 @@ class CrewPreparationTest {
             ),
         )
 
-        val noExact = summary(item, alpha to CrewAvailability.PEER_ONLY, bravo to CrewAvailability.DOWNLOAD,
-            charlie to CrewAvailability.DOWNLOAD)
+        val noExact =
+            summary(
+                item,
+                alpha to CrewAvailability.PEER_ONLY,
+                bravo to CrewAvailability.DOWNLOAD,
+                charlie to CrewAvailability.DOWNLOAD,
+            )
         assertEquals(
             SupplierDecision.Selected(bravo, PeerSupplySource.DOWNLOAD),
             CrewSupplierSelector.select(
@@ -127,12 +142,13 @@ class CrewPreparationTest {
         val alpha = member("alpha")
         val bravo = member("bravo")
         val charlie = member("charlie")
-        val summary = summary(
-            item,
-            alpha to CrewAvailability.PEER_ONLY,
-            bravo to CrewAvailability.DOWNLOAD,
-            charlie to CrewAvailability.TEMPORARY_CACHE,
-        )
+        val summary =
+            summary(
+                item,
+                alpha to CrewAvailability.PEER_ONLY,
+                bravo to CrewAvailability.DOWNLOAD,
+                charlie to CrewAvailability.TEMPORARY_CACHE,
+            )
 
         assertEquals(
             SupplierDecision.Selected(charlie, PeerSupplySource.TEMPORARY_CACHE),
@@ -146,7 +162,11 @@ class CrewPreparationTest {
         assertEquals(
             SupplierDecision.NotPlayable(CrewAvailability.BLOCKED),
             CrewSupplierSelector.select(
-                summary(item, alpha to CrewAvailability.BLOCKED, bravo to CrewAvailability.DOWNLOAD),
+                summary(
+                    item,
+                    alpha to CrewAvailability.BLOCKED,
+                    bravo to CrewAvailability.DOWNLOAD,
+                ),
                 alpha,
                 true,
             ),
@@ -159,12 +179,13 @@ class CrewPreparationTest {
         val alpha = member("alpha")
         val bravo = member("bravo")
         val charlie = member("charlie")
-        val summary = summary(
-            item,
-            alpha to CrewAvailability.PREFERRED_PROVIDER,
-            bravo to CrewAvailability.PEER_ONLY,
-            charlie to CrewAvailability.DOWNLOAD,
-        )
+        val summary =
+            summary(
+                item,
+                alpha to CrewAvailability.PREFERRED_PROVIDER,
+                bravo to CrewAvailability.PEER_ONLY,
+                charlie to CrewAvailability.DOWNLOAD,
+            )
         val policy = CrewReadinessPolicy(deadlineEpochMs = 100)
 
         assertEquals(
@@ -182,11 +203,12 @@ class CrewPreparationTest {
         val item = item("one")
         val alpha = member("alpha")
         val bravo = member("bravo")
-        val summary = summary(item, alpha to CrewAvailability.PEER_ONLY, bravo to CrewAvailability.DOWNLOAD)
+        val summary =
+            summary(item, alpha to CrewAvailability.PEER_ONLY, bravo to CrewAvailability.DOWNLOAD)
 
         assertEquals(
             CrewStartDecision.Unavailable(
-                listOf(CrewReadinessProblem(alpha, CrewReadinessProblemReason.DEADLINE_EXPIRED)),
+                listOf(CrewReadinessProblem(alpha, CrewReadinessProblemReason.DEADLINE_EXPIRED))
             ),
             CrewReadinessPlanner.decide(
                 summary,
@@ -205,33 +227,43 @@ class CrewPreparationTest {
         val replacement = item("replacement")
         val alpha = member("alpha")
         val bravo = member("bravo")
-        val currentRequest = CrewPrefetchRequest(
-            CrewPrefetchKey(current.id, alpha, bravo),
-            PeerSupplySource.LOCAL_EXACT,
-            2,
-        )
-        val oldNextRequest = CrewPrefetchRequest(
-            CrewPrefetchKey(next.id, alpha, bravo),
-            PeerSupplySource.LOCAL_EXACT,
-            2,
-        )
+        val currentRequest =
+            CrewPrefetchRequest(
+                CrewPrefetchKey(current.id, alpha, bravo),
+                PeerSupplySource.LOCAL_EXACT,
+                2,
+            )
+        val oldNextRequest =
+            CrewPrefetchRequest(
+                CrewPrefetchKey(next.id, alpha, bravo),
+                PeerSupplySource.LOCAL_EXACT,
+                2,
+            )
 
-        val plan = CrewPrefetchPlanner.plan(
-            queue = listOf(current, replacement),
-            currentQueueItemId = current.id,
-            summaries = mapOf(
-                current.id to summary(current, alpha to CrewAvailability.PEER_ONLY, bravo to CrewAvailability.LOCAL_EXACT),
-                replacement.id to summary(
-                    replacement,
-                    alpha to CrewAvailability.PEER_ONLY,
-                    bravo to CrewAvailability.LOCAL_EXACT,
-                ),
-            ),
-            activeMembers = listOf(alpha, bravo),
-            pushPullEnabled = true,
-            policy = CrewPrefetchPolicy(lookAheadItems = 1),
-            existingRequests = listOf(currentRequest, oldNextRequest),
-        )
+        val plan =
+            CrewPrefetchPlanner.plan(
+                queue = listOf(current, replacement),
+                currentQueueItemId = current.id,
+                summaries =
+                    mapOf(
+                        current.id to
+                            summary(
+                                current,
+                                alpha to CrewAvailability.PEER_ONLY,
+                                bravo to CrewAvailability.LOCAL_EXACT,
+                            ),
+                        replacement.id to
+                            summary(
+                                replacement,
+                                alpha to CrewAvailability.PEER_ONLY,
+                                bravo to CrewAvailability.LOCAL_EXACT,
+                            ),
+                    ),
+                activeMembers = listOf(alpha, bravo),
+                pushPullEnabled = true,
+                policy = CrewPrefetchPolicy(lookAheadItems = 1),
+                existingRequests = listOf(currentRequest, oldNextRequest),
+            )
 
         assertEquals(listOf(currentRequest), plan.keep)
         assertEquals(
@@ -240,53 +272,64 @@ class CrewPreparationTest {
                     CrewPrefetchKey(replacement.id, alpha, bravo),
                     PeerSupplySource.LOCAL_EXACT,
                     1,
-                ),
+                )
             ),
             plan.start,
         )
         assertTrue(plan.reprioritize.isEmpty())
         assertEquals(listOf(oldNextRequest.key), plan.cancellations)
 
-        val reprioritized = CrewPrefetchPlanner.plan(
-            queue = listOf(current, replacement),
-            currentQueueItemId = current.id,
-            summaries = mapOf(
-                current.id to summary(current, alpha to CrewAvailability.PEER_ONLY, bravo to CrewAvailability.LOCAL_EXACT),
-                replacement.id to summary(
-                    replacement,
-                    alpha to CrewAvailability.PEER_ONLY,
-                    bravo to CrewAvailability.LOCAL_EXACT,
-                ),
-            ),
-            activeMembers = listOf(alpha, bravo),
-            pushPullEnabled = true,
-            policy = CrewPrefetchPolicy(lookAheadItems = 1),
-            existingRequests = listOf(currentRequest.copy(priority = 99)),
-        )
+        val reprioritized =
+            CrewPrefetchPlanner.plan(
+                queue = listOf(current, replacement),
+                currentQueueItemId = current.id,
+                summaries =
+                    mapOf(
+                        current.id to
+                            summary(
+                                current,
+                                alpha to CrewAvailability.PEER_ONLY,
+                                bravo to CrewAvailability.LOCAL_EXACT,
+                            ),
+                        replacement.id to
+                            summary(
+                                replacement,
+                                alpha to CrewAvailability.PEER_ONLY,
+                                bravo to CrewAvailability.LOCAL_EXACT,
+                            ),
+                    ),
+                activeMembers = listOf(alpha, bravo),
+                pushPullEnabled = true,
+                policy = CrewPrefetchPolicy(lookAheadItems = 1),
+                existingRequests = listOf(currentRequest.copy(priority = 99)),
+            )
         assertEquals(listOf(currentRequest), reprioritized.reprioritize)
 
-        val advanced = CrewPrefetchPlanner.plan(
-            queue = listOf(current, replacement),
-            currentQueueItemId = replacement.id,
-            summaries = mapOf(
-                replacement.id to summary(
-                    replacement,
-                    alpha to CrewAvailability.PEER_ONLY,
-                    bravo to CrewAvailability.LOCAL_EXACT,
-                ),
-            ),
-            activeMembers = listOf(alpha, bravo),
-            pushPullEnabled = true,
-            policy = CrewPrefetchPolicy(lookAheadItems = 1),
-            existingRequests = plan.start,
-        )
+        val advanced =
+            CrewPrefetchPlanner.plan(
+                queue = listOf(current, replacement),
+                currentQueueItemId = replacement.id,
+                summaries =
+                    mapOf(
+                        replacement.id to
+                            summary(
+                                replacement,
+                                alpha to CrewAvailability.PEER_ONLY,
+                                bravo to CrewAvailability.LOCAL_EXACT,
+                            )
+                    ),
+                activeMembers = listOf(alpha, bravo),
+                pushPullEnabled = true,
+                policy = CrewPrefetchPolicy(lookAheadItems = 1),
+                existingRequests = plan.start,
+            )
         assertEquals(
             listOf(
                 CrewPrefetchRequest(
                     CrewPrefetchKey(replacement.id, alpha, bravo),
                     PeerSupplySource.LOCAL_EXACT,
                     1,
-                ),
+                )
             ),
             advanced.keep,
         )
@@ -314,7 +357,7 @@ class CrewPreparationTest {
                             current,
                             alpha to CrewAvailability.PEER_ONLY,
                             bravo to CrewAvailability.LOCAL_EXACT,
-                        ),
+                        )
                 ),
             activeMembers = listOf(alpha, bravo),
             pushPullEnabled = true,
@@ -331,15 +374,16 @@ class CrewPreparationTest {
         uploads: Int = 0,
         batteryEligible: Boolean = true,
         networkEligible: Boolean = true,
-    ) = SupplierCandidateMetrics(
-        target,
-        supplier,
-        connectionMs,
-        completionMs,
-        uploads,
-        batteryEligible,
-        networkEligible,
-    )
+    ) =
+        SupplierCandidateMetrics(
+            target,
+            supplier,
+            connectionMs,
+            completionMs,
+            uploads,
+            batteryEligible,
+            networkEligible,
+        )
 
     private fun member(value: String) = CrewMemberId(value, ProtocolVersion(1))
 
@@ -347,23 +391,22 @@ class CrewPreparationTest {
         val trackId = TrackId("track-$value")
         return QueueItem(
             id = QueueItemId(value),
-            track = Track(
-                id = trackId,
-                realm = TrackRealm.PROVIDER,
-                title = value,
-                artists = listOf("Artist"),
-                candidates = emptyList(),
-            ),
+            track =
+                Track(
+                    id = trackId,
+                    realm = TrackRealm.PROVIDER,
+                    title = value,
+                    artists = listOf("Artist"),
+                    candidates = emptyList(),
+                ),
         )
     }
 
-    private fun summary(
-        item: QueueItem,
-        vararg entries: Pair<CrewMemberId, CrewAvailability>,
-    ) = QueueItemAvailabilitySummary(
-        item,
-        entries.map { (memberId, availability) ->
-            MemberItemAvailability(memberId, item.id, availability)
-        },
-    )
+    private fun summary(item: QueueItem, vararg entries: Pair<CrewMemberId, CrewAvailability>) =
+        QueueItemAvailabilitySummary(
+            item,
+            entries.map { (memberId, availability) ->
+                MemberItemAvailability(memberId, item.id, availability)
+            },
+        )
 }

@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio
 
 import android.os.Bundle
@@ -30,9 +29,9 @@ import androidx.core.view.isInvisible
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.NavController
-import androidx.navigation.NavOptions
-import androidx.navigation.findNavController
+import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.fragment.findNavController
+import androidx.navigation.ui.NavigationUI
 import com.google.android.material.R as MR
 import com.google.android.material.bottomsheet.BackportBottomSheetBehavior
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -43,7 +42,6 @@ import com.google.android.material.transition.MaterialFadeThrough
 import com.leinardi.android.speeddial.SpeedDialActionItem
 import com.leinardi.android.speeddial.SpeedDialView
 import dagger.hilt.android.AndroidEntryPoint
-import java.lang.reflect.Method
 import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.min
@@ -60,8 +58,10 @@ import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackBottomSheetBehavior
 import org.oxycblt.auxio.playback.PlaybackDisplayItem
+import org.oxycblt.auxio.playback.PlaybackPanelFragment
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.queue.QueueBottomSheetBehavior
+import org.oxycblt.auxio.playback.queue.QueueFragment
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
 import org.oxycblt.auxio.ui.BottomSheetContentBehavior
 import org.oxycblt.auxio.ui.DialogAwareNavigationListener
@@ -73,7 +73,6 @@ import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.coordinatorLayoutBehavior
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.getDimen
-import org.oxycblt.auxio.util.lazyReflectedMethod
 import org.oxycblt.auxio.util.navigateSafe
 import org.oxycblt.auxio.util.unlikelyToBeNull
 import org.oxycblt.musikr.Music
@@ -101,12 +100,15 @@ class MainFragment :
     private var selectionBackCallback: SelectionBackPressedCallback? = null
     private var speedDialBackCallback: SpeedDialBackPressedCallback? = null
     private var navigationListener: DialogAwareNavigationListener? = null
+    private var primaryNavController: NavController? = null
     private var primaryNavigationListener: NavController.OnDestinationChangedListener? = null
     private var lastInsets: WindowInsets? = null
     private var elevationNormal = 0f
     private var normalCornerSize = 0f
     private var maxScaleXDistance = 0f
     private var sheetRising: Boolean? = null
+    private var playbackSheetCallback: BackportBottomSheetBehavior.BottomSheetCallback? = null
+    private var queueSheetCallback: BackportBottomSheetBehavior.BottomSheetCallback? = null
     @Inject lateinit var uiSettings: UISettings
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -127,12 +129,61 @@ class MainFragment :
         playbackSheetBehavior.uiSettings = uiSettings
         playbackSheetBehavior.primaryNavigationHeight = navigationHeight
         playbackSheetBehavior.makeBackgroundDrawable(requireContext())
+        playbackSheetCallback =
+            object : BackportBottomSheetBehavior.BottomSheetCallback() {
+                    private var lastStableState = playbackSheetBehavior.state
+
+                    override fun onStateChanged(bottomSheet: android.view.View, newState: Int) {
+                        when (newState) {
+                            BackportBottomSheetBehavior.STATE_COLLAPSED,
+                            BackportBottomSheetBehavior.STATE_EXPANDED,
+                            BackportBottomSheetBehavior.STATE_HIDDEN -> lastStableState = newState
+                            BackportBottomSheetBehavior.STATE_DRAGGING -> {
+                                if (
+                                    lastStableState == BackportBottomSheetBehavior.STATE_COLLAPSED
+                                ) {
+                                    resetPlaybackPanelScroll()
+                                }
+                            }
+                        }
+                    }
+
+                    override fun onSlide(bottomSheet: android.view.View, slideOffset: Float) = Unit
+                }
+                .also(playbackSheetBehavior::addBottomSheetCallback)
         val contentBehavior =
             binding.mainContentContainer.coordinatorLayoutBehavior as BottomSheetContentBehavior
         contentBehavior.minimumBottomInset = navigationHeight
         val queueSheetBehavior =
             binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?
         queueSheetBehavior?.uiSettings = uiSettings
+        queueSheetCallback =
+            queueSheetBehavior
+                ?.let { behavior ->
+                    object : BackportBottomSheetBehavior.BottomSheetCallback() {
+                        private var lastStableState = behavior.state
+
+                        override fun onStateChanged(bottomSheet: android.view.View, newState: Int) {
+                            when (newState) {
+                                BackportBottomSheetBehavior.STATE_COLLAPSED,
+                                BackportBottomSheetBehavior.STATE_EXPANDED ->
+                                    lastStableState = newState
+                                BackportBottomSheetBehavior.STATE_DRAGGING -> {
+                                    if (
+                                        lastStableState ==
+                                            BackportBottomSheetBehavior.STATE_COLLAPSED
+                                    ) {
+                                        scrollQueueToCurrent()
+                                    }
+                                }
+                            }
+                        }
+
+                        override fun onSlide(bottomSheet: android.view.View, slideOffset: Float) =
+                            Unit
+                    }
+                }
+                ?.also(queueSheetBehavior::addBottomSheetCallback)
 
         elevationNormal = binding.context.getDimen(MR.dimen.m3_sys_elevation_level1)
 
@@ -241,8 +292,10 @@ class MainFragment :
         val binding = requireBinding()
         // Once we add the destination change callback, we will receive another initialization call,
         // so handle that by resetting the flag.
-        requireNotNull(navigationListener) { "NavigationListener was not available" }
-            .attach(binding.exploreNavHost.findNavController())
+        val listener = requireNotNull(navigationListener) { "NavigationListener was not available" }
+        val navController =
+            requireNotNull(primaryNavController) { "Primary NavController was not available" }
+        listener.attach(navController)
         // Listener could still reasonably fire even if we clear the binding, attach/detach
         // our pre-draw listener our listener in onStart/onStop respectively.
         binding.playbackSheet.viewTreeObserver.addOnPreDrawListener(this@MainFragment)
@@ -264,22 +317,32 @@ class MainFragment :
     override fun onStop() {
         super.onStop()
         val binding = requireBinding()
-        requireNotNull(navigationListener) { "NavigationListener was not available" }
-            .release(binding.exploreNavHost.findNavController())
+        navigationListener?.let { listener -> primaryNavController?.let(listener::release) }
         binding.playbackSheet.viewTreeObserver.removeOnPreDrawListener(this)
     }
 
     override fun onDestroyBinding(binding: FragmentMainBinding) {
+        playbackSheetCallback?.let { callback ->
+            (binding.playbackSheet.coordinatorLayoutBehavior as PlaybackBottomSheetBehavior)
+                .removeBottomSheetCallback(callback)
+        }
+        playbackSheetCallback = null
+        queueSheetCallback?.let { callback ->
+            (binding.queueSheet.coordinatorLayoutBehavior as QueueBottomSheetBehavior?)
+                ?.removeBottomSheetCallback(callback)
+        }
+        queueSheetCallback = null
         super.onDestroyBinding(binding)
         speedDialBackCallback = null
         sheetBackCallback = null
         detailBackCallback = null
         selectionBackCallback = null
         navigationListener = null
-        primaryNavigationListener?.let {
-            binding.exploreNavHost.findNavController().removeOnDestinationChangedListener(it)
+        primaryNavigationListener?.let { listener ->
+            primaryNavController?.removeOnDestinationChangedListener(listener)
         }
         primaryNavigationListener = null
+        primaryNavController = null
         binding.primaryNavigation.setOnItemSelectedListener(null)
         binding.homeNewPlaylistFab.setChangeListener(null)
         binding.homeNewPlaylistFab.setOnActionSelectedListener(null)
@@ -441,10 +504,15 @@ class MainFragment :
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                if (libraryCollectionsModel.createPlaylist(dialogBinding.playlistName.text.orEmpty())) {
+                if (
+                    libraryCollectionsModel.createPlaylist(
+                        dialogBinding.playlistName.text.toString()
+                    )
+                ) {
                     dialog.dismiss()
                 } else {
-                    dialogBinding.playlistContainer.error = getString(R.string.err_playlist_name_required)
+                    dialogBinding.playlistContainer.error =
+                        getString(R.string.err_playlist_name_required)
                     dialogBinding.playlistName.requestFocus()
                 }
             }
@@ -463,7 +531,14 @@ class MainFragment :
     }
 
     private fun configurePrimaryNavigation(binding: FragmentMainBinding) {
-        val navController = binding.exploreNavHost.findNavController()
+        val navHostFragment =
+            requireNotNull(
+                childFragmentManager.findFragmentById(R.id.explore_nav_host) as? NavHostFragment
+            ) {
+                "Primary NavHostFragment was not available"
+            }
+        val navController = navHostFragment.navController
+        primaryNavController = navController
         val topLevelDestinations =
             setOf(
                 R.id.shippy_home_fragment,
@@ -480,18 +555,9 @@ class MainFragment :
                 return@setOnItemSelectedListener true
             }
 
-            val options =
-                NavOptions.Builder()
-                    .setLaunchSingleTop(true)
-                    .setRestoreState(true)
-                    .setPopUpTo(
-                        navController.graph.startDestinationId,
-                        inclusive = false,
-                        saveState = true,
-                    )
-                    .build()
-            navController.navigate(item.itemId, null, options)
-            true
+            runCatching { NavigationUI.onNavDestinationSelected(item, navController) }
+                .onFailure { error -> L.e(error, "Primary navigation to ${item.itemId} failed") }
+                .getOrDefault(false)
         }
 
         val destinationListener =
@@ -607,12 +673,11 @@ class MainFragment :
     }
 
     private fun shouldHideAllFabs(
-        binding: FragmentMainBinding,
+        @Suppress("UNUSED_PARAMETER") binding: FragmentMainBinding,
         songs: List<Song>,
         isFastScrolling: Boolean,
     ) =
-        binding.exploreNavHost.findNavController().currentDestination?.id !=
-            R.id.library_fragment ||
+        primaryNavController?.currentDestination?.id != R.id.library_fragment ||
             sheetRising == true ||
             songs.isEmpty() ||
             isFastScrolling
@@ -620,13 +685,13 @@ class MainFragment :
     private fun forceHideAllFabs() {
         val binding = requireBinding()
         if (binding.homeShuffleFab.isOrWillBeShown) {
-            FAB_HIDE_FROM_USER_FIELD.invoke(binding.homeShuffleFab, null, false)
+            binding.homeShuffleFab.hide()
         }
         if (binding.homeNewPlaylistFab.isOpen) {
             binding.homeNewPlaylistFab.close()
         }
         if (binding.homeNewPlaylistFab.mainFab.isOrWillBeShown) {
-            FAB_HIDE_FROM_USER_FIELD.invoke(binding.homeNewPlaylistFab.mainFab, null, false)
+            binding.homeNewPlaylistFab.hide()
         }
     }
 
@@ -690,6 +755,7 @@ class MainFragment :
         if (playbackSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED) {
             // Playback sheet is not expanded and not hidden, we can expand it.
             L.d("Expanding playback sheet")
+            resetPlaybackPanelScroll()
             playbackSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
             return
         }
@@ -705,6 +771,17 @@ class MainFragment :
             L.d("Collapsing queue sheet")
             queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_COLLAPSED
         }
+    }
+
+    private fun resetPlaybackPanelScroll() {
+        (childFragmentManager.findFragmentById(R.id.playback_panel_fragment)
+                as? PlaybackPanelFragment)
+            ?.resetScrollPosition()
+    }
+
+    private fun scrollQueueToCurrent() {
+        (childFragmentManager.findFragmentById(R.id.queue_fragment) as? QueueFragment)
+            ?.scrollToCurrent()
     }
 
     private fun tryClosePlaybackPanel() {
@@ -732,6 +809,7 @@ class MainFragment :
                 queueSheetBehavior.targetState == BackportBottomSheetBehavior.STATE_COLLAPSED
         ) {
             // Playback sheet is expanded and queue sheet is collapsed, we can expand it.
+            scrollQueueToCurrent()
             queueSheetBehavior.state = BackportBottomSheetBehavior.STATE_EXPANDED
         }
     }
@@ -879,15 +957,5 @@ class MainFragment :
         fun invalidateEnabled(open: Boolean) {
             isEnabled = open
         }
-    }
-
-    private companion object {
-        val FAB_HIDE_FROM_USER_FIELD: Method by
-            lazyReflectedMethod(
-                FloatingActionButton::class,
-                "hide",
-                FloatingActionButton.OnVisibilityChangedListener::class,
-                Boolean::class,
-            )
     }
 }

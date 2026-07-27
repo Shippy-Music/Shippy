@@ -76,6 +76,9 @@ settings launcher or a catalogue of every integration.
 - Focus enters one global query field.
 - Results update quickly with stable layout.
 - Typo tolerance and recent searches are supported.
+- With no query, recent searches render as useful result-like rows with retained
+  title, subtitle, and artwork where available.
+- The query field owns a direct clear affordance.
 - Provider requests may arrive independently without reshuffling already
   interacted-with rows unpredictably.
 - Loading and partial-provider failure are scoped to the affected result group.
@@ -90,6 +93,9 @@ settings launcher or a catalogue of every integration.
 
 `On this device` is a labelled Local group. It offers convenience without
 merging exact files into provider identity automatically.
+
+Search opened from Library is a local-only mode. It never becomes global
+provider Search merely because the same result components are reused.
 
 ### Result actions
 
@@ -130,7 +136,13 @@ Liked, Downloads, and Local use distinct default artwork and labels. Their
 overflow never offers Rename or Delete.
 
 User playlists expose Rename and Delete only in appropriate management surfaces,
-not as a permanently visible trash icon beside every row.
+not as a permanently visible trash icon beside every row. User playlists may
+choose custom artwork through the native Android image picker; permanent
+collection artwork is intentionally not user-editable.
+
+All collections can be pinned. Long-press drag reorders the combined system and
+user list; dragging across the pinned boundary changes pin state instead of
+requiring a second disconnected settings flow.
 
 ### Local
 
@@ -156,7 +168,9 @@ Album and playlist detail surfaces contain:
 - Restrained overflow for management/share/info
 
 The download action works on the collection and reflects partial/in-progress/
-complete state. Mixed downloaded and streamable tracks are expected.
+complete state. It is hidden when nothing eligible is missing and never attempts
+to redownload Local or already available tracks. Mixed downloaded and
+streamable tracks are expected. Each collection persists its own sort mode.
 
 ## 7. Now Playing
 
@@ -164,15 +178,25 @@ complete state. Mixed downloaded and streamable tracks are expected.
 
 1. Collapse affordance and restrained overflow
 2. Artwork
-3. Title and artist
-4. Save and download
+3. Track identity, optionally reinforced by a compact artwork thumbnail
+4. Save
 5. Seek/progress with elapsed/remaining time
 6. Shuffle, previous, play/pause, next, repeat
-7. Queue access and other compact contextual actions
+7. Sleep timer at the left; conditional Download and Queue at the right
 8. Lyrics below the main player content
 
 The exact responsive arrangement may change by screen size, but the hierarchy
 must remain.
+
+### Expansion and collapse
+
+- Tapping or dragging upward on the persistent mini-player expands Now Playing.
+- Every expansion resets the player's content scroll to the artwork/top state.
+- Dragging downward on the expanded player collapses it back to the mini-player.
+- The collapse gesture uses the same native bottom-sheet motion as expansion,
+  not a second screen transition.
+- Back also collapses Now Playing before leaving the current root destination.
+- When Queue is expanded, Queue owns the drag gesture until it closes.
 
 ### Save behavior
 
@@ -201,6 +225,14 @@ added each item and reflects remote edits in place.
 Lyrics live below or in a naturally attached player section. Synchronized lyrics
 follow playback when available. The user can disable automatic following and
 return to the active line. Cached lyrics remain available offline.
+
+The full lyrics surface keeps track identity centered, gives the active line
+clear scale/weight/contrast, makes surrounding lines smaller and matte, and uses
+an edge fade rather than hard clipping. Its visible actions are conditional
+Download and the same consolidated track overflow; Local media does not show
+Download. Tapping a timestamped synchronized line seeks playback to that line
+and immediately updates the progress presentation; plain lyrics are not
+misrepresented as seekable.
 
 ### Overflow
 
@@ -337,6 +369,9 @@ Motion communicates continuity:
 - Queue edits animate locally without rebuilding the entire screen.
 - Reactions are playful but short.
 - State changes use subtle spring/fade behavior.
+- Default Shippy transitions run at 1.25x the previous Material duration:
+  smooth enough to preserve continuity, short enough to feel immediate.
+- Android's animator-duration setting remains authoritative.
 
 No continuous background animation, unnecessary blur recomputation, or motion
 that delays input. Reduced motion removes shared-element travel and floating
@@ -375,3 +410,18 @@ A change is rejected when it:
 - Places a delete icon permanently beside normal tracks
 - Causes Back from Now Playing to leave the app
 - Sacrifices TalkBack, large text, or reduced motion for visual polish
+
+## 14. Current Lyrics Target
+
+Now Playing uses one continuous vertical surface:
+
+- artwork and canonical controls first
+- top-right overflow owns the consolidated current-track action sheet
+- the title row owns the save/playlist plus-to-tick state
+- Download and Queue sit in the utility row below playback controls
+- a large synced-lyrics preview card immediately below
+- nearby lines remain visible while the active line is emphasized
+- tapping the card opens the full synced-lyrics sheet
+- preview and full view share the same playback position and seek authority
+
+Lyrics must never become a disconnected static page or a duplicate player.

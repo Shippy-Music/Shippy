@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewActiveMediaRuntime.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewActiveMediaRuntime.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.media
 
 import android.content.ContentResolver
@@ -27,10 +34,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,14 +47,14 @@ import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaIndex
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
-import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
 import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.CrewPrefetchKey
 import org.oxycblt.auxio.shippy.crew.preparation.CrewPrefetchPlanner
 import org.oxycblt.auxio.shippy.crew.preparation.CrewPrefetchPolicy
-import org.oxycblt.auxio.shippy.crew.preparation.CrewPrefetchKey
 import org.oxycblt.auxio.shippy.crew.preparation.CrewPrefetchRequest
 import org.oxycblt.auxio.shippy.crew.preparation.PeerSupplySource
 import org.oxycblt.auxio.shippy.crew.preparation.QueueItemAvailabilitySummary
+import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
@@ -64,7 +71,9 @@ import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderSettings
 
 @Singleton
-class CrewActiveMediaRuntimeFactory @Inject constructor(
+class CrewActiveMediaRuntimeFactory
+@Inject
+constructor(
     @ApplicationContext private val context: Context,
     private val settings: CrewSettings,
     private val downloadRepository: DownloadJobRepository,
@@ -92,15 +101,14 @@ class CrewActiveMediaRuntimeFactory @Inject constructor(
             localMemberId = localMemberId,
             stateProvider = stateProvider,
             settings = settings,
+            providerSettings = providerSettings,
             temporaryIndex = temporaryIndex,
             initialDownloads = CrewActiveMediaSelector.availableDownloads(downloads),
             observeDownloads = downloadRepository::observeAvailable,
             enabledProviderIds = {
                 providerRegistry
                     .enabled(
-                        providerSettings.selection(
-                            providerRegistry.descriptors().map { it.id }
-                        )
+                        providerSettings.selection(providerRegistry.descriptors().map { it.id })
                     )
                     .map { it.descriptor.id }
             },
@@ -110,14 +118,17 @@ class CrewActiveMediaRuntimeFactory @Inject constructor(
 }
 
 /** One active Crew's private media composition. It never owns playback or transport discovery. */
-class CrewActiveMediaRuntime internal constructor(
+class CrewActiveMediaRuntime
+internal constructor(
     private val context: Context,
     private val sessionId: CrewSessionId,
     private val localMemberId: CrewMemberId,
     private val stateProvider: () -> CrewState,
     private val settings: CrewSettings,
+    private val providerSettings: ProviderSettings,
     private val temporaryIndex: CrewTemporaryMediaIndex,
-    initialDownloads: Map<CrewActiveMediaSelector.DownloadKey, CrewActiveMediaSelector.DownloadSource>,
+    initialDownloads:
+        Map<CrewActiveMediaSelector.DownloadKey, CrewActiveMediaSelector.DownloadSource>,
     private val observeDownloads: () -> kotlinx.coroutines.flow.Flow<List<PersistedDownload>>,
     private val enabledProviderIds: () -> List<ProviderId>,
     private val privateSources: CrewPrivateSourceRegistry,
@@ -144,57 +155,60 @@ class CrewActiveMediaRuntime internal constructor(
     private val mutablePeerMediaBlocked = MutableStateFlow(false)
     val peerMediaBlocked: StateFlow<Boolean> = mutablePeerMediaBlocked
 
-    private val router = CrewMediaSessionRouter(
-        sessionId,
-        localMemberId,
-        policy,
-        receiver,
-        object : CrewMediaSessionCallbacks {
-            override fun authorizeSupplierSource(
-                transfer: CrewMediaTransferRef,
-                requestingMemberId: CrewMemberId,
-            ): CrewAuthorizedMediaSource? = authorize(transfer, requestingMemberId)
+    private val router =
+        CrewMediaSessionRouter(
+            sessionId,
+            localMemberId,
+            policy,
+            receiver,
+            object : CrewMediaSessionCallbacks {
+                override fun authorizeSupplierSource(
+                    transfer: CrewMediaTransferRef,
+                    requestingMemberId: CrewMemberId,
+                ): CrewAuthorizedMediaSource? = authorize(transfer, requestingMemberId)
 
-            override fun onTemporaryMediaComplete(
-                manifest: CrewMediaManifest,
-                supplyingMemberId: CrewMemberId,
-                file: File,
-            ): Boolean =
-                manifest.sessionId == sessionId &&
-                    manifest.transfer.targetMemberId == localMemberId &&
-                    manifest.transfer.supplierMemberId == supplyingMemberId &&
-                    temporaryIndex.complete(manifest, file)
+                override fun onTemporaryMediaComplete(
+                    manifest: CrewMediaManifest,
+                    supplyingMemberId: CrewMemberId,
+                    file: File,
+                ): Boolean =
+                    manifest.sessionId == sessionId &&
+                        manifest.transfer.targetMemberId == localMemberId &&
+                        manifest.transfer.supplierMemberId == supplyingMemberId &&
+                        temporaryIndex.complete(manifest, file)
 
-            override fun onTransferRetryLater(
-                transfer: CrewMediaTransferRef,
-                peerMemberId: CrewMemberId,
-            ) {
-                onRequestFinished(transfer, peerMemberId)
-            }
+                override fun onTransferRetryLater(
+                    transfer: CrewMediaTransferRef,
+                    peerMemberId: CrewMemberId,
+                ) {
+                    onRequestFinished(transfer, peerMemberId)
+                }
 
-            override fun onTransferRejected(
-                transfer: CrewMediaTransferRef,
-                peerMemberId: CrewMemberId,
-            ) {
-                onRequestFinished(transfer, peerMemberId)
-            }
-        },
-    )
+                override fun onTransferRejected(
+                    transfer: CrewMediaTransferRef,
+                    peerMemberId: CrewMemberId,
+                ) {
+                    onRequestFinished(transfer, peerMemberId)
+                }
+            },
+        )
 
-    private val settingsListener = object : CrewSettings.Listener {
-        override fun onPushPullEnabledChanged(enabled: Boolean) {
-            if (!closed) {
-                policy.activate(sessionId, enabled)
-                if (!enabled) router.onPushPullDisabled()
-                scope.launch { reconcileLocalMedia() }
+    private val settingsListener =
+        object : CrewSettings.Listener {
+            override fun onPushPullEnabledChanged(enabled: Boolean) {
+                if (!closed) {
+                    policy.activate(sessionId, enabled)
+                    if (!enabled) router.onPushPullDisabled()
+                    scope.launch { reconcileLocalMedia() }
+                }
             }
         }
-    }
-    private val providerSettingsListener = object : ProviderSettings.Listener {
-        override fun onProviderPriorityChanged() {
-            if (!closed) scope.launch { reconcileLocalMedia() }
+    private val providerSettingsListener =
+        object : ProviderSettings.Listener {
+            override fun onProviderPriorityChanged() {
+                if (!closed) scope.launch { reconcileLocalMedia() }
+            }
         }
-    }
 
     init {
         cache.beginSession(sessionId)
@@ -230,10 +244,12 @@ class CrewActiveMediaRuntime internal constructor(
             }
         }
     }
+
     override fun onMediaFrame(
         peer: CrewAuthenticatedMediaPeer,
         frame: org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame,
     ) = router.onMediaFrame(peer, frame)
+
     override fun onPeerDetached(peer: CrewAuthenticatedMediaPeer) {
         if (closed) return
         router.onPeerDetached(peer)
@@ -250,14 +266,15 @@ class CrewActiveMediaRuntime internal constructor(
         }
     }
 
-    fun requestTemporaryMedia(supplier: CrewMemberId, transfer: CrewMediaTransferRef): CrewSendResult? =
-        router.requestTemporaryMedia(supplier, transfer)
+    fun requestTemporaryMedia(
+        supplier: CrewMemberId,
+        transfer: CrewMediaTransferRef,
+    ): CrewSendResult? = router.requestTemporaryMedia(supplier, transfer)
 
     fun cancelTemporaryMediaRequest(
         supplier: CrewMemberId,
         transfer: CrewMediaTransferRef,
-    ): CrewSendResult? =
-        router.cancelTemporaryMediaRequest(supplier, transfer)
+    ): CrewSendResult? = router.cancelTemporaryMediaRequest(supplier, transfer)
 
     fun resumeSupplierTransfer(supplier: CrewMemberId, transfer: CrewMediaTransferRef) =
         router.resumeSupplierTransfer(supplier, transfer)
@@ -333,16 +350,10 @@ class CrewActiveMediaRuntime internal constructor(
             state.queue
                 .asSequence()
                 .flatMap { item ->
-                    item.track.candidates
-                        .asSequence()
-                        .map { CrewLocalMediaKey(item.id, it.id) }
+                    item.track.candidates.asSequence().map { CrewLocalMediaKey(item.id, it.id) }
                 }
                 .filter { key ->
-                    temporaryIndex.findActive(
-                        sessionId,
-                        key.queueItemId,
-                        key.candidateId,
-                    ) != null
+                    temporaryIndex.findActive(sessionId, key.queueItemId, key.candidateId) != null
                 }
                 .toSet()
         val enabledProviders = enabledProviderIds()
@@ -367,8 +378,7 @@ class CrewActiveMediaRuntime internal constructor(
             }
         mutablePeerMediaBlocked.value =
             state.playback.currentQueueItemId?.let {
-                localAvailability[it] == CrewAvailability.PEER_ONLY &&
-                    !settings.pushPullEnabled
+                localAvailability[it] == CrewAvailability.PEER_ONLY && !settings.pushPullEnabled
             } == true
         if (localAvailability != lastPublishedAvailability) {
             if (publishAvailability?.invoke(localAvailability) == true) {
@@ -420,11 +430,11 @@ class CrewActiveMediaRuntime internal constructor(
             if (desired.key.supplierMemberId !in attachedPeers) return@forEach
             val item = state.queue.firstOrNull { it.id == queueItemId } ?: return@forEach
             val candidateId =
-                CrewLocalAvailabilityEvaluator.candidateId(item, enabledProviders)
-                    ?: return@forEach
+                CrewLocalAvailabilityEvaluator.candidateId(item, enabledProviders) ?: return@forEach
             val key = CrewLocalMediaKey(queueItemId, candidateId)
             val existing = inFlight[key]
-            if (existing != null && existing.supplierMemberId == desired.key.supplierMemberId) return@forEach
+            if (existing != null && existing.supplierMemberId == desired.key.supplierMemberId)
+                return@forEach
             if ((lastAttempt[key] ?: Long.MIN_VALUE) + 750L > now) return@forEach
             existing?.let { cancelTemporaryMediaRequest(it.supplierMemberId, it) }
             val transfer =
@@ -448,20 +458,20 @@ class CrewActiveMediaRuntime internal constructor(
         }
         lastAttempt.keys.retainAll(
             inFlight.keys +
-                wanted.keys.mapNotNull { (id, _) ->
-                    state.queue.firstOrNull { it.id == id }?.let {
-                        CrewLocalAvailabilityEvaluator.candidateId(it, enabledProviders)?.let {
-                            candidate -> CrewLocalMediaKey(id, candidate)
+                wanted.keys.mapNotNull { id ->
+                    state.queue
+                        .firstOrNull { it.id == id }
+                        ?.let {
+                            CrewLocalAvailabilityEvaluator.candidateId(it, enabledProviders)?.let {
+                                candidate ->
+                                CrewLocalMediaKey(id, candidate)
+                            }
                         }
-                    }
                 }
         )
     }
 
-    private fun onRequestFinished(
-        transfer: CrewMediaTransferRef,
-        peerMemberId: CrewMemberId,
-    ) {
+    private fun onRequestFinished(transfer: CrewMediaTransferRef, peerMemberId: CrewMemberId) {
         if (
             transfer.sessionId != sessionId ||
                 transfer.targetMemberId != localMemberId ||
@@ -508,7 +518,13 @@ class CrewActiveMediaRuntime internal constructor(
             ) ?: return null
         return when (selected) {
             is CrewActiveMediaSelector.Selection.Temporary -> FileSource(selected.entry)
-            is CrewActiveMediaSelector.Selection.Content -> ContentSource(context.contentResolver, selected.uri, selected.lengthBytes, selected.mimeType)
+            is CrewActiveMediaSelector.Selection.Content ->
+                ContentSource(
+                    context.contentResolver,
+                    selected.uri,
+                    selected.lengthBytes,
+                    selected.mimeType,
+                )
         }
     }
 
@@ -534,38 +550,44 @@ private fun CrewState.queueWindow(): List<QueueItem> {
 
 internal object CrewActiveMediaSelector {
     data class DownloadKey(val trackId: TrackId, val requestedCandidateId: CandidateId)
+
     data class DownloadSource(val uri: String, val lengthBytes: Long, val mimeType: String?)
+
     sealed interface Selection {
         data class Temporary(val entry: CrewTemporaryMediaEntry) : Selection
-        data class Content(val uri: String, val lengthBytes: Long, val mimeType: String?) : Selection
+
+        data class Content(val uri: String, val lengthBytes: Long, val mimeType: String?) :
+            Selection
     }
 
     fun availableDownloads(downloads: List<PersistedDownload>): Map<DownloadKey, DownloadSource> =
-        downloads.asSequence().mapNotNull { download ->
-            val job = download.job
-            val artifact = job.artifact
-            val exactCandidate =
-                download.track
-                    .takeIf { it.id == job.trackId }
-                    ?.candidates
-                    ?.firstOrNull { it.id == job.candidateId }
-            if (
-                job.state != DownloadState.AVAILABLE ||
-                    artifact == null ||
-                    exactCandidate == null ||
-                    !validLength(artifact.contentLength) ||
-                    !isContentUri(artifact.contentUri)
-            ) {
-                null
-            } else {
-                DownloadKey(job.trackId, job.candidateId) to
-                    DownloadSource(
-                        artifact.contentUri,
-                        artifact.contentLength,
-                        artifact.mimeType,
-                    )
+        downloads
+            .asSequence()
+            .mapNotNull { download ->
+                val job = download.job
+                val artifact = job.artifact
+                val exactCandidate =
+                    download.track
+                        .takeIf { it.id == job.trackId }
+                        ?.candidates
+                        ?.firstOrNull { it.id == job.candidateId }
+                if (
+                    job.state != DownloadState.AVAILABLE ||
+                        artifact == null ||
+                        exactCandidate == null ||
+                        !validLength(artifact.contentLength) ||
+                        !isContentUri(artifact.contentUri)
+                ) {
+                    null
+                } else {
+                    DownloadKey(job.trackId, job.candidateId) to
+                        DownloadSource(
+                            artifact.contentUri,
+                            artifact.contentLength,
+                            artifact.mimeType,
+                        )
+                }
             }
-        }
             // DAO order is newest first. Keep the first exact artifact when a
             // historical duplicate job exists for the same requested candidate.
             .distinctBy { it.first }
@@ -580,20 +602,29 @@ internal object CrewActiveMediaSelector {
         temporaryIndex: CrewTemporaryMediaIndex,
         downloads: Map<DownloadKey, DownloadSource>,
     ): Selection? {
-        if (transfer.sessionId != activeSessionId || state.sessionId != activeSessionId ||
-            transfer.supplierMemberId != localMemberId || transfer.targetMemberId != requestingMemberId ||
-            requestingMemberId == localMemberId || state.members.none { it.id == requestingMemberId }
-        ) return null
+        if (
+            transfer.sessionId != activeSessionId ||
+                state.sessionId != activeSessionId ||
+                transfer.supplierMemberId != localMemberId ||
+                transfer.targetMemberId != requestingMemberId ||
+                requestingMemberId == localMemberId ||
+                state.members.none { it.id == requestingMemberId }
+        )
+            return null
         val item = state.queue.firstOrNull { it.id == transfer.queueItemId } ?: return null
-        val original = item.track.candidates.firstOrNull { it.id == transfer.candidateId } ?: return null
-        temporaryIndex.findActive(activeSessionId, item.id, original.id)?.let { return Selection.Temporary(it) }
+        val original =
+            item.track.candidates.firstOrNull { it.id == transfer.candidateId } ?: return null
+        temporaryIndex.findActive(activeSessionId, item.id, original.id)?.let {
+            return Selection.Temporary(it)
+        }
         val localMedia = original.media
         if (
             item.track.realm == TrackRealm.LOCAL &&
                 item.contributorId == localMemberId.value &&
                 original.kind == CandidateKind.LOCAL &&
                 original.availability == CandidateAvailability.AVAILABLE &&
-            validLength(localMedia?.contentLength) && isContentUri(original.locator)
+                validLength(localMedia?.contentLength) &&
+                isContentUri(original.locator)
         ) {
             return Selection.Content(
                 original.locator!!,
@@ -605,16 +636,22 @@ internal object CrewActiveMediaSelector {
         return Selection.Content(downloaded.uri, downloaded.lengthBytes, downloaded.mimeType)
     }
 
-    private fun validLength(length: Long?) = length != null && length in 1..CREW_MEDIA_MAX_OBJECT_BYTES
+    private fun validLength(length: Long?) =
+        length != null && length in 1..CREW_MEDIA_MAX_OBJECT_BYTES
+
     /** Deliberately pure so authorization selection remains a JVM-testable policy. */
     private fun isContentUri(value: String?) =
-        value?.substringBefore(':', missingDelimiterValue = "")?.equals("content", ignoreCase = true) == true
+        value
+            ?.substringBefore(':', missingDelimiterValue = "")
+            ?.equals("content", ignoreCase = true) == true
 }
 
 private class FileSource(private val entry: CrewTemporaryMediaEntry) : CrewAuthorizedMediaSource {
     override val lengthBytes = entry.lengthBytes
     override val mimeType = entry.mimeType
+
     override fun open(): InputStream = entry.file.inputStream()
+
     override fun toString() = "CrewAuthorizedMediaSource(redacted)"
 }
 
@@ -625,5 +662,6 @@ private class ContentSource(
     override val mimeType: String?,
 ) : CrewAuthorizedMediaSource {
     override fun open(): InputStream = requireNotNull(resolver.openInputStream(Uri.parse(uri)))
+
     override fun toString() = "CrewAuthorizedMediaSource(redacted)"
 }

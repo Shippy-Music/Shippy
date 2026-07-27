@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.home
 
 import android.annotation.SuppressLint
@@ -48,20 +47,18 @@ import org.oxycblt.auxio.home.list.GenreListFragment
 import org.oxycblt.auxio.home.list.PlaylistListFragment
 import org.oxycblt.auxio.home.list.SongListFragment
 import org.oxycblt.auxio.home.tabs.NamedTabStrategy
-import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.list.SelectionFragment
 import org.oxycblt.auxio.list.menu.Menu
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicType
-import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
-import org.oxycblt.auxio.shippy.library.usesAuxioLocalSurface
-import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
 import org.oxycblt.auxio.playback.PlaybackDecision
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
+import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.ui.FadingToolbarOffsetListener
 import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
@@ -87,7 +84,6 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     override val playbackModel: PlaybackViewModel by activityViewModels()
     private val homeModel: HomeViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
-    private var storagePermissionLauncher: ActivityResultLauncher<String>? = null
     private var getContentLauncher: ActivityResultLauncher<String>? = null
     private var pendingImportTarget: Playlist? = null
 
@@ -107,12 +103,6 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     @SuppressLint("ClickableViewAccessibility")
     override fun onBindingCreated(binding: FragmentHomeBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
-
-        // Have to set up the permission launcher before the view is shown
-        storagePermissionLauncher =
-            registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-                musicModel.refresh()
-            }
 
         getContentLauncher =
             registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -152,11 +142,10 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             // listener with a non-consuming listener.
             setOnApplyWindowInsetsListener { _, insets -> insets }
 
-            // We know that there will only be a fixed amount of tabs, so we manually set this
-            // limit to the maximum amount possible. This will prevent the tab ripple from
-            // bugging out due to dynamically inflating each fragment, at the cost of slower
-            // debug UI performance.
-            offscreenPageLimit = Tab.MAX_SEQUENCE_IDX + 1
+            // Keep the active Library tab and its closest neighbor warm. Pre-inflating every
+            // artwork-heavy tab made the first switch to Library do all five screens' work at
+            // once; FragmentStateAdapter still preserves the state of tabs outside this window.
+            offscreenPageLimit = 1
 
             dampen()
         }
@@ -182,7 +171,6 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
 
     override fun onDestroyBinding(binding: FragmentHomeBinding) {
         super.onDestroyBinding(binding)
-        storagePermissionLauncher = null
         binding.homeNormalToolbar.setOnMenuItemClickListener(null)
     }
 
@@ -195,7 +183,10 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
             // Handle main actions (Search, Settings, About)
             R.id.action_search -> {
                 L.d("Navigating to search")
-                findNavController().navigateSafe(HomeFragmentDirections.search())
+                findNavController()
+                    .navigateSafe(
+                        HomeFragmentDirections.search(initialQuery = null, localOnly = true)
+                    )
                 true
             }
             R.id.action_settings -> {
@@ -296,18 +287,8 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     private fun handleOpenShippyCollection(collectionId: LibraryCollectionId?) {
         if (collectionId == null) return
 
-        if (collectionId.usesAuxioLocalSurface()) {
-            val songsIndex = homeModel.currentTabTypes.indexOf(MusicType.SONGS)
-            if (songsIndex >= 0) {
-                requireBinding().homePager.currentItem = songsIndex
-            } else {
-                L.w("Local Library requested while the Auxio Songs tab is unavailable")
-            }
-        } else {
-            findNavController().navigateSafe(
-                HomeFragmentDirections.showShippyCollection(collectionId.value)
-            )
-        }
+        findNavController()
+            .navigateSafe(HomeFragmentDirections.showShippyCollection(collectionId.value))
         homeModel.openShippyCollection.consume()
     }
 
@@ -489,7 +470,9 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 is Menu.ForPlaylist -> HomeFragmentDirections.openPlaylistMenu(menu.parcel)
                 is Menu.ForSelection -> HomeFragmentDirections.openSelectionMenu(menu.parcel)
             }
-        findNavController().navigateSafe(directions)
+        if (!findNavController().navigateSafe(directions)) {
+            listModel.menu.consume()
+        }
     }
 
     private fun updateSelection(selected: List<Music>) {

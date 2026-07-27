@@ -29,6 +29,24 @@
         </item>
         <item name="motionSpringSlowSpatial">@style/Motion.Material3.Spring.Standard.Slow.Spatial</item>
         <item name="motionSpringSlowEffects">@style/Motion.Material3.Spring.Standard.Slow.Effects</item>
+        <!-- Shippy keeps Material motion, but at a tighter ~1.4x tempo. Android's animator
+             duration scale still applies, so reduced-motion/system preferences remain honored. -->
+        <item name="motionDurationShort1">36</item>
+        <item name="motionDurationShort2">72</item>
+        <item name="motionDurationShort3">108</item>
+        <item name="motionDurationShort4">144</item>
+        <item name="motionDurationMedium1">180</item>
+        <item name="motionDurationMedium2">216</item>
+        <item name="motionDurationMedium3">252</item>
+        <item name="motionDurationMedium4">288</item>
+        <item name="motionDurationLong1">324</item>
+        <item name="motionDurationLong2">360</item>
+        <item name="motionDurationLong3">396</item>
+        <item name="motionDurationLong4">432</item>
+        <item name="motionDurationExtraLong1">504</item>
+        <item name="motionDurationExtraLong2">576</item>
+        <item name="motionDurationExtraLong3">648</item>
+        <item name="motionDurationExtraLong4">720</item>
         <item name="appBarLayoutStyle">@style/Widget.Auxio.AppBarLayout</item>
         <item name="toolbarStyle">@style/Widget.Auxio.Toolbar</item>
         <item name="tabStyle">@style/Widget.Auxio.TabLayout</item>

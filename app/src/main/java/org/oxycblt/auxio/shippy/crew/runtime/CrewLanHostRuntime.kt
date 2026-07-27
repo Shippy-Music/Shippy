@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewLanHostRuntime.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewLanHostRuntime.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import android.content.Context
@@ -20,46 +27,47 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.OkHttpClient
 import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerConnection
 import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerRole
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
-import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
+import org.oxycblt.auxio.shippy.crew.core.CrewState
+import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanAdvertisement
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanDiscovery
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanFailureOperation
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanOperationState
-import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingHost
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalInviteResolver
+import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingHost
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntime
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinCredentialRegistry
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayHost
-import org.oxycblt.auxio.shippy.crew.relay.CrewRelayInviteCandidate
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayRegistrationState
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHttpClient
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayIceServerProvider
+import org.oxycblt.auxio.shippy.crew.relay.CrewRelayInviteCandidate
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
+import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
-import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
-import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
-import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinCredentialRegistry
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewWebRtcRuntime
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
 import org.oxycblt.auxio.shippy.persistence.crew.CrewRejoinLeaseStore
-import okhttp3.OkHttpClient
 
 private const val CREW_PROTOCOL_V1 = 1
 private const val DEFAULT_ADVERTISEMENT_TIMEOUT_MS = 10_000L
@@ -83,10 +91,8 @@ sealed interface CrewLanHostLaunchFailure {
 
     data object EngineOrPersistence : CrewLanHostLaunchFailure
 
-    data class AdvertisementFailed(
-        val operation: CrewLanFailureOperation,
-        val platformCode: Int?,
-    ) : CrewLanHostLaunchFailure
+    data class AdvertisementFailed(val operation: CrewLanFailureOperation, val platformCode: Int?) :
+        CrewLanHostLaunchFailure
 
     data object AdvertisementClosed : CrewLanHostLaunchFailure
 
@@ -98,7 +104,8 @@ sealed interface CrewLanHostLaunchFailure {
  * checkpoint and rejoin lease stay available for a future process-recovery runtime. [end] is the
  * explicit host-session end operation publishes one terminal ordered event before teardown.
  */
-class CrewLanHostSession internal constructor(
+class CrewLanHostSession
+internal constructor(
     val sessionId: CrewSessionId,
     val localMemberId: CrewMemberId,
     val inviteLink: String,
@@ -135,7 +142,7 @@ class CrewLanHostSession internal constructor(
                 issuingMemberId = localMemberId,
                 clientMonotonicTimestampMs = (System.nanoTime() / 1_000_000L).coerceAtLeast(0L),
                 action = action,
-            ),
+            )
         )
 
     suspend fun sendReaction(emoji: String): CrewReactionSendResult = engine.sendReaction(emoji)
@@ -148,12 +155,14 @@ class CrewLanHostSession internal constructor(
 
     /** Releases this session and removes only its exact checkpoint and credential lease. */
     suspend fun end() {
-        val shouldEnd = synchronized(lock) {
-            if (ended) false else {
-                ended = true
-                true
+        val shouldEnd =
+            synchronized(lock) {
+                if (ended) false
+                else {
+                    ended = true
+                    true
+                }
             }
-        }
         if (!shouldEnd) return
         runCatching { submit(CrewAction.SessionEnded) }
         withTimeoutOrNull(CREW_TERMINAL_EVENT_WAIT_MS) {
@@ -164,12 +173,14 @@ class CrewLanHostSession internal constructor(
         runCatching { leases.clear(sessionId) }
     }
 
-    private fun markReleased() = synchronized(lock) {
-        if (released) false else {
-            released = true
-            true
+    private fun markReleased() =
+        synchronized(lock) {
+            if (released) false
+            else {
+                released = true
+                true
+            }
         }
-    }
 
     private fun releaseAll() {
         // Each boundary is isolated: a broken Android/RTC close must not retain later resources.
@@ -211,17 +222,24 @@ constructor(
         }
 
         val protocol = ProtocolVersion(CREW_PROTOCOL_V1)
-        val localMemberId = runCatching { profileSettings.memberId(protocol) }.getOrElse {
-            return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
-        }
+        val localMemberId =
+            runCatching { profileSettings.memberId(protocol) }
+                .getOrElse {
+                    return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
+                }
         val localMember =
-            runCatching { CrewMember(localMemberId, profileSettings.displayName) }.getOrElse {
-                return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
-            }
+            runCatching { CrewMember(localMemberId, profileSettings.displayName) }
+                .getOrElse {
+                    return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
+                }
         var bootstrap =
-            runCatching { CrewHostBootstrapFactory().create(localMember, nowEpochMs(), crewSettings.relayLocator) }.getOrElse {
-                return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
-            }
+            runCatching {
+                    CrewHostBootstrapFactory()
+                        .create(localMember, nowEpochMs(), crewSettings.relayLocator)
+                }
+                .getOrElse {
+                    return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
+                }
         val credentialRegistry = CrewRejoinCredentialRegistry()
 
         val requestedRelay = bootstrap.invite.relayLocator != null
@@ -229,29 +247,42 @@ constructor(
         if (bootstrap.invite.relayLocator != null) {
             val candidate =
                 runCatching {
-                    CrewHostedRelayHost(
-                        relayClient,
-                        bootstrap.invite,
-                        bootstrap.initialState.sessionId,
-                        localMemberId,
-                        localMember.displayName,
-                        inviteCandidates = {
-                            buildList {
-                                if (nowEpochMs() in bootstrap.invite.issuedAtEpochMs until bootstrap.invite.expiresAtEpochMs) {
-                                    add(CrewRelayInviteCandidate(null, bootstrap.invite))
-                                }
-                                credentialRegistry.activeInviteCandidates(
-                                    bootstrap.initialState.sessionId,
-                                    bootstrap.invite.sessionLocator,
-                                    bootstrap.invite.inviteId,
-                                    nowEpochMs(),
-                                ).forEach { candidate ->
-                                    add(CrewRelayInviteCandidate(candidate.memberId, candidate.invite))
-                                }
-                            }.take(8)
-                        },
-                    )
-                }.getOrNull()
+                        CrewHostedRelayHost(
+                            relayClient,
+                            bootstrap.invite,
+                            bootstrap.initialState.sessionId,
+                            localMemberId,
+                            localMember.displayName,
+                            inviteCandidates = {
+                                buildList {
+                                        if (
+                                            nowEpochMs() in
+                                                bootstrap.invite.issuedAtEpochMs until
+                                                    bootstrap.invite.expiresAtEpochMs
+                                        ) {
+                                            add(CrewRelayInviteCandidate(null, bootstrap.invite))
+                                        }
+                                        credentialRegistry
+                                            .activeInviteCandidates(
+                                                bootstrap.initialState.sessionId,
+                                                bootstrap.invite.sessionLocator,
+                                                bootstrap.invite.inviteId,
+                                                nowEpochMs(),
+                                            )
+                                            .forEach { candidate ->
+                                                add(
+                                                    CrewRelayInviteCandidate(
+                                                        candidate.memberId,
+                                                        candidate.invite,
+                                                    )
+                                                )
+                                            }
+                                    }
+                                    .take(8)
+                            },
+                        )
+                    }
+                    .getOrNull()
             val registration =
                 try {
                     candidate?.awaitRegistration()
@@ -267,9 +298,12 @@ constructor(
             } else {
                 runCatching { candidate?.close() }
                 bootstrap =
-                    runCatching { CrewHostBootstrapFactory().create(localMember, nowEpochMs()) }.getOrElse {
-                        return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
-                    }
+                    runCatching { CrewHostBootstrapFactory().create(localMember, nowEpochMs()) }
+                        .getOrElse {
+                            return CrewLanHostLaunchResult.Failed(
+                                CrewLanHostLaunchFailure.Initialization
+                            )
+                        }
             }
         }
         val connectivity =
@@ -313,8 +347,10 @@ constructor(
                     localMemberId = localMemberId,
                     stateProvider = {
                         checkNotNull(engine) {
-                            "Crew media state requested before host engine assignment"
-                        }.state.value
+                                "Crew media state requested before host engine assignment"
+                            }
+                            .state
+                            .value
                     },
                 )
             } catch (error: CancellationException) {
@@ -332,17 +368,31 @@ constructor(
                         mediaLifecycle = activeMediaRuntime,
                     )
                 }
-                .getOrElse { return fail(CrewLanHostLaunchFailure.EngineOrPersistence) }
+                .getOrElse {
+                    return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
+                }
         val activeEngine = checkNotNull(engine)
         if (runCatching { activeEngine.start() }.isFailure) {
             return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
         }
-        if (runCatching { activeMediaRuntime.bind(activeEngine.state, activeEngine.availability, activeEngine::publishLocalAvailability) }.isFailure) {
+        if (
+            runCatching {
+                    activeMediaRuntime.bind(
+                        activeEngine.state,
+                        activeEngine.availability,
+                        activeEngine::publishLocalAvailability,
+                    )
+                }
+                .isFailure
+        ) {
             return fail(CrewLanHostLaunchFailure.EngineOrPersistence)
         }
 
-        webRtc = runCatching { CrewWebRtcRuntime(context.applicationContext) }
-            .getOrElse { return fail(CrewLanHostLaunchFailure.Initialization) }
+        webRtc =
+            runCatching { CrewWebRtcRuntime(context.applicationContext) }
+                .getOrElse {
+                    return fail(CrewLanHostLaunchFailure.Initialization)
+                }
         val activeWebRtc = checkNotNull(webRtc)
         signaling =
             runCatching {
@@ -353,25 +403,27 @@ constructor(
                         localDisplayName = localMember.displayName,
                         nowEpochMs = nowEpochMs(),
                         inviteResolver =
-                            CrewLanSignalInviteResolver { protocol, locator, inviteId, memberId, now ->
+                            CrewLanSignalInviteResolver { protocol, locator, inviteId, memberId, now
+                                ->
                                 bootstrap.invite.takeIf {
                                     it.protocolVersion == protocol &&
-                                        it.sessionLocator == locator && it.inviteId == inviteId &&
+                                        it.sessionLocator == locator &&
+                                        it.inviteId == inviteId &&
                                         now in it.issuedAtEpochMs until it.expiresAtEpochMs
                                 }
-                                    ?: credentialRegistry.activeInviteCandidates(
-                                        sessionId,
-                                        locator,
-                                        inviteId,
-                                        now,
-                                    ).firstOrNull { candidate ->
-                                        candidate.memberId == memberId &&
-                                            candidate.invite.protocolVersion == protocol
-                                    }?.invite
+                                    ?: credentialRegistry
+                                        .activeInviteCandidates(sessionId, locator, inviteId, now)
+                                        .firstOrNull { candidate ->
+                                            candidate.memberId == memberId &&
+                                                candidate.invite.protocolVersion == protocol
+                                        }
+                                        ?.invite
                             },
                     )
                 }
-                .getOrElse { return fail(CrewLanHostLaunchFailure.Initialization) }
+                .getOrElse {
+                    return fail(CrewLanHostLaunchFailure.Initialization)
+                }
         val activeSignaling = checkNotNull(signaling)
         val iceServers = relayIceServerProvider.resolve(bootstrap.invite)
         admission =
@@ -390,7 +442,7 @@ constructor(
                                         localMemberId = localMemberId,
                                         role = CrewDirectPeerRole.RESPONDER,
                                         iceServers = iceServers,
-                                    ),
+                                    )
                                 )
                             },
                         credentialIssuer = { memberId ->
@@ -411,25 +463,37 @@ constructor(
                         },
                     )
                 }
-                .getOrElse { return fail(CrewLanHostLaunchFailure.Initialization) }
+                .getOrElse {
+                    return fail(CrewLanHostLaunchFailure.Initialization)
+                }
         val activeAdmission = checkNotNull(admission)
         collectorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val activeCollectorScope = checkNotNull(collectorScope)
-        collector = activeCollectorScope.launch { activeSignaling.peers.collect(activeAdmission::accept) }
+        collector =
+            activeCollectorScope.launch { activeSignaling.peers.collect(activeAdmission::accept) }
         val activeCollector = checkNotNull(collector)
-        relayCollector = relayHost?.let { hosted ->
-            activeCollectorScope.launch { hosted.peers.collect(activeAdmission::accept) }
-        }
+        relayCollector =
+            relayHost?.let { hosted ->
+                activeCollectorScope.launch { hosted.peers.collect(activeAdmission::accept) }
+            }
         advertisement =
             runCatching { lanDiscovery.advertise(bootstrap.invite, activeSignaling.port) }
-                .getOrElse { return fail(CrewLanHostLaunchFailure.Initialization) }
+                .getOrElse {
+                    return fail(CrewLanHostLaunchFailure.Initialization)
+                }
         val activeAdvertisement = checkNotNull(advertisement)
 
         when (val state = awaitAdvertisement(activeAdvertisement)) {
             CrewLanOperationState.Active -> Unit
             is CrewLanOperationState.Failed ->
-                return fail(CrewLanHostLaunchFailure.AdvertisementFailed(state.operation, state.platformCode))
-            CrewLanOperationState.Closed -> return fail(CrewLanHostLaunchFailure.AdvertisementClosed)
+                return fail(
+                    CrewLanHostLaunchFailure.AdvertisementFailed(
+                        state.operation,
+                        state.platformCode,
+                    )
+                )
+            CrewLanOperationState.Closed ->
+                return fail(CrewLanHostLaunchFailure.AdvertisementClosed)
             null,
             CrewLanOperationState.Starting ->
                 return fail(CrewLanHostLaunchFailure.AdvertisementTimedOut)
@@ -456,11 +520,13 @@ constructor(
                 webRtcRuntime = activeWebRtc,
                 checkpoints = checkpoints,
                 leases = leases,
-            ),
+            )
         )
     }
 
-    private suspend fun awaitAdvertisement(advertisement: CrewLanAdvertisement): CrewLanOperationState? =
+    private suspend fun awaitAdvertisement(
+        advertisement: CrewLanAdvertisement
+    ): CrewLanOperationState? =
         withTimeoutOrNull(advertisementTimeoutMs) {
             advertisement.state.first { it !is CrewLanOperationState.Starting }
         }

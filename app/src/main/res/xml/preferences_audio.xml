@@ -44,6 +44,26 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory android:title="@string/set_playback_and_downloads">
+
+        <ListPreference
+            app:defaultValue="160000"
+            app:entries="@array/entries_stream_quality"
+            app:entryValues="@array/values_stream_quality"
+            app:key="@string/set_key_playback_quality"
+            app:title="@string/set_playback_quality"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            app:defaultValue="320000"
+            app:entries="@array/entries_stream_quality"
+            app:entryValues="@array/values_stream_quality"
+            app:key="@string/set_key_download_quality"
+            app:title="@string/set_download_quality"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
     <PreferenceCategory android:title="@string/set_replay_gain">
 
         <org.oxycblt.auxio.settings.ui.IntListPreference

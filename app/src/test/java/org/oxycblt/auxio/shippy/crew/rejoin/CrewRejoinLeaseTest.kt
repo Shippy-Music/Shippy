@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewRejoinLeaseTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewRejoinLeaseTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.rejoin
 
 import java.io.ByteArrayOutputStream
@@ -44,7 +56,10 @@ class CrewRejoinLeaseTest {
             }
 
         assertEquals(CrewRejoinLeaseDecodeResult.Rejected, CrewRejoinLeaseCodec.decode(legacy))
-        assertEquals(null, CrewRejoinLeasePersistencePolicy.acceptedLease(CrewRejoinLeaseCodec.decode(legacy)))
+        assertEquals(
+            null,
+            CrewRejoinLeasePersistencePolicy.acceptedLease(CrewRejoinLeaseCodec.decode(legacy)),
+        )
     }
 
     @Test
@@ -72,13 +87,29 @@ class CrewRejoinLeaseTest {
         val lease = fixtureLease()
         val checkpoint = fixtureCheckpoint(lease)
 
-        assertEquals(CrewRejoinRestoreDecision.RESTORE, CrewRejoinRestorePolicy.decide(checkpoint, lease, 1_500L))
-        assertEquals(CrewRejoinRestoreDecision.DISCARD_EXPIRED_LEASE, CrewRejoinRestorePolicy.decide(checkpoint, lease, 2_000L))
-        assertEquals(CrewRejoinRestoreDecision.DISCARD_MISSING_LEASE, CrewRejoinRestorePolicy.decide(checkpoint, null, 1_500L))
-        assertEquals(CrewRejoinRestoreDecision.DISCARD_ORPHANED_LEASE, CrewRejoinRestorePolicy.decide(null, lease, 1_500L))
+        assertEquals(
+            CrewRejoinRestoreDecision.RESTORE,
+            CrewRejoinRestorePolicy.decide(checkpoint, lease, 1_500L),
+        )
+        assertEquals(
+            CrewRejoinRestoreDecision.DISCARD_EXPIRED_LEASE,
+            CrewRejoinRestorePolicy.decide(checkpoint, lease, 2_000L),
+        )
+        assertEquals(
+            CrewRejoinRestoreDecision.DISCARD_MISSING_LEASE,
+            CrewRejoinRestorePolicy.decide(checkpoint, null, 1_500L),
+        )
+        assertEquals(
+            CrewRejoinRestoreDecision.DISCARD_ORPHANED_LEASE,
+            CrewRejoinRestorePolicy.decide(null, lease, 1_500L),
+        )
         assertEquals(
             CrewRejoinRestoreDecision.DISCARD_MISMATCHED_LEASE,
-            CrewRejoinRestorePolicy.decide(checkpoint, fixtureLease(session = "other_session"), 1_500L),
+            CrewRejoinRestorePolicy.decide(
+                checkpoint,
+                fixtureLease(session = "other_session"),
+                1_500L,
+            ),
         )
     }
 
@@ -115,12 +146,15 @@ class CrewRejoinLeaseTest {
         val lease = issueFixture(registry)
 
         val clientInvite = CrewRejoinInviteFactory.fromLease(lease)
-        val candidate = registry.activeInviteCandidates(
-            lease.sessionId,
-            lease.sessionLocator,
-            lease.rendezvousInviteId,
-            1_500L,
-        ).single()
+        val candidate =
+            registry
+                .activeInviteCandidates(
+                    lease.sessionId,
+                    lease.sessionLocator,
+                    lease.rendezvousInviteId,
+                    1_500L,
+                )
+                .single()
 
         assertEquals(lease.memberId, candidate.memberId)
         assertEquals(clientInvite, candidate.invite)
@@ -138,12 +172,14 @@ class CrewRejoinLeaseTest {
         assertTrue(registry.verify(replacement, 1_500L))
         assertEquals(
             1,
-            registry.activeInviteCandidates(
-                replacement.sessionId,
-                replacement.sessionLocator,
-                replacement.rendezvousInviteId,
-                1_500L,
-            ).size,
+            registry
+                .activeInviteCandidates(
+                    replacement.sessionId,
+                    replacement.sessionLocator,
+                    replacement.rendezvousInviteId,
+                    1_500L,
+                )
+                .size,
         )
     }
 
@@ -187,13 +223,34 @@ class CrewRejoinLeaseTest {
         )
 
     private fun CrewRejoinLease.copySecret(secret: String) =
-        CrewRejoinLease(sessionId, memberId, sessionLocator, relayLocator, rendezvousInviteId, credentialId, secret, issuedAtEpochMs, expiresAtEpochMs)
+        CrewRejoinLease(
+            sessionId,
+            memberId,
+            sessionLocator,
+            relayLocator,
+            rendezvousInviteId,
+            credentialId,
+            secret,
+            issuedAtEpochMs,
+            expiresAtEpochMs,
+        )
 
     private fun CrewRejoinLease.copyMember(member: String) =
-        CrewRejoinLease(sessionId, CrewMemberId(member, protocolVersion), sessionLocator, relayLocator, rendezvousInviteId, credentialId, credentialSecret, issuedAtEpochMs, expiresAtEpochMs)
+        CrewRejoinLease(
+            sessionId,
+            CrewMemberId(member, protocolVersion),
+            sessionLocator,
+            relayLocator,
+            rendezvousInviteId,
+            credentialId,
+            credentialSecret,
+            issuedAtEpochMs,
+            expiresAtEpochMs,
+        )
 
     private class DeterministicRandom : CrewCredentialRandom {
         private var next = 0
+
         override fun nextBytes(size: Int) = ByteArray(size) { (next++ and 0x7f).toByte() }
     }
 }

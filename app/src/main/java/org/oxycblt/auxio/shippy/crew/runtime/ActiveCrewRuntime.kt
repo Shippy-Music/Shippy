@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ActiveCrewRuntime.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ActiveCrewRuntime.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import javax.inject.Inject
@@ -18,8 +25,8 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,10 +37,10 @@ import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewState
-import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
-import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
-import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.media.CrewPrivateSourceRegistry
+import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
+import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 
 enum class ActiveCrewMode {
     HOST,
@@ -60,9 +67,13 @@ sealed interface ActiveCrewSubmitResult {
 
 sealed interface ActiveCrewReactionSendResult {
     data class Accepted(val reaction: ActiveCrewReaction) : ActiveCrewReactionSendResult
+
     data object Rejected : ActiveCrewReactionSendResult
+
     data object NotActive : ActiveCrewReactionSendResult
+
     data object SessionChanged : ActiveCrewReactionSendResult
+
     data object Failed : ActiveCrewReactionSendResult
 }
 
@@ -81,7 +92,8 @@ sealed interface ActiveCrewRuntimeFailure {
 }
 
 /** The safe, UI-facing view of the one Crew currently owned by this process. */
-class ActiveCrewPresentation internal constructor(
+class ActiveCrewPresentation
+internal constructor(
     val role: ActiveCrewMode,
     val sessionId: CrewSessionId,
     val localMemberId: CrewMemberId,
@@ -108,8 +120,8 @@ sealed interface ActiveCrewRuntimeState {
 }
 
 /**
- * Application-wide owner for the one live LAN Crew. It owns launch, state observation, and
- * explicit teardown so a fragment or ViewModel cannot orphan a session.
+ * Application-wide owner for the one live LAN Crew. It owns launch, state observation, and explicit
+ * teardown so a fragment or ViewModel cannot orphan a session.
  */
 @Singleton
 class ActiveCrewRuntime
@@ -141,44 +153,50 @@ constructor(
         begin(ActiveCrewMode.HOST) { generation -> launchHost(generation) }
 
     fun join(inviteLink: String): ActiveCrewRequestResult {
-        val generation = synchronized(lock) {
-            if (!mutableState.value.isStartable()) return ActiveCrewRequestResult.Busy
-            generation += 1
-            if (inviteLink.isBlank()) {
-                mutableState.value = ActiveCrewRuntimeState.Failed(ActiveCrewRuntimeFailure.BlankInviteLink)
-                return ActiveCrewRequestResult.Accepted
+        val requestGeneration =
+            synchronized(lock) {
+                if (!mutableState.value.isStartable()) return ActiveCrewRequestResult.Busy
+                generation += 1
+                if (inviteLink.isBlank()) {
+                    mutableState.value =
+                        ActiveCrewRuntimeState.Failed(ActiveCrewRuntimeFailure.BlankInviteLink)
+                    return ActiveCrewRequestResult.Accepted
+                }
+                mutableState.value = ActiveCrewRuntimeState.Starting(ActiveCrewMode.JOIN)
+                generation
             }
-            mutableState.value = ActiveCrewRuntimeState.Starting(ActiveCrewMode.JOIN)
-            generation
-        }
-        launch(generation) { launchJoin(generation, inviteLink) }
+        launch(requestGeneration) { launchJoin(requestGeneration, inviteLink) }
         return ActiveCrewRequestResult.Accepted
     }
 
     fun end(): ActiveCrewRequestResult {
-        val ending = synchronized(lock) {
-            val active = mutableState.value as? ActiveCrewRuntimeState.Active
-                ?: return when (mutableState.value) {
-                    ActiveCrewRuntimeState.Idle,
-                    is ActiveCrewRuntimeState.Failed -> ActiveCrewRequestResult.NothingToEnd
-                    else -> ActiveCrewRequestResult.Busy
-                }
-            val session = ownedSession ?: return ActiveCrewRequestResult.Busy
-            generation += 1
-            val endGeneration = generation
-            mutableState.value = ActiveCrewRuntimeState.Ending(active.presentation)
-            EndRequest(endGeneration, session)
-        }
+        val ending =
+            synchronized(lock) {
+                val active =
+                    mutableState.value as? ActiveCrewRuntimeState.Active
+                        ?: return when (mutableState.value) {
+                            ActiveCrewRuntimeState.Idle,
+                            is ActiveCrewRuntimeState.Failed -> ActiveCrewRequestResult.NothingToEnd
+                            else -> ActiveCrewRequestResult.Busy
+                        }
+                val session = ownedSession ?: return ActiveCrewRequestResult.Busy
+                generation += 1
+                val endGeneration = generation
+                mutableState.value = ActiveCrewRuntimeState.Ending(active.presentation)
+                EndRequest(endGeneration, session)
+            }
         launch(ending.generation) { endOwnedSession(ending) }
         return ActiveCrewRequestResult.Accepted
     }
 
     suspend fun submit(action: CrewAction): ActiveCrewSubmitResult {
-        val submission = synchronized(lock) {
-            if (mutableState.value !is ActiveCrewRuntimeState.Active) return ActiveCrewSubmitResult.NotActive
-            val session = ownedSession ?: return ActiveCrewSubmitResult.NotActive
-            SubmitRequest(generation, session)
-        }
+        val submission =
+            synchronized(lock) {
+                if (mutableState.value !is ActiveCrewRuntimeState.Active)
+                    return ActiveCrewSubmitResult.NotActive
+                val session = ownedSession ?: return ActiveCrewSubmitResult.NotActive
+                SubmitRequest(generation, session)
+            }
         val result =
             try {
                 submission.session.submit(
@@ -192,7 +210,9 @@ constructor(
                 throw error
             } catch (_: Exception) {
                 return synchronized(lock) {
-                    if (generation != submission.generation || ownedSession !== submission.session) {
+                    if (
+                        generation != submission.generation || ownedSession !== submission.session
+                    ) {
                         ActiveCrewSubmitResult.SessionChanged
                     } else {
                         ActiveCrewSubmitResult.Failed
@@ -209,11 +229,13 @@ constructor(
     }
 
     suspend fun sendReaction(emoji: String): ActiveCrewReactionSendResult {
-        val request = synchronized(lock) {
-            if (mutableState.value !is ActiveCrewRuntimeState.Active) return ActiveCrewReactionSendResult.NotActive
-            val session = ownedSession ?: return ActiveCrewReactionSendResult.NotActive
-            SubmitRequest(generation, session)
-        }
+        val request =
+            synchronized(lock) {
+                if (mutableState.value !is ActiveCrewRuntimeState.Active)
+                    return ActiveCrewReactionSendResult.NotActive
+                val session = ownedSession ?: return ActiveCrewReactionSendResult.NotActive
+                SubmitRequest(generation, session)
+            }
         val result =
             try {
                 request.session.sendReaction(emoji)
@@ -229,10 +251,12 @@ constructor(
         return synchronized(lock) {
             if (generation != request.generation || ownedSession !== request.session) {
                 ActiveCrewReactionSendResult.SessionChanged
-            } else when (result) {
-                is CrewReactionSendResult.Accepted -> ActiveCrewReactionSendResult.Accepted(result.reaction)
-                CrewReactionSendResult.Rejected -> ActiveCrewReactionSendResult.Rejected
-            }
+            } else
+                when (result) {
+                    is CrewReactionSendResult.Accepted ->
+                        ActiveCrewReactionSendResult.Accepted(result.reaction)
+                    CrewReactionSendResult.Rejected -> ActiveCrewReactionSendResult.Rejected
+                }
         }
     }
 
@@ -244,17 +268,15 @@ constructor(
         }
     }
 
-    private fun begin(
-        mode: ActiveCrewMode,
-        work: suspend (Long) -> Unit,
-    ): ActiveCrewRequestResult {
-        val generation = synchronized(lock) {
-            if (!mutableState.value.isStartable()) return ActiveCrewRequestResult.Busy
-            generation += 1
-            mutableState.value = ActiveCrewRuntimeState.Starting(mode)
-            generation
-        }
-        launch(generation) { work(generation) }
+    private fun begin(mode: ActiveCrewMode, work: suspend (Long) -> Unit): ActiveCrewRequestResult {
+        val requestGeneration =
+            synchronized(lock) {
+                if (!mutableState.value.isStartable()) return ActiveCrewRequestResult.Busy
+                generation += 1
+                mutableState.value = ActiveCrewRuntimeState.Starting(mode)
+                generation
+            }
+        launch(requestGeneration) { work(requestGeneration) }
         return ActiveCrewRequestResult.Accepted
     }
 
@@ -291,14 +313,18 @@ constructor(
     }
 
     private suspend fun activate(generation: Long, session: OwnedSession) {
-        val claimed = synchronized(lock) {
-            if (this.generation != generation || mutableState.value !is ActiveCrewRuntimeState.Starting) {
-                false
-            } else {
-                ownedSession = session
-                true
+        val claimed =
+            synchronized(lock) {
+                if (
+                    this.generation != generation ||
+                        mutableState.value !is ActiveCrewRuntimeState.Starting
+                ) {
+                    false
+                } else {
+                    ownedSession = session
+                    true
+                }
             }
-        }
         if (!claimed) {
             session.endExplicitly()
             return
@@ -314,7 +340,10 @@ constructor(
             scope.launch(start = CoroutineStart.LAZY) {
                 session.reactions.collect { reaction ->
                     synchronized(lock) {
-                        if (this.generation == generation && ownedSession === session) {
+                        if (
+                            this@ActiveCrewRuntime.generation == generation &&
+                                ownedSession === session
+                        ) {
                             mutableReactions.tryEmit(reaction)
                         }
                     }
@@ -330,38 +359,42 @@ constructor(
             scope.launch(start = CoroutineStart.LAZY) {
                 session.peerMediaBlocked.collect { blocked ->
                     synchronized(lock) {
-                        if (this.generation == generation && ownedSession === session) {
+                        if (
+                            this@ActiveCrewRuntime.generation == generation &&
+                                ownedSession === session
+                        ) {
                             mutablePeerMediaBlocked.value = blocked
                         }
                     }
                 }
             }
-        val activated = synchronized(lock) {
-            if (
-                this.generation != generation ||
-                    mutableState.value !is ActiveCrewRuntimeState.Starting ||
-                    ownedSession !== session
-            ) {
-                false
-            } else {
-                presentationJob?.cancel()
-                reconnectStateJob?.cancel()
-                reactionJob?.cancel()
-                peerMediaBlockedJob?.cancel()
-                presentationJob = nextPresentationJob
-                reconnectStateJob = nextReconnectStateJob
-                reactionJob = nextReactionJob
-                peerMediaBlockedJob = nextPeerMediaBlockedJob
-                mutablePeerMediaBlocked.value = false
-                nextPresentationJob.start()
-                nextReconnectStateJob.start()
-                nextReactionJob.start()
-                nextPeerMediaBlockedJob.start()
-                mutableState.value =
-                    ActiveCrewRuntimeState.Active(session.presentation(session.state.value))
-                true
+        val activated =
+            synchronized(lock) {
+                if (
+                    this.generation != generation ||
+                        mutableState.value !is ActiveCrewRuntimeState.Starting ||
+                        ownedSession !== session
+                ) {
+                    false
+                } else {
+                    presentationJob?.cancel()
+                    reconnectStateJob?.cancel()
+                    reactionJob?.cancel()
+                    peerMediaBlockedJob?.cancel()
+                    presentationJob = nextPresentationJob
+                    reconnectStateJob = nextReconnectStateJob
+                    reactionJob = nextReactionJob
+                    peerMediaBlockedJob = nextPeerMediaBlockedJob
+                    mutablePeerMediaBlocked.value = false
+                    nextPresentationJob.start()
+                    nextReconnectStateJob.start()
+                    nextReactionJob.start()
+                    nextPeerMediaBlockedJob.start()
+                    mutableState.value =
+                        ActiveCrewRuntimeState.Active(session.presentation(session.state.value))
+                    true
+                }
             }
-        }
         if (!activated) {
             nextPresentationJob.cancel()
             nextReconnectStateJob.cancel()
@@ -372,7 +405,7 @@ constructor(
     }
 
     private fun refreshPresentation(generation: Long, session: OwnedSession, crewState: CrewState) {
-        val terminalRequest =
+        val terminalRequest: EndRequest? =
             synchronized(lock) {
                 if (this.generation == generation && ownedSession === session) {
                     val active =
@@ -391,14 +424,15 @@ constructor(
                     null
                 }
             }
-        terminalRequest?.let { request ->
-            launch(request.generation) { endOwnedSession(request) }
-        }
+        terminalRequest?.let { request -> launch(request.generation) { endOwnedSession(request) } }
     }
 
     private fun publishFailure(generation: Long, failure: ActiveCrewRuntimeFailure) {
         synchronized(lock) {
-            if (this.generation == generation && mutableState.value is ActiveCrewRuntimeState.Starting) {
+            if (
+                this.generation == generation &&
+                    mutableState.value is ActiveCrewRuntimeState.Starting
+            ) {
                 mutableState.value = ActiveCrewRuntimeState.Failed(failure)
             }
         }
@@ -448,6 +482,7 @@ constructor(
         suspend fun endExplicitly()
 
         suspend fun submit(action: CrewAction): CrewSubmitResult
+
         suspend fun sendReaction(emoji: String): CrewReactionSendResult
 
         fun presentation(crewState: CrewState) =
@@ -465,7 +500,7 @@ constructor(
             override val role = ActiveCrewMode.HOST
             override val sessionId = session.sessionId
             override val localMemberId = session.localMemberId
-            override val state = session.state
+            override val state: StateFlow<CrewState> = session.state
             override val inviteLink = session.inviteLink
             override val connectivity = session.connectivity
             override val reconnectState =
@@ -477,6 +512,7 @@ constructor(
             override suspend fun endExplicitly() = session.end()
 
             override suspend fun submit(action: CrewAction) = session.submit(action)
+
             override suspend fun sendReaction(emoji: String) = session.sendReaction(emoji)
         }
 
@@ -484,7 +520,7 @@ constructor(
             override val role = ActiveCrewMode.JOIN
             override val sessionId = session.sessionId
             override val localMemberId = session.localMemberId
-            override val state = session.state
+            override val state: StateFlow<CrewState> = session.state
             override val inviteLink: String? = null
             override val connectivity = session.connectivity
             override val reconnectState = session.reconnectState
@@ -495,6 +531,7 @@ constructor(
             override suspend fun endExplicitly() = session.leave()
 
             override suspend fun submit(action: CrewAction) = session.submit(action)
+
             override suspend fun sendReaction(emoji: String) = session.sendReaction(emoji)
         }
     }

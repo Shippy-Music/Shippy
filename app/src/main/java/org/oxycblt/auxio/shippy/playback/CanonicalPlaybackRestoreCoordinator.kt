@@ -1,4 +1,20 @@
-/* Copyright (c) 2026 Shippy contributors */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * CanonicalPlaybackRestoreCoordinator.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.playback
 
 import javax.inject.Inject
@@ -6,13 +22,18 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
 import org.oxycblt.auxio.shippy.domain.PlaybackResolutionCoordinator
 import org.oxycblt.auxio.shippy.domain.ResolutionPolicy
+import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointRepository
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderSettings
-import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointRepository
 
-/** Restores durable queue intent only; stream URLs and temporary/download candidates are re-resolved. */
-class CanonicalPlaybackRestoreCoordinator @Inject constructor(
+/**
+ * Restores durable queue intent only; stream URLs and temporary/download candidates are
+ * re-resolved.
+ */
+class CanonicalPlaybackRestoreCoordinator
+@Inject
+constructor(
     private val checkpoints: PlaybackCheckpointRepository,
     private val resolution: PlaybackResolutionCoordinator,
     private val registry: ProviderRegistry,
@@ -20,13 +41,22 @@ class CanonicalPlaybackRestoreCoordinator @Inject constructor(
 ) {
     suspend fun restore(): PlaybackStateManager.CanonicalCheckpoint? {
         val stored = checkpoints.read() ?: return null
-        val policy = ResolutionPolicy(settings.selection(registry.supporting(ProviderCapability.STREAM).map { it.descriptor.id }).priority, pushPullEnabled = false)
-        val prepared = stored.heap.map { item ->
-            when (val result = resolution.prepare(item, policy)) {
-                is PlaybackPreparation.Ready -> item.id to result.value
-                is PlaybackPreparation.Failed -> item.id to null
+        val policy =
+            ResolutionPolicy(
+                settings
+                    .selection(
+                        registry.supporting(ProviderCapability.STREAM).map { it.descriptor.id }
+                    )
+                    .priority,
+                pushPullEnabled = false,
+            )
+        val prepared =
+            stored.heap.map { item ->
+                when (val result = resolution.prepare(item, policy)) {
+                    is PlaybackPreparation.Ready -> item.id to result.value
+                    is PlaybackPreparation.Failed -> item.id to null
+                }
             }
-        }
         val surviving = prepared.mapNotNull { it.second }
         if (surviving.isEmpty()) return null
         val shape =
@@ -34,9 +64,7 @@ class CanonicalPlaybackRestoreCoordinator @Inject constructor(
                 prepared.size,
                 stored.heapIndex,
                 stored.mapping,
-                prepared.mapIndexedNotNull { oldIndex, value ->
-                    value.second?.let { oldIndex }
-                },
+                prepared.mapIndexedNotNull { oldIndex, value -> value.second?.let { oldIndex } },
             ) ?: return null
         return PlaybackStateManager.CanonicalCheckpoint(
             surviving,
@@ -71,7 +99,10 @@ internal fun remapSurvivingQueue(
     if (oldToNew.isEmpty()) return null
 
     val playbackOrder = mapping.ifEmpty { (0 until originalSize).toList() }
-    if (playbackOrder.size != originalSize || playbackOrder.sorted() != playbackOrder.indices.toList()) {
+    if (
+        playbackOrder.size != originalSize ||
+            playbackOrder.sorted() != playbackOrder.indices.toList()
+    ) {
         return null
     }
     val selectedOrderIndex = playbackOrder.indexOf(selectedHeapIndex)

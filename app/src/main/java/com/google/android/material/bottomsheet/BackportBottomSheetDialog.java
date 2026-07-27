@@ -20,6 +20,7 @@ import com.google.android.material.R;
 
 import static com.google.android.material.color.MaterialColors.isColorLight;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
@@ -68,6 +69,8 @@ import com.google.android.material.shape.MaterialShapeDrawable;
  *
  * MODIFICATION: Replace all usages of BottomSheetBehavior with BackportBottomSheetBehavior
  */
+// This pinned Material backport intentionally uses Material's restricted compatibility APIs.
+@SuppressLint("RestrictedApi")
 public class BackportBottomSheetDialog extends AppCompatDialog {
 
   private BackportBottomSheetBehavior<FrameLayout> behavior;

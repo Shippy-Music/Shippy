@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewPrivateSourceRegistry.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewPrivateSourceRegistry.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.media
 
 import java.net.URI
@@ -26,34 +38,33 @@ class CrewPrivateSourceRegistry @Inject constructor() {
     private var activeSessionId: CrewSessionId? = null
     private val sources = LinkedHashMap<Key, Source>()
 
-    fun beginSession(sessionId: CrewSessionId) = synchronized(lock) {
-        if (activeSessionId != sessionId) {
-            activeSessionId = sessionId
-            sources.clear()
+    fun beginSession(sessionId: CrewSessionId) =
+        synchronized(lock) {
+            if (activeSessionId != sessionId) {
+                activeSessionId = sessionId
+                sources.clear()
+            }
         }
-    }
 
-    fun endSession(sessionId: CrewSessionId) = synchronized(lock) {
-        if (activeSessionId == sessionId) {
-            activeSessionId = null
-            sources.clear()
+    fun endSession(sessionId: CrewSessionId) =
+        synchronized(lock) {
+            if (activeSessionId == sessionId) {
+                activeSessionId = null
+                sources.clear()
+            }
         }
-    }
 
     fun captureAndPublicize(
         sessionId: CrewSessionId,
         memberId: CrewMemberId,
         action: CrewAction,
-    ): CrewAction = synchronized(lock) {
-        if (activeSessionId == sessionId) capture(memberId, action)
-        publicizeCrewAction(action, memberId)
-    }
+    ): CrewAction =
+        synchronized(lock) {
+            if (activeSessionId == sessionId) capture(memberId, action)
+            publicizeCrewAction(action, memberId)
+        }
 
-    fun overlay(
-        sessionId: CrewSessionId,
-        memberId: CrewMemberId,
-        item: QueueItem,
-    ): QueueItem =
+    fun overlay(sessionId: CrewSessionId, memberId: CrewMemberId, item: QueueItem): QueueItem =
         synchronized(lock) {
             if (activeSessionId != sessionId || item.contributorId != memberId.value) {
                 return item
@@ -78,11 +89,13 @@ class CrewPrivateSourceRegistry @Inject constructor() {
             )
         }
 
-    fun prune(sessionId: CrewSessionId, queue: List<QueueItem>) = synchronized(lock) {
-        if (activeSessionId != sessionId) return@synchronized
-        val retained = queue.flatMap { item -> item.track.candidates.map { Key(item.id, it.id) } }.toSet()
-        sources.keys.retainAll(retained)
-    }
+    fun prune(sessionId: CrewSessionId, queue: List<QueueItem>) =
+        synchronized(lock) {
+            if (activeSessionId != sessionId) return@synchronized
+            val retained =
+                queue.flatMap { item -> item.track.candidates.map { Key(item.id, it.id) } }.toSet()
+            sources.keys.retainAll(retained)
+        }
 
     private fun capture(memberId: CrewMemberId, action: CrewAction) {
         val items =
@@ -104,10 +117,7 @@ class CrewPrivateSourceRegistry @Inject constructor() {
             }
         val publicItems = publicizeCrewQueue(items, memberId)
         items.zip(publicItems).forEach { (raw, publicItem) ->
-            if (
-                publicItem.contributorId != memberId.value ||
-                    raw.track.realm != TrackRealm.LOCAL
-            ) {
+            if (publicItem.contributorId != memberId.value || raw.track.realm != TrackRealm.LOCAL) {
                 return@forEach
             }
             raw.track.candidates
@@ -129,23 +139,40 @@ class CrewPrivateSourceRegistry @Inject constructor() {
     }
 
     private data class Key(val itemId: QueueItemId, val candidateId: CandidateId)
-    private data class Source(val trackId: TrackId, val sourceId: String, val sourceItemId: String, val locator: String)
+
+    private data class Source(
+        val trackId: TrackId,
+        val sourceId: String,
+        val sourceItemId: String,
+        val locator: String,
+    )
 
     private companion object {
         const val MAX_PRIVATE_SOURCES = 10_000
     }
 }
 
-internal fun publicizeCrewAction(action: CrewAction, localMemberId: CrewMemberId? = null): CrewAction = when (action) {
-    is CrewAction.QueueReplaced -> action.copy(items = publicizeCrewQueue(action.items, localMemberId))
-    is CrewAction.QueueItemInserted -> action.copy(item = publicizeCrewQueueItem(action.item, localMemberId))
-    else -> action
-}
+internal fun publicizeCrewAction(
+    action: CrewAction,
+    localMemberId: CrewMemberId? = null,
+): CrewAction =
+    when (action) {
+        is CrewAction.QueueReplaced ->
+            action.copy(items = publicizeCrewQueue(action.items, localMemberId))
+        is CrewAction.QueueItemInserted ->
+            action.copy(item = publicizeCrewQueueItem(action.item, localMemberId))
+        else -> action
+    }
 
-internal fun publicizeCrewQueue(items: List<QueueItem>, localMemberId: CrewMemberId? = null): List<QueueItem> =
-    items.map { publicizeCrewQueueItem(it, localMemberId) }
+internal fun publicizeCrewQueue(
+    items: List<QueueItem>,
+    localMemberId: CrewMemberId? = null,
+): List<QueueItem> = items.map { publicizeCrewQueueItem(it, localMemberId) }
 
-internal fun publicizeCrewQueueItem(item: QueueItem, localMemberId: CrewMemberId? = null): QueueItem {
+internal fun publicizeCrewQueueItem(
+    item: QueueItem,
+    localMemberId: CrewMemberId? = null,
+): QueueItem {
     val contributor =
         if (
             item.contributorId == null &&
@@ -163,9 +190,12 @@ internal fun publicizeCrewQueueItem(item: QueueItem, localMemberId: CrewMemberId
 internal fun publicizeCrewTrack(track: Track): Track =
     track.copy(
         artwork = track.artwork?.takeIf(::isPublicArtworkUri),
-        candidates = track.candidates
-            .filterNot { it.kind == CandidateKind.DOWNLOAD || it.kind == CandidateKind.CREW_TEMPORARY }
-            .map { it.copy(locator = null) },
+        candidates =
+            track.candidates
+                .filterNot {
+                    it.kind == CandidateKind.DOWNLOAD || it.kind == CandidateKind.CREW_TEMPORARY
+                }
+                .map { it.copy(locator = null) },
     )
 
 private fun isContentUri(value: String?): Boolean =
@@ -180,12 +210,14 @@ private fun isContentUri(value: String?): Boolean =
             .getOrDefault(false)
     } == true
 
-private fun isPublicArtworkUri(value: String): Boolean = runCatching {
-    URI(value).let {
-        it.scheme.equals("https", true) &&
-            !it.host.isNullOrBlank() &&
-            it.userInfo == null &&
-            it.rawQuery.isNullOrBlank() &&
-            it.rawFragment.isNullOrBlank()
-    }
-}.getOrDefault(false)
+private fun isPublicArtworkUri(value: String): Boolean =
+    runCatching {
+            URI(value).let {
+                it.scheme.equals("https", true) &&
+                    !it.host.isNullOrBlank() &&
+                    it.userInfo == null &&
+                    it.rawQuery.isNullOrBlank() &&
+                    it.rawFragment.isNullOrBlank()
+            }
+        }
+        .getOrDefault(false)

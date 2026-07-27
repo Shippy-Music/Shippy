@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.state
 
 import javax.inject.Inject
@@ -766,11 +765,7 @@ constructor(
                         rawQueue = rawQueue,
                     )
                 listeners.forEach {
-                    it.onQueueReordered(
-                        queue,
-                        stateMirror.index,
-                        stateMirror.isShuffled,
-                    )
+                    it.onQueueReordered(queue, stateMirror.index, stateMirror.isShuffled)
                     it.onCanonicalQueueReordered(
                         stateMirror.queue,
                         stateMirror.index,
@@ -822,11 +817,7 @@ constructor(
     @Synchronized
     override fun toSavedState(): PlaybackStateManager.SavedState? {
         val currentSong = currentSong ?: return null
-        val localHeap =
-            stateMirror.rawQueue.heap.map { item ->
-                item.localSong()
-                    ?: return null
-            }
+        val localHeap = stateMirror.rawQueue.heap.map { item -> item.localSong() ?: return null }
         return PlaybackStateManager.SavedState(
             positionMs = stateMirror.progression.calculateElapsedPositionMs(),
             repeatMode = stateMirror.repeatMode,
@@ -843,8 +834,11 @@ constructor(
         val raw = stateMirror.rawQueue
         if (raw.heap.isEmpty() || raw.heapIndex !in raw.heap.indices) return null
         return PlaybackStateManager.CanonicalCheckpoint(
-            raw.heap, raw.shuffledMapping, raw.heapIndex,
-            stateMirror.progression.calculateElapsedPositionMs(), stateMirror.repeatMode
+            raw.heap,
+            raw.shuffledMapping,
+            raw.heapIndex,
+            stateMirror.progression.calculateElapsedPositionMs(),
+            stateMirror.repeatMode,
         )
     }
 
@@ -986,8 +980,7 @@ constructor(
 
     private fun ResolvedQueueItem.localSong(): Song? {
         val candidate =
-            item.track.candidates.firstOrNull { it.id == playback.candidateId }
-                ?: return null
+            item.track.candidates.firstOrNull { it.id == playback.candidateId } ?: return null
         return when (val result = localCandidateResolver.resolve(candidate)) {
             is LocalCandidateResolution.Ready -> result.song
             LocalCandidateResolution.InvalidIdentity,

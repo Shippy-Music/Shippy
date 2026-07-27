@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewRelayCrypto.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewRelayCrypto.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.relay
 
 import java.io.ByteArrayOutputStream
@@ -42,9 +49,11 @@ internal class CrewRelayRouteCrypto(
     private val identityHash = sha256(identity)
     private val salt = sha256(identity + route.bytes)
     private val sendDirection =
-        if (localRole == CrewRelayRole.HOST) CrewRelayDirection.HOST_TO_JOIN else CrewRelayDirection.JOIN_TO_HOST
+        if (localRole == CrewRelayRole.HOST) CrewRelayDirection.HOST_TO_JOIN
+        else CrewRelayDirection.JOIN_TO_HOST
     private val receiveDirection =
-        if (localRole == CrewRelayRole.HOST) CrewRelayDirection.JOIN_TO_HOST else CrewRelayDirection.HOST_TO_JOIN
+        if (localRole == CrewRelayRole.HOST) CrewRelayDirection.JOIN_TO_HOST
+        else CrewRelayDirection.HOST_TO_JOIN
     private val secret = invite.secret.value.toByteArray(Charsets.UTF_8)
     private val sendKey = key(sendDirection, "key", 32)
     private val receiveKey = key(receiveDirection, "key", 32)
@@ -58,7 +67,12 @@ internal class CrewRelayRouteCrypto(
         check(sendSequence != Long.MAX_VALUE) { "Relay send sequence exhausted" }
         val sequence = sendSequence++
         val encrypted =
-            cipher(Cipher.ENCRYPT_MODE, sendKey, nonce(sendPrefix, sequence), aad(sendDirection, sequence))
+            cipher(
+                    Cipher.ENCRYPT_MODE,
+                    sendKey,
+                    nonce(sendPrefix, sequence),
+                    aad(sendDirection, sequence),
+                )
                 .doFinal(plain)
         return ByteArrayOutputStream(Long.SIZE_BYTES + encrypted.size).use { bytes ->
             DataOutputStream(bytes).use { output ->
@@ -72,19 +86,34 @@ internal class CrewRelayRouteCrypto(
     fun decrypt(frame: ByteArray): ByteArray {
         require(frame.size in (Long.SIZE_BYTES + GCM_TAG_BYTES)..CREW_RELAY_MAX_DATA_BYTES)
         val sequence = ByteBuffer.wrap(frame, 0, Long.SIZE_BYTES).long
-        require(sequence == receiveSequence && receiveSequence != Long.MAX_VALUE) { "Relay replay or out-of-order frame" }
+        require(sequence == receiveSequence && receiveSequence != Long.MAX_VALUE) {
+            "Relay replay or out-of-order frame"
+        }
         val plain =
-            cipher(Cipher.DECRYPT_MODE, receiveKey, nonce(receivePrefix, sequence), aad(receiveDirection, sequence))
+            cipher(
+                    Cipher.DECRYPT_MODE,
+                    receiveKey,
+                    nonce(receivePrefix, sequence),
+                    aad(receiveDirection, sequence),
+                )
                 .doFinal(frame.copyOfRange(Long.SIZE_BYTES, frame.size))
         receiveSequence++
         return plain
     }
 
     private fun key(direction: CrewRelayDirection, purpose: String, length: Int) =
-        hkdf(secret, salt, "shippy-relay-v1/${direction.label}/$purpose".toByteArray(Charsets.US_ASCII), length)
+        hkdf(
+            secret,
+            salt,
+            "shippy-relay-v1/${direction.label}/$purpose".toByteArray(Charsets.US_ASCII),
+            length,
+        )
 
     private fun aad(direction: CrewRelayDirection, sequence: Long) =
-        identityHash + route.bytes + direction.label.toByteArray(Charsets.US_ASCII) + ByteBuffer.allocate(8).putLong(sequence).array()
+        identityHash +
+            route.bytes +
+            direction.label.toByteArray(Charsets.US_ASCII) +
+            ByteBuffer.allocate(8).putLong(sequence).array()
 }
 
 internal data class CrewRelayHello(val memberId: String, val displayName: String)
@@ -174,7 +203,8 @@ private fun hkdf(ikm: ByteArray, salt: ByteArray, info: ByteArray, length: Int):
 
 private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes)
 
-private fun nonce(prefix: ByteArray, sequence: Long) = prefix + ByteBuffer.allocate(8).putLong(sequence).array()
+private fun nonce(prefix: ByteArray, sequence: Long) =
+    prefix + ByteBuffer.allocate(8).putLong(sequence).array()
 
 private fun cipher(mode: Int, key: ByteArray, nonce: ByteArray, aad: ByteArray) =
     Cipher.getInstance("AES/GCM/NoPadding").apply {

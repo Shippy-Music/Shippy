@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewJoinReconnectController.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewJoinReconnectController.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import java.io.Closeable
@@ -23,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
@@ -41,9 +49,8 @@ interface CrewJoinedSessionReconnectPort {
     suspend fun requestSnapshot(): Boolean
 }
 
-class CrewSessionEngineReconnectPort(
-    private val engine: CrewSessionEngine,
-) : CrewJoinedSessionReconnectPort {
+class CrewSessionEngineReconnectPort(private val engine: CrewSessionEngine) :
+    CrewJoinedSessionReconnectPort {
     override val state: StateFlow<CrewState> = engine.state
     override val peerStates: StateFlow<Map<CrewMemberId, CrewTransportState>> = engine.peerStates
 
@@ -54,10 +61,8 @@ class CrewSessionEngineReconnectPort(
 
 /** A dial result transfers its owned [connection] to the controller with [transport]. */
 sealed interface CrewReconnectDialResult {
-    data class Authenticated(
-        val connection: Closeable,
-        val transport: CrewPeerTransport,
-    ) : CrewReconnectDialResult
+    data class Authenticated(val connection: Closeable, val transport: CrewPeerTransport) :
+        CrewReconnectDialResult
 
     data object Retryable : CrewReconnectDialResult
 
@@ -96,11 +101,11 @@ class CrewJoinReconnectController(
 ) : Closeable {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val wakeups = Channel<Unit>(Channel.CONFLATED)
-    private val mutableState = MutableStateFlow<CrewJoinReconnectState>(CrewJoinReconnectState.Connected)
+    private val mutableState =
+        MutableStateFlow<CrewJoinReconnectState>(CrewJoinReconnectState.Connected)
     private val ownershipLock = Any()
 
-    @Volatile
-    private var closed = false
+    @Volatile private var closed = false
     private var started = false
     private var ownedConnection: Closeable? = null
     private var loop: Job? = null
@@ -124,10 +129,9 @@ class CrewJoinReconnectController(
         ) {
             return
         }
-        scope.launch { session.state.collect { wakeups.trySend(Unit) } }
-        scope.launch { session.peerStates.collect { wakeups.trySend(Unit) } }
+        scope.launch { session.state.drop(1).collect { wakeups.trySend(Unit) } }
+        scope.launch { session.peerStates.drop(1).collect { wakeups.trySend(Unit) } }
         loop = scope.launch { runLoop() }
-        wakeups.trySend(Unit)
     }
 
     /** Call after a network change to bypass the current retry wait. */
@@ -199,9 +203,7 @@ class CrewJoinReconnectController(
                                 if (closed) {
                                     null
                                 } else {
-                                    ownedConnection.also {
-                                        ownedConnection = result.connection
-                                    }
+                                    ownedConnection.also { ownedConnection = result.connection }
                                 }
                             }
                         if (closed) {
@@ -225,9 +227,7 @@ class CrewJoinReconnectController(
 
     private fun reconnectCoordinatorOrNull(): CrewMemberId? {
         val coordinator = session.state.value.coordinatorMemberId
-        return coordinator.takeUnless {
-            it == localMemberId || it in session.peerStates.value
-        }
+        return coordinator.takeUnless { it == localMemberId || it in session.peerStates.value }
     }
 
     private fun isStillExpected(expected: CrewMemberId, transport: CrewPeerTransport): Boolean =
@@ -235,7 +235,9 @@ class CrewJoinReconnectController(
 
     private fun retryDelay(failures: Int): Long {
         var delay = initialDelayMillis
-        repeat((failures - 1).coerceAtLeast(0)) { delay = (delay * 2).coerceAtMost(maximumDelayMillis) }
+        repeat((failures - 1).coerceAtLeast(0)) {
+            delay = (delay * 2).coerceAtMost(maximumDelayMillis)
+        }
         return delay
     }
 

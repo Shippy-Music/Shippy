@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ShippyPersistenceModule.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ShippyPersistenceModule.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.persistence.library
 
 import android.content.Context
@@ -18,15 +25,15 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
+import org.oxycblt.auxio.shippy.persistence.crew.AndroidKeystoreCrewRejoinLeaseStore
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointDao
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
-import org.oxycblt.auxio.shippy.persistence.crew.RoomCrewCheckpointRepository
-import org.oxycblt.auxio.shippy.persistence.crew.AndroidKeystoreCrewRejoinLeaseStore
 import org.oxycblt.auxio.shippy.persistence.crew.CrewRejoinLeaseStore
+import org.oxycblt.auxio.shippy.persistence.crew.RoomCrewCheckpointRepository
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.RoomDownloadJobRepository
-import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
 import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleDao
 
 @Module
@@ -35,11 +42,7 @@ object ShippyPersistenceModule {
     @Provides
     @Singleton
     internal fun database(@ApplicationContext context: Context): ShippyDatabase =
-        Room.databaseBuilder(
-                context.applicationContext,
-                ShippyDatabase::class.java,
-                "shippy.db",
-            )
+        Room.databaseBuilder(context.applicationContext, ShippyDatabase::class.java, "shippy.db")
             .addMigrations(
                 ShippyDatabase.MIGRATION_1_2,
                 ShippyDatabase.MIGRATION_2_3,
@@ -49,6 +52,7 @@ object ShippyPersistenceModule {
                 ShippyDatabase.MIGRATION_6_7,
                 ShippyDatabase.MIGRATION_7_8,
                 ShippyDatabase.MIGRATION_8_9,
+                ShippyDatabase.MIGRATION_9_10,
             )
             .build()
 
@@ -87,18 +91,24 @@ object ShippyPersistenceModule {
     ): SavedProviderEntityRepository = repository
 
     @Provides
-    internal fun playbackCheckpointDao(database: ShippyDatabase): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointDao = database.playbackCheckpointDao()
+    internal fun playbackCheckpointDao(
+        database: ShippyDatabase
+    ): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointDao =
+        database.playbackCheckpointDao()
 
     @Provides
     @Singleton
-    internal fun playbackCheckpointRepository(repository: org.oxycblt.auxio.shippy.persistence.playback.RoomPlaybackCheckpointRepository): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointRepository = repository
+    internal fun playbackCheckpointRepository(
+        repository: org.oxycblt.auxio.shippy.persistence.playback.RoomPlaybackCheckpointRepository
+    ): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointRepository = repository
 
     @Provides
     internal fun lyricsCacheDao(database: ShippyDatabase): LyricsCacheDao =
         database.lyricsCacheDao()
 
     @Provides
-    internal fun lastFmScrobbleDao(database: ShippyDatabase): LastFmScrobbleDao = database.lastFmScrobbleDao()
+    internal fun lastFmScrobbleDao(database: ShippyDatabase): LastFmScrobbleDao =
+        database.lastFmScrobbleDao()
 
     @Provides
     internal fun crewCheckpointDao(database: ShippyDatabase): CrewCheckpointDao =

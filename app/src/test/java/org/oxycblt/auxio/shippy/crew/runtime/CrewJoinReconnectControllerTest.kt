@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewJoinReconnectControllerTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewJoinReconnectControllerTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import java.io.Closeable
@@ -86,7 +93,9 @@ class CrewJoinReconnectControllerTest {
     fun `wrong member result is closed and retried`() = runBlocking {
         val fixture = fixture()
         val wrongConnection = FakeConnection()
-        fixture.results.send(CrewReconnectDialResult.Authenticated(wrongConnection, FakeTransport(replacement)))
+        fixture.results.send(
+            CrewReconnectDialResult.Authenticated(wrongConnection, FakeTransport(replacement))
+        )
         fixture.results.send(CrewReconnectDialResult.Retryable)
         fixture.controller.start()
         await { wrongConnection.closed && fixture.dialCalls >= 2 }
@@ -99,7 +108,9 @@ class CrewJoinReconnectControllerTest {
         val fixture = fixture()
         val connection = FakeConnection()
         fixture.dialBeforeResult = { fixture.port.setCoordinator(replacement) }
-        fixture.results.send(CrewReconnectDialResult.Authenticated(connection, FakeTransport(coordinator)))
+        fixture.results.send(
+            CrewReconnectDialResult.Authenticated(connection, FakeTransport(coordinator))
+        )
         fixture.results.send(CrewReconnectDialResult.Retryable)
         fixture.controller.start()
         await { connection.closed }
@@ -112,7 +123,9 @@ class CrewJoinReconnectControllerTest {
         val fixture = fixture(initialDelay = 1, maximumDelay = 2)
         fixture.results.send(CrewReconnectDialResult.Retryable)
         fixture.results.send(CrewReconnectDialResult.Retryable)
-        fixture.results.send(CrewReconnectDialResult.Authenticated(FakeConnection(), FakeTransport(coordinator)))
+        fixture.results.send(
+            CrewReconnectDialResult.Authenticated(FakeConnection(), FakeTransport(coordinator))
+        )
         fixture.controller.start()
         await { fixture.port.snapshotRequests == 1 }
         fixture.port.setConnected(false)
@@ -179,21 +192,37 @@ class CrewJoinReconnectControllerTest {
             fixture.dialBeforeResult?.invoke()
             results.receive()
         }
-        val controller = CrewJoinReconnectController(local, port, dialer, initialDelay, maximumDelay, Dispatchers.Default)
+        val controller =
+            CrewJoinReconnectController(
+                local,
+                port,
+                dialer,
+                initialDelay,
+                maximumDelay,
+                Dispatchers.Default,
+            )
         return Fixture(controller, port, results).also { fixture = it }
     }
 
-    private suspend fun await(predicate: () -> Boolean) = withTimeout(1_000) {
-        while (!predicate()) delay(1)
-    }
+    private suspend fun await(predicate: () -> Boolean) =
+        withTimeout(1_000) { while (!predicate()) delay(1) }
 
     private fun member(value: String) = CrewMemberId(value, protocol)
 
-    private fun state(coordinator: CrewMemberId) = CrewState(
-        sessionId = CrewSessionId("session", protocol), protocolVersion = protocol,
-        term = CoordinatorTerm(1), lastSequence = EventSequence(0), coordinatorMemberId = coordinator,
-        members = listOf(CrewMember(local, "Local"), CrewMember(this.coordinator, "Coordinator"), CrewMember(replacement, "Replacement")),
-    )
+    private fun state(coordinator: CrewMemberId) =
+        CrewState(
+            sessionId = CrewSessionId("session", protocol),
+            protocolVersion = protocol,
+            term = CoordinatorTerm(1),
+            lastSequence = EventSequence(0),
+            coordinatorMemberId = coordinator,
+            members =
+                listOf(
+                    CrewMember(local, "Local"),
+                    CrewMember(this.coordinator, "Coordinator"),
+                    CrewMember(replacement, "Replacement"),
+                ),
+        )
 
     private data class Fixture(
         val controller: CrewJoinReconnectController,
@@ -210,16 +239,21 @@ class CrewJoinReconnectControllerTest {
         private val createState: (CrewMemberId) -> CrewState,
     ) : CrewJoinedSessionReconnectPort {
         private val mutableState = MutableStateFlow(initial)
-        private val mutablePeerStates = MutableStateFlow(if (connected) mapOf(coordinator to CrewTransportState.CONNECTED) else emptyMap())
+        private val mutablePeerStates =
+            MutableStateFlow(
+                if (connected) mapOf(coordinator to CrewTransportState.CONNECTED) else emptyMap()
+            )
         override val state: StateFlow<CrewState> = mutableState
-        override val peerStates: StateFlow<Map<CrewMemberId, CrewTransportState>> = mutablePeerStates
+        override val peerStates: StateFlow<Map<CrewMemberId, CrewTransportState>> =
+            mutablePeerStates
         val attached = mutableListOf<CrewPeerTransport>()
         var snapshotRequests = 0
         var snapshotRequestResult = true
 
         override fun attachPeer(transport: CrewPeerTransport) {
             attached += transport
-            mutablePeerStates.value = mutablePeerStates.value + (transport.remoteMemberId to CrewTransportState.CONNECTED)
+            mutablePeerStates.value =
+                mutablePeerStates.value + (transport.remoteMemberId to CrewTransportState.CONNECTED)
         }
 
         override suspend fun requestSnapshot(): Boolean {
@@ -228,24 +262,34 @@ class CrewJoinReconnectControllerTest {
             return snapshotRequestResult
         }
 
-        fun setCoordinator(id: CrewMemberId) { mutableState.value = createState(id) }
+        fun setCoordinator(id: CrewMemberId) {
+            mutableState.value = createState(id)
+        }
+
         fun setConnected(connected: Boolean) {
             val id = mutableState.value.coordinatorMemberId
-            mutablePeerStates.value = if (connected) mapOf(id to CrewTransportState.CONNECTED) else emptyMap()
+            mutablePeerStates.value =
+                if (connected) mapOf(id to CrewTransportState.CONNECTED) else emptyMap()
         }
     }
 
     private class FakeConnection : Closeable {
         var closed = false
-        override fun close() { closed = true }
+
+        override fun close() {
+            closed = true
+        }
     }
 
     private class FakeTransport(override val remoteMemberId: CrewMemberId) : CrewPeerTransport {
         override val state = MutableStateFlow(CrewTransportState.CONNECTED)
         override val incoming: Flow<CrewTransportFrame> = emptyFlow()
         override val drops: Flow<CrewTransportDrop> = emptyFlow()
+
         override fun trySend(frame: CrewTransportFrame) = CrewSendResult.ChannelNotOpen
+
         override fun bufferedBytes(channel: CrewTransportChannel) = 0L
+
         override fun close() = Unit
     }
 }

@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ProviderSearchItems.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ProviderSearchItems.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.search
 
 import android.view.View
@@ -23,24 +30,16 @@ import org.oxycblt.auxio.util.inflater
 
 data class SearchTextHeader(val text: String)
 
-data class ProviderTrackItem(
-    val providerName: String,
-    val track: Track,
-)
+data class RecentSearchItem(val recent: RecentSearch)
 
-data class ProviderEntityItem(
-    val providerName: String,
-    val entity: ProviderEntity,
-)
+data class ProviderTrackItem(val providerName: String, val track: Track)
 
-data class ProviderSearchFailureItem(
-    val providerName: String,
-    val retryable: Boolean,
-)
+data class ProviderEntityItem(val providerName: String, val entity: ProviderEntity)
 
-class SearchTextHeaderViewHolder private constructor(
-    private val binding: ItemHeaderBinding,
-) : RecyclerView.ViewHolder(binding.root) {
+data class ProviderSearchFailureItem(val providerName: String, val retryable: Boolean)
+
+class SearchTextHeaderViewHolder private constructor(private val binding: ItemHeaderBinding) :
+    RecyclerView.ViewHolder(binding.root) {
     fun bind(item: SearchTextHeader) {
         binding.title.text = item.text
     }
@@ -53,12 +52,34 @@ class SearchTextHeaderViewHolder private constructor(
     }
 }
 
-class ProviderTrackViewHolder private constructor(
-    private val binding: ItemSongBinding,
-) : RecyclerView.ViewHolder(binding.root) {
+class RecentSearchViewHolder private constructor(private val binding: ItemSongBinding) :
+    RecyclerView.ViewHolder(binding.root) {
+    fun bind(item: RecentSearchItem, onClick: (RecentSearchItem) -> Unit) {
+        val recent = item.recent
+        binding.songName.text = recent.title
+        binding.songInfo.text = recent.subtitle ?: recent.query
+        binding.songAlbumCover.bindArtwork(recent.artwork, recent.title)
+        binding.songMenu.isVisible = false
+        binding.root.apply {
+            contentDescription = "${recent.title}, ${recent.query}"
+            setOnClickListener { onClick(item) }
+        }
+    }
+
+    companion object {
+        const val VIEW_TYPE = 10_105
+
+        fun from(parent: View) =
+            RecentSearchViewHolder(ItemSongBinding.inflate(parent.context.inflater))
+    }
+}
+
+class ProviderTrackViewHolder private constructor(private val binding: ItemSongBinding) :
+    RecyclerView.ViewHolder(binding.root) {
     fun bind(
         item: ProviderTrackItem,
         onClick: (ProviderTrackItem) -> Unit,
+        onMenu: (ProviderTrackItem) -> Unit,
     ) {
         val track = item.track
         binding.songName.text = track.title
@@ -73,18 +94,20 @@ class ProviderTrackViewHolder private constructor(
             track.artwork,
             track.album?.let { "${track.title}, $it" } ?: track.title,
         )
-        binding.root.contentDescription =
-            buildString {
-                append(track.title)
-                if (track.artists.isNotEmpty()) {
-                    append(", ")
-                    append(track.artists.joinToString(", "))
-                }
+        binding.root.contentDescription = buildString {
+            append(track.title)
+            if (track.artists.isNotEmpty()) {
                 append(", ")
-                append(item.providerName)
+                append(track.artists.joinToString(", "))
             }
+            append(", ")
+            append(item.providerName)
+        }
         binding.root.setOnClickListener { onClick(item) }
-        binding.songMenu.isVisible = false
+        binding.songMenu.apply {
+            isVisible = true
+            setOnClickListener { onMenu(item) }
+        }
     }
 
     companion object {
@@ -95,13 +118,9 @@ class ProviderTrackViewHolder private constructor(
     }
 }
 
-class ProviderEntityViewHolder private constructor(
-    private val binding: ItemSongBinding,
-) : RecyclerView.ViewHolder(binding.root) {
-    fun bind(
-        item: ProviderEntityItem,
-        onClick: (ProviderEntityItem) -> Unit,
-    ) {
+class ProviderEntityViewHolder private constructor(private val binding: ItemSongBinding) :
+    RecyclerView.ViewHolder(binding.root) {
+    fun bind(item: ProviderEntityItem, onClick: (ProviderEntityItem) -> Unit) {
         val entity = item.entity
         val type =
             binding.root.context.getString(
@@ -119,18 +138,17 @@ class ProviderEntityViewHolder private constructor(
                 }
                 .joinToString(" • ")
         binding.songAlbumCover.bindArtwork(entity.artwork, entity.title)
-        binding.root.contentDescription =
-            buildString {
-                append(entity.title)
+        binding.root.contentDescription = buildString {
+            append(entity.title)
+            append(", ")
+            append(type)
+            entity.subtitle?.takeIf(String::isNotBlank)?.let {
                 append(", ")
-                append(type)
-                entity.subtitle?.takeIf(String::isNotBlank)?.let {
-                    append(", ")
-                    append(it)
-                }
-                append(", ")
-                append(item.providerName)
+                append(it)
             }
+            append(", ")
+            append(item.providerName)
+        }
         binding.root.setOnClickListener { onClick(item) }
         binding.songMenu.isVisible = false
     }
@@ -143,9 +161,8 @@ class ProviderEntityViewHolder private constructor(
     }
 }
 
-class ProviderSearchFailureViewHolder private constructor(
-    private val binding: ItemHeaderBinding,
-) : RecyclerView.ViewHolder(binding.root) {
+class ProviderSearchFailureViewHolder private constructor(private val binding: ItemHeaderBinding) :
+    RecyclerView.ViewHolder(binding.root) {
     fun bind(item: ProviderSearchFailureItem) {
         binding.title.text =
             binding.root.context.getString(

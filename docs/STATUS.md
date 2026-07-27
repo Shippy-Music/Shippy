@@ -1,21 +1,208 @@
 # Shippy Live Status
 
-**Updated:** 2026-07-26
-**Current stage:** Functional first-pass source closure and owner handoff
-**Overall state:** Functional first-pass source complete; owner build/device
-verification pending
+**Updated:** 2026-07-27
+**Current stage:** Alpha Release 1 shipping pass
+**Overall state:** The internal r10 build is being promoted to Shippy Alpha
+Release 1 with public documentation, reproducible submodule patches, GitHub CI,
+alpha identity/versioning, and a prerelease APK. Kotlin compilation, 433 JVM
+tests (432 passed; one opt-in live smoke skipped), formatting, lint, assembly,
+v2 signature verification, and owner-device core testing pass. Wider physical
+device, provider-longevity, accessibility, and multi-phone Crew acceptance
+remain pending.
 
-**Progress snapshot:** source implementation ~95% · functional product ~90% ·
-UX intent ~95% · non-build verification ~90% · APK/device verification 0%
+**Progress snapshot:** source implementation ~98% · functional product ~94% ·
+UX intent ~98% · automated verification 100% · APK verification 100% ·
+physical-device verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
+
+**Alpha Release 1 artifact:** `Shippy-Alpha-Release-1.apk`, version
+`0.1.0-alpha.1` (74), 61,015,449 bytes, SHA-256
+`82C83CA5C08F2485BBEE04F257F77C7B9274D80FD3A184DD1E285D3E6B62850E`,
+APK Signature Scheme v2 verified.
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Completed
 
+- r9 collection and player interaction refinement:
+  - A dedicated full-player gesture observer sees deliberate downward swipes
+    before ViewPager, seek, buttons, or lyrics children consume the touch
+    stream. It does not consume child events. On the tall-phone lyrics surface,
+    content scrolls to the top before the same gesture collapses the sheet.
+  - Liked, Downloads, Local, and user playlists share one performant,
+    artwork-led detail surface with search, sort, metadata, full-width rows,
+    Play, Shuffle, collection download state, and restrained management.
+  - Local requests audio permission when first opened, uses generated Shippy
+    artwork, and maps large indexed libraries on a background dispatcher.
+  - User-playlist drag is constrained to track rows and cannot cross the
+    collection header. The consistent track action sheet can add or remove a
+    track from any existing user playlist.
+  - A subtle Lyrics affordance adds breathing room below the player controls so
+    the lyrics card does not intrude into the initial player fold.
+  - `:app:compileDebugKotlin`, all 430 normal JVM tests, `spotlessCheck`,
+    `:app:lintDebug`, `:app:assembleDebug`, and APK Signature Scheme v2
+    verification pass.
+  - r9 artifact:
+    `gdrive:Shippy Builds/Shippy-debug-4.1.3-20260727-r9.apk`, size
+    `66,884,684` bytes, SHA-256
+    `F295778EDD937BBFA9B67591FBC592BEB6341F96895153AF0F65489541172FA1`,
+    MD5 `01B4DA521B0F3104D7B0DCB6B63A639D`.
+- r8 player and lyrics refinement:
+  - The existing player sheet again intercepts downward drags while expanded.
+    Tap or upward-drag on the mini-player opens the full player; a downward drag
+    on the full player collapses to the mini-player using the same native sheet
+    physics. Queue-open state still disables player dragging.
+  - Tall-phone Now Playing adds a restrained square artwork thumbnail beside
+    track identity. Sleep timer remains visible at the left of the utility row;
+    Download appears only for downloadable provider/Crew media, with Queue at
+    the right. Local tracks never show a misleading download action.
+  - Full lyrics uses a centered track header, native edge fade, matte inactive
+    lines, a substantially larger/bolder active line, conditional Download, and
+    the same direct consolidated three-dot action sheet as Now Playing.
+  - The timed Material motion scale and selection fades are another 10% faster,
+    for an effective roughly 1.4x tempo, without replacing Material easing or
+    bypassing Android's system animator scale.
+  - `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, `spotlessCheck`,
+    `:app:lintDebug`, `:app:assembleDebug`, and APK Signature Scheme v2
+    verification pass.
+  - r8 artifact:
+    `gdrive:Shippy Builds/Shippy-debug-4.1.3-20260727-r8.apk`, size
+    `66,875,762` bytes, SHA-256
+    `CD90A2CC0157CE60E505DE350EF9D49B9C3399E102A2CF6F6CE1EA7241DAF234`,
+    MD5 `DF8F1ED83B6D44B97EDD52EEACAD3133`.
+- r7 owner-device refinement:
+  - Now Playing follows the selected core layout: top-right consolidated
+    overflow, save/playlist plus-to-tick beside track identity, seek and
+    canonical shuffle/repeat controls, Download and Queue utility actions
+    beneath playback, then the wider synced-lyrics card.
+  - Player overflow opens the exact track action sheet directly from the
+    player FragmentManager. It no longer emits a global menu event that waits
+    for Search to become visible.
+  - Player-only overflow actions retain Lyrics, sleep timer, and the system
+    equalizer without duplicating them in the visible control row.
+  - Collection, provider-detail, and unified Songs rows show one consistent
+    three-dot action surface; downloaded tracks are first-class Songs rows and
+    remain deduplicated from matching indexed Local media.
+  - Library initially retains only the active tab and nearest neighbor instead
+    of inflating all five artwork-heavy tabs. Songs keeps a small recycled-view
+    cache and avoids unnecessary item animations.
+  - Synced lyrics use explicit active/inactive colors, stronger current-line
+    weight, wider spacing, a taller preview, and corrected full-sheet header
+    alignment. Plain lyrics remain honestly unsynchronized.
+  - Liked and Downloads use real square Shippy artwork rather than generic
+    placeholder glyphs.
+  - Material motion durations are uniformly reduced to 80% of their previous
+    values (1.25x faster) while Android's system animator scale remains
+    authoritative.
+  - `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, `spotlessCheck`,
+    `:app:lintDebug`, `:app:assembleDebug`, and APK Signature Scheme v2
+    verification pass.
+  - r7 artifact:
+    `gdrive:Shippy Builds/Shippy-debug-4.1.3-20260727-r7.apk`, size
+    `66,875,574` bytes, SHA-256
+    `17A805C374F38A366E6201EE6AAF3391C2824AF564EDE06F4D8B40C9E39A84C5`,
+    MD5 `D6827E57D71A1327C4FE4B6950A925F9`.
+- r6 owner-device stabilization:
+  - Library Songs uses Auxio's proven native `SongAdapter` path again. The
+    unstable r5 Downloads/Songs adapter merge is removed; Downloads remains a
+    permanent collection while a safe unified implementation is designed.
+  - Malformed persisted canonical metadata is skipped and logged instead of
+    terminating every Library observer.
+  - Playlist artwork now comes from one bounded Room join projection instead
+    of rebuilding a full canonical-track map on every Home/Library update.
+  - Home recent local rows bind actual Auxio `Song` covers, preserving embedded
+    local artwork; provider rows retain normalized remote artwork.
+  - Provider track actions use a bounded transient registry so Search, Home,
+    Now Playing, and Crew can open the same action sheet without requiring a
+    share-link-compatible track.
+  - Home, Crew, collection detail, and provider detail reserve the complete
+    persistent mini-player/navigation inset. Their last content can scroll
+    fully above app chrome.
+  - The plain black lyrics block is replaced by an Auxio/Material surface with
+    current/upcoming synced lines and a direct full-lyrics action.
+  - Quality controls move into Audio settings instead of cluttering the root.
+  - Crew QR joining uses permissionless Google Code Scanner with QR-only
+    detection and auto-zoom; the custom scanner activity and app camera
+    permission are removed.
+  - `:app:compileDebugKotlin`, `:app:testDebugUnitTest`, `spotlessCheck`,
+    `:app:lintDebug`, `:app:assembleDebug`, and APK Signature Scheme v2
+    verification pass.
+  - r6 artifact:
+    `gdrive:Shippy Builds/Shippy-debug-4.1.3-20260727-r6.apk`, SHA-256
+    `6922E0AB940D4389BE5BC7779BF99C73F1434789EB90FB52DFC34B54EB964280`.
+- Core UX refinement pass:
+  - Primary navigation delegates to `NavigationUI`, preserving each root
+    destination's state instead of reconstructing the selected tab.
+  - Queue dragging updates only the visible adapter during motion and commits
+    one canonical queue mutation on release.
+  - Unified Search renders on-device results before provider results and no
+    longer jumps to the top when an async provider page arrives.
+  - Provider tracks use one full-width Auxio/Shippy bottom-sheet action surface
+    across Search and Now Playing. Failed menu navigation is consumed so an old
+    sheet cannot appear later on another screen.
+  - Library's default order is Songs, Playlists, Albums, Artists, Genres.
+    Local remains a distinct permanent realm. Playlists use available track
+    artwork.
+  - Now Playing scrolls into a synced lyrics preview card; tapping it opens a
+    large synced lyrics sheet on the same playback timeline.
+  - Streaming and download quality are separate persisted settings and flow
+    into provider resolution for normal playback, Crew playback, and downloads.
+  - Shippy-visible About identity and download iconography replace remaining
+    user-facing Auxio/chevron artifacts while upstream legal attribution stays
+    intact.
+  - `:app:compileDebugKotlin` and `:app:testDebugUnitTest` pass after these
+    changes.
+  - r5 was built and uploaded, then invalidated by the owner-device regression
+    report. Use r6 for the next acceptance pass.
+- Owner-device regression pass:
+  - Primary navigation owns the exact child `NavHostFragment` controller rather
+    than asking the container view to resolve a controller from nested graphs.
+    FAB destination checks use that same retained controller.
+  - Local requests the correct Android media permission when first opened and
+    resumes indexing after grant.
+  - Provider queue resolution and expensive playback/queue display mapping run
+    off the main thread to remove the visible tap freeze.
+  - Queue content uses physical system/gesture insets without compounding the
+    nested player-sheet offset.
+  - JioSaavn and YouTube artwork mapping rejects blanks and preserves normalized
+    remote artwork URLs.
+  - Search has a compact selector for JioSaavn, YouTube, and YouTube Music
+    without mutating global provider priority.
+  - YouTube and YouTube Music use a shared NewPipe Extractor gateway with
+    distinct filters and progressive-stream fallback.
+  - Primary tabs use one explicit inner-graph root stack; destination
+    transitions no longer invoke a reflected private FAB API that could
+    terminate the app.
+  - A closed Queue is fully off-screen and opens only through the explicit
+    player Queue action, so it cannot cover playback controls.
+  - Home and Crew app bars consume system insets. Home exposes an always-visible
+    Settings action wired to the existing settings flow.
+  - Primary navigation now uses one deterministic root back stack without
+    restoring stale tab state. Its controller is retained across the view
+    lifecycle instead of being rediscovered while Settings destroys the inner
+    host.
+  - Download-destination inspection treats revoked or malformed persisted SAF
+    access as unavailable instead of allowing an uncaught Settings/startup
+    coroutine failure.
+  - Relationship-backed collection details now install a real linear layout
+    manager, so submitted Liked, Downloads, and playlist rows are rendered.
+- Regression verification:
+  - 431 app JVM tests discovered: 430 executed successfully and the opt-in
+    live-provider smoke skipped during the normal suite.
+  - The opt-in real-network YouTube Music search and stream-resolution smoke
+    passed separately.
+  - Formatting, Android lint, debug compilation, assembly, APK Signature
+    Scheme v2 verification, and four-ABI packaging passed.
+  - The current r6 APK is v2-signed and uploaded at
+    `gdrive:Shippy Builds/Shippy-debug-4.1.3-20260727-r6.apk`; its SHA-256 is
+    `6922E0AB940D4389BE5BC7779BF99C73F1434789EB90FB52DFC34B54EB964280`.
+- Native Windows build support is verified for the custom FFmpeg and TagLib
+  toolchains across arm64-v8a, armeabi-v7a, x86, and x86_64. App JVM tests,
+  109 Musikr JVM tests, 19 relay tests, Android lint, and `app:assembleDebug`
+  pass.
 - Home now completes the product continuation hierarchy with bounded
   metadata-only recent listening, verified recent Downloads, pinned Library
   projections, active Crew state, and an account-scoped cache-first Last.fm
@@ -556,19 +743,37 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   for a bounded default 30 seconds; valid resume rotates the token/verifier and
   restores the same host registration. Hostless sessions reject new joins and
   relay restart still loses all state. This is not relay control/media fan-out.
+- Queue expansion now anchors the current duplicate-safe playback item near the
+  upper third of the sheet after both action-button and drag-open paths. If the
+  queue projection is still loading, the request is retained and fulfilled as
+  soon as the adapter receives canonical state.
+- Shuffle keeps the same expressive adjacent-button spring used by Repeat, but
+  its heavier queue-order mutation is coalesced and committed after the first
+  animation frame window. The icon/check state changes immediately, rapid taps
+  collapse to the final requested value, and the queue remains authoritative.
 
 ## In Progress
 
 - No remaining functional first-pass source work is knowingly open.
-- Owner Gradle compilation and physical-device acceptance are the next gate.
+- Owner physical-device regression acceptance of the 2026-07-27 APK is the
+  next gate.
 - Accessibility remains deliberately deferred until that gate passes.
 
 ## Not Started
 
-- Full Gradle/Android build.
-- Physical-device verification.
+- Physical-device verification of the current regression-fixed APK.
+- Real multi-device Crew acceptance.
 
 ## Current Risks
+
+- The current APK cannot be exercised locally because no physical device is
+  connected and this PC lacks Android emulator hardware acceleration.
+- YouTube extraction can change upstream; an opt-in real-network smoke test is
+  retained for refresh checks.
+- JioSaavn relies on an undocumented external API and can drift.
+- Crew still needs a real multi-phone LAN/remote acceptance matrix.
+
+## Archived Pre-build Risks
 
 - Auxio upstream `dev` has documented Windows build limitations that require
   exact verification before selecting the day-to-day development branch.
@@ -627,9 +832,15 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Follow `DEVICE_TEST_HANDOFF.md` from Linux/WSL or CI.
-2. Return the first real compiler/runtime failure for a focused correction pass.
-3. After functional device acceptance, complete the deferred accessibility pass.
+1. Install `Shippy-debug-4.1.3-20260727-r10.apk` on the owner phone.
+2. First open Library repeatedly, test track actions from Search/Home/player/
+   Crew, and scroll Home and Crew to their final content with the mini-player
+   visible.
+3. Verify local Home artwork, the synced lyrics card/full view, and native Crew
+   QR scanning. Then retest playback latency and queue interactions.
+4. Return the first reproducible runtime failure, then run the real multi-device
+   Crew LAN/remote matrix.
+5. Start accessibility and release polish only after functional acceptance.
 
 ## Verification Ledger
 
@@ -640,9 +851,9 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Crew behavior | Documented | `CREW.md` |
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
-| App code | Implemented, not compiled | Canonical player/UI/system consumers and direct actions, Home continuation/Last.fm projections, Quick Settings tile, native-gapless/bounded-crossfade transitions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox/saved-provider persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding/saved-provider routes, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube provider Search-to-play plus JioSaavn album/artist/playlist browse/save/download/queue paths, Last.fm secure scrobble foundation, local adapter, Crew active UI/reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, renewable encrypted rejoin transport, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
-| New tests | Authored, not run | Resolver, recent-listening/Last.fm overview, collections/projections/playable details/canonical-track/Last.fm migration/onboarding, provider registry/JioSaavn browse/YouTube fixtures, download reducer/transfer/persistence/reconciliation/publication gate, lyrics matcher/source chain/cache/broker/active-line timing, Last.fm signing/listen policy, playback transition policy, player action presentation, Crew event/snapshot/clock/reaction/preparation/invite/sequencing/optimistic reconciliation/liveness/election/control codec/framing/checkpoint/rejoin/media-cache/transfer persistence/session convergence/signaling/direct-connection/transport/hosted-relay policies |
-| External provider shape | Live-inspected | JioSaavn song/category/detail search and LRCLIB exact-lyrics responses, latest 2026-07-26 |
+| App code | Compiled, linted, and JVM-tested; device acceptance pending | Canonical player/UI/system consumers and direct actions, Home continuation/Last.fm projections, Quick Settings tile, native-gapless/bounded-crossfade transitions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox/saved-provider persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding/saved-provider routes, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube/YouTube Music provider Search-to-play plus JioSaavn album/artist/playlist browse/save/download/queue paths, Last.fm secure scrobble foundation, local adapter, Crew active UI/reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, renewable encrypted rejoin transport, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
+| App tests | 433 executed: 432 passed and 1 opt-in live smoke skipped | Resolver, provider, Search, downloads, lyrics, Last.fm, playback, persistence, and Crew policy/runtime coverage |
+| External provider shape | Live-inspected | JioSaavn and LRCLIB responses plus real YouTube Music search and playable HTTPS stream resolution, latest 2026-07-27 |
 | Relay service | Unit/integration tested | `npm test`: 19/19 passed, including host resume, opaque routing, bounded backpressure, health, and coturn credential minting |
-| Static structure | Parsed | Curated app Graphify AST refreshed at 476/476 files, 9,594 nodes, and 955,547 edges; XML parsing and `git diff --check` used where applicable |
-| APK/device | Not verified | Owner handoff stage |
+| Static structure | Parsed | Curated app Graphify AST refreshed at 484/484 files, 9,845 nodes, and 966,644 edges; XML parsing and `git diff --check` used where applicable |
+| APK/device | APK assembled, signed, hashed, and Drive-uploaded; physical device pending | Owner handoff stage |

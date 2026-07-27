@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.image
 
 import android.annotation.SuppressLint
@@ -481,12 +480,7 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
      * accessibility behavior without teaching the local music model about remote artwork.
      */
     fun bindArtwork(data: Any?, desc: String) =
-        bindImpl(
-            { data },
-            desc,
-            R.drawable.ic_album_24,
-            squareishShapeAppearance,
-        )
+        bindImpl({ data }, desc, R.drawable.ic_album_24, squareishShapeAppearance)
 
     private fun bindImpl(
         img: (Size) -> Any?,

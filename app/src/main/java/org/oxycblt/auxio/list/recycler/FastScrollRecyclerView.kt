@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.list.recycler
 
 import android.annotation.SuppressLint
@@ -592,6 +591,8 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
         popupShapeAlphaAnimation = popupAlphaSpring.alpha(popupView, 0f)
     }
 
+    // MaterialTextView forwards these platform strategy constants; lint cannot infer that contract.
+    @SuppressLint("WrongConstant")
     private fun createPopupTextView(context: Context): MaterialTextView =
         MaterialTextView(context).apply {
             TextViewCompat.setTextAppearance(

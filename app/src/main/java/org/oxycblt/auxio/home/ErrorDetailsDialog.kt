@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.home
 
 import android.content.ClipData
@@ -88,7 +87,7 @@ class ErrorDetailsDialog : ViewBindingMaterialDialogFragment<DialogErrorDetailsB
     private companion object {
         /** The URL to the bug report issue form */
         const val LINK_ISSUES =
-            "https://github.com/OxygenCobalt/Auxio/issues/new" +
-                "?assignees=OxygenCobalt&labels=bug&projects=&template=bug-crash-report.yml"
+            "https://github.com/Shippy-Music/Shippy/issues/new" +
+                "?labels=bug&projects=&template=bug-crash-report.yml"
     }
 }

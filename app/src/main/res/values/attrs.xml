@@ -7,8 +7,8 @@
     <item name="home_genre_recycler" type="id" />
     <item name="home_playlist_recycler" type="id" />
 
-    <integer name="anim_fade_enter_duration">200</integer>
-    <integer name="anim_fade_exit_duration">100</integer>
+    <integer name="anim_fade_enter_duration">180</integer>
+    <integer name="anim_fade_exit_duration">90</integer>
 
     <declare-styleable name="CoverView">
         <attr name="shapeAppearance" format="reference" />

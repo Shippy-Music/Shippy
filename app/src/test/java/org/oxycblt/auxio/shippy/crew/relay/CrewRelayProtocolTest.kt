@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewRelayProtocolTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewRelayProtocolTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.relay
 
 import org.junit.Assert.assertArrayEquals
@@ -33,18 +45,36 @@ class CrewRelayProtocolTest {
     fun `golden register wire matches node relay v1`() {
         val encoded =
             CrewRelayCodec.encode(
-                CrewRelayFrame.Register(CrewRelayRole.HOST, 1, "s".toByteArray(), "i".toByteArray()),
+                CrewRelayFrame.Register(CrewRelayRole.HOST, 1, "s".toByteArray(), "i".toByteArray())
             )
-        assertArrayEquals(byteArrayOf(1, 1, 1, 1, 1, 's'.code.toByte(), 1, 'i'.code.toByte()), encoded)
+        assertArrayEquals(
+            byteArrayOf(1, 1, 1, 1, 1, 's'.code.toByte(), 1, 'i'.code.toByte()),
+            encoded,
+        )
     }
 
     @Test
     fun `golden route data and heartbeat wires match node relay v1`() {
-        assertArrayEquals(byteArrayOf(1, 2, 2, 1) + routeBytes, CrewRelayCodec.encode(CrewRelayFrame.Registered(CrewRelayRole.JOIN, route)))
-        assertArrayEquals(byteArrayOf(1, 3) + routeBytes + byteArrayOf(0), CrewRelayCodec.encode(CrewRelayFrame.RouteOpen(route)))
-        assertArrayEquals(byteArrayOf(1, 4) + routeBytes + byteArrayOf(0), CrewRelayCodec.encode(CrewRelayFrame.RouteClose(route)))
-        assertArrayEquals(byteArrayOf(1, 5) + routeBytes + byteArrayOf(9), CrewRelayCodec.encode(CrewRelayFrame.Data(route, byteArrayOf(9))))
-        assertArrayEquals(byteArrayOf(1, 6, 3, 'B'.code.toByte(), 'A'.code.toByte(), 'D'.code.toByte()), CrewRelayCodec.encode(CrewRelayFrame.Error("BAD".toByteArray())))
+        assertArrayEquals(
+            byteArrayOf(1, 2, 2, 1) + routeBytes,
+            CrewRelayCodec.encode(CrewRelayFrame.Registered(CrewRelayRole.JOIN, route)),
+        )
+        assertArrayEquals(
+            byteArrayOf(1, 3) + routeBytes + byteArrayOf(0),
+            CrewRelayCodec.encode(CrewRelayFrame.RouteOpen(route)),
+        )
+        assertArrayEquals(
+            byteArrayOf(1, 4) + routeBytes + byteArrayOf(0),
+            CrewRelayCodec.encode(CrewRelayFrame.RouteClose(route)),
+        )
+        assertArrayEquals(
+            byteArrayOf(1, 5) + routeBytes + byteArrayOf(9),
+            CrewRelayCodec.encode(CrewRelayFrame.Data(route, byteArrayOf(9))),
+        )
+        assertArrayEquals(
+            byteArrayOf(1, 6, 3, 'B'.code.toByte(), 'A'.code.toByte(), 'D'.code.toByte()),
+            CrewRelayCodec.encode(CrewRelayFrame.Error("BAD".toByteArray())),
+        )
         assertArrayEquals(byteArrayOf(1, 7), CrewRelayCodec.encode(CrewRelayFrame.Ping))
         assertArrayEquals(byteArrayOf(1, 8), CrewRelayCodec.encode(CrewRelayFrame.Pong))
     }
@@ -52,7 +82,10 @@ class CrewRelayProtocolTest {
     @Test
     fun `host resume wire carries only exact opaque credential`() {
         val token = ByteArray(CREW_RELAY_RESUME_TOKEN_BYTES) { 7 }
-        val registered = CrewRelayCodec.encode(CrewRelayFrame.Registered(CrewRelayRole.HOST, resumeToken = token))
+        val registered =
+            CrewRelayCodec.encode(
+                CrewRelayFrame.Registered(CrewRelayRole.HOST, resumeToken = token)
+            )
         assertArrayEquals(byteArrayOf(1, 2, 1, 0) + token, registered)
         assertEquals(
             CrewRelayFrame.Registered(CrewRelayRole.HOST, resumeToken = token).role,
@@ -64,10 +97,14 @@ class CrewRelayProtocolTest {
         )
         assertArrayEquals(
             byteArrayOf(1, 9, 1, 1, 's'.code.toByte(), 1, 'i'.code.toByte()) + token,
-            CrewRelayCodec.encode(CrewRelayFrame.HostResume(1, "s".toByteArray(), "i".toByteArray(), token)),
+            CrewRelayCodec.encode(
+                CrewRelayFrame.HostResume(1, "s".toByteArray(), "i".toByteArray(), token)
+            ),
         )
         assertFails {
-            CrewRelayCodec.encode(CrewRelayFrame.HostResume(1, "s".toByteArray(), "i".toByteArray(), ByteArray(31)))
+            CrewRelayCodec.encode(
+                CrewRelayFrame.HostResume(1, "s".toByteArray(), "i".toByteArray(), ByteArray(31))
+            )
         }
     }
 
@@ -78,27 +115,50 @@ class CrewRelayProtocolTest {
         val frame = host.encrypt("private SDP".toByteArray())
         assertArrayEquals("private SDP".toByteArray(), join.decrypt(frame))
         assertFails { join.decrypt(frame) }
-        assertFails { CrewRelayRouteCrypto(invite.copy(secret = CrewInviteSecret("different_123456789012345678")), route, CrewRelayRole.JOIN).decrypt(frame) }
-        assertFails { CrewRelayRouteCrypto(invite.copy(relayLocator = CrewRelayLocator("https://other.example.com/v1/crew")), route, CrewRelayRole.JOIN).decrypt(frame) }
+        assertFails {
+            CrewRelayRouteCrypto(
+                    invite.copy(secret = CrewInviteSecret("different_123456789012345678")),
+                    route,
+                    CrewRelayRole.JOIN,
+                )
+                .decrypt(frame)
+        }
+        assertFails {
+            CrewRelayRouteCrypto(
+                    invite.copy(
+                        relayLocator = CrewRelayLocator("https://other.example.com/v1/crew")
+                    ),
+                    route,
+                    CrewRelayRole.JOIN,
+                )
+                .decrypt(frame)
+        }
     }
 
     @Test
     fun `hello rejects malformed utf8 and oversized values`() {
-        assertEquals(CrewRelayHello("member", "name"), CrewRelayHelloCodec.decode(CrewRelayHelloCodec.encode(CrewRelayHello("member", "name"))))
+        assertEquals(
+            CrewRelayHello("member", "name"),
+            CrewRelayHelloCodec.decode(CrewRelayHelloCodec.encode(CrewRelayHello("member", "name"))),
+        )
         assertFails { CrewRelayHelloCodec.encode(CrewRelayHello("member", "n".repeat(81))) }
-        assertFails { CrewRelayHelloCodec.decode(byteArrayOf(1, 0, 1, 0x80.toByte(), 0, 1, 'n'.code.toByte())) }
+        assertFails {
+            CrewRelayHelloCodec.decode(byteArrayOf(1, 0, 1, 0x80.toByte(), 0, 1, 'n'.code.toByte()))
+        }
     }
 
     @Test
     fun `relay url changes only scheme`() {
-        assertEquals("wss://relay.example.com:9443/custom/%2Fpath", CrewRelayLocatorWebSocketUrl("https://relay.example.com:9443/custom/%2Fpath"))
+        assertEquals(
+            "wss://relay.example.com:9443/custom/%2Fpath",
+            CrewRelayLocatorWebSocketUrl("https://relay.example.com:9443/custom/%2Fpath"),
+        )
     }
 
     private fun assertFails(action: () -> Unit) {
         try {
             action()
             throw AssertionError("Expected failure")
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
     }
 }

@@ -15,9 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.detail.decision
 
+import android.annotation.SuppressLint
 import android.view.ViewGroup
 import org.oxycblt.auxio.databinding.ItemPickerChoiceBinding
 import org.oxycblt.auxio.list.ClickableListListener
@@ -84,6 +84,7 @@ private constructor(private val binding: ItemPickerChoiceBinding) :
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Artist>() {
+                @SuppressLint("DiffUtilEquals")
                 override fun areContentsTheSame(oldItem: Artist, newItem: Artist) =
                     oldItem.name == newItem.name
             }

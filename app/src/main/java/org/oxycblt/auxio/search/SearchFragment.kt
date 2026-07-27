@@ -15,16 +15,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.search
 
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.inputmethod.InputMethodManager
+import android.widget.PopupMenu
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isInvisible
+import androidx.core.view.isVisible
 import androidx.core.view.postDelayed
 import androidx.core.widget.addTextChangedListener
 import androidx.fragment.app.activityViewModels
@@ -47,9 +48,12 @@ import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
+import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.playback.PlaybackDecision
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.shippy.provider.ProviderDescriptor
 import org.oxycblt.auxio.shippy.provider.ProviderEntity
+import org.oxycblt.auxio.shippy.provider.ui.ProviderTrackActionsSheet
 import org.oxycblt.auxio.ui.FadingToolbarOffsetListener
 import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
@@ -77,7 +81,11 @@ import timber.log.Timber as L
  */
 @AndroidEntryPoint
 class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
-    companion object { const val ARG_INITIAL_QUERY = "initialQuery" }
+    companion object {
+        const val ARG_INITIAL_QUERY = "initialQuery"
+        const val ARG_LOCAL_ONLY = "localOnly"
+    }
+
     private val searchModel: SearchViewModel by viewModels()
     private val detailModel: DetailViewModel by activityViewModels()
     override val listModel: ListViewModel by activityViewModels()
@@ -87,12 +95,24 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
         SearchAdapter(
             listener = this,
             onProviderTrackClick = { item -> searchModel.playProviderTrack(item.track) },
+            onProviderTrackMenu = { item ->
+                hideKeyboard()
+                ProviderTrackActionsSheet.show(parentFragmentManager, item.track)
+            },
             onProviderEntityClick = { item -> openProviderEntity(item.entity) },
+            onRecentSearchClick = { item ->
+                requireBinding().searchEditText.apply {
+                    setText(item.recent.query)
+                    setSelection(item.recent.query.length)
+                }
+            },
         )
     private var getContentLauncher: ActivityResultLauncher<String>? = null
     private var pendingImportTarget: Playlist? = null
     private var imm: InputMethodManager? = null
     private var launchedKeyboard = false
+    private var lastSubmittedQuery: String? = null
+    private var scrollResultsToTop = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,6 +131,8 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
         super.onBindingCreated(binding, savedInstanceState)
 
         imm = binding.context.getSystemServiceCompat(InputMethodManager::class)
+        val localOnly = arguments?.getBoolean(ARG_LOCAL_ONLY, false) == true
+        searchModel.setLocalOnly(localOnly)
 
         getContentLauncher =
             registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -143,7 +165,12 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
         binding.searchEditText.apply {
             addTextChangedListener { text ->
                 // Run the search with the updated text as the query
-                searchModel.search(text?.toString()?.trim())
+                val query = text?.toString()?.trim()
+                if (query != lastSubmittedQuery) {
+                    lastSubmittedQuery = query
+                    scrollResultsToTop = true
+                }
+                searchModel.search(query)
             }
 
             if (!launchedKeyboard) {
@@ -152,11 +179,14 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
                 showKeyboard(this)
                 launchedKeyboard = true
             }
-            arguments?.getString(ARG_INITIAL_QUERY)?.takeIf { it.isNotBlank() }?.let { query ->
-                setText(query)
-                setSelection(query.length)
-                arguments?.remove(ARG_INITIAL_QUERY)
-            }
+            arguments
+                ?.getString(ARG_INITIAL_QUERY)
+                ?.takeIf { it.isNotBlank() }
+                ?.let { query ->
+                    setText(query)
+                    setSelection(query.length)
+                    arguments?.remove(ARG_INITIAL_QUERY)
+                }
         }
 
         val filters = searchModel.filters
@@ -179,8 +209,11 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
                         }
                     }
                 searchModel.updateFilters(filters)
+                scrollResultsToTop = true
             }
         }
+        binding.searchProviderSelector.setOnClickListener(::showProviderMenu)
+        binding.searchProviderSelector.isVisible = !localOnly
 
         binding.searchRecycler.apply {
             adapter = searchAdapter
@@ -188,10 +221,11 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
                 val item =
                     searchModel.searchResults.value.getOrElse(it) {
                         return@setFullWidthLookup false
-                }
+                    }
                 item is PlainDivider ||
                     item is PlainHeader ||
                     item is SearchTextHeader ||
+                    item is RecentSearchItem ||
                     item is ProviderTrackItem ||
                     item is ProviderEntityItem ||
                     item is ProviderSearchFailureItem
@@ -201,6 +235,7 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
         // --- VIEWMODEL SETUP ---
 
         collectImmediately(searchModel.searchResults, ::updateSearchResults)
+        collectImmediately(searchModel.selectedProvider, ::updateSelectedProvider)
         collect(searchModel.providerPlaybackFailure.flow) { failure ->
             if (failure != null) {
                 requireContext().showToast(R.string.msg_provider_playback_unavailable)
@@ -219,6 +254,33 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
         )
         collect(playbackModel.playbackDecision.flow, ::handlePlaybackDecision)
         collect(detailModel.toShow.flow, ::handleShow)
+    }
+
+    private fun showProviderMenu(anchor: View) {
+        val providers = searchModel.providerOptions
+        if (providers.isEmpty()) return
+        PopupMenu(requireContext(), anchor).apply {
+            providers.forEachIndexed { index, provider ->
+                menu.add(0, index + 1, index, provider.displayName).isCheckable = true
+            }
+            menu.setGroupCheckable(0, true, true)
+            menu.findItem(providers.indexOf(searchModel.selectedProvider.value) + 1)?.isChecked =
+                true
+            setOnMenuItemClickListener { item ->
+                val provider =
+                    providers.getOrNull(item.itemId - 1) ?: return@setOnMenuItemClickListener false
+                scrollResultsToTop = true
+                searchModel.selectProvider(provider)
+                true
+            }
+            show()
+        }
+    }
+
+    private fun updateSelectedProvider(provider: ProviderDescriptor?) {
+        requireBinding().searchProviderSelector.text =
+            provider?.let { getString(R.string.fmt_music_source, it.displayName) }
+                ?: getString(R.string.lbl_music_source)
     }
 
     override fun onDestroyBinding(binding: FragmentSearchBinding) {
@@ -244,6 +306,7 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
     }
 
     override fun onRealClick(item: Music) {
+        searchModel.recordSearchSelection(item.name.resolve(requireContext()))
         when (item) {
             is Song -> playbackModel.play(item, searchModel.playWith)
             is Album -> detailModel.showAlbum(item)
@@ -269,11 +332,13 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
         // are no results.
         binding.searchRecycler.isInvisible = results.isEmpty()
         searchAdapter.update(results.toMutableList(), null) {
-            // I would make it so that the position is only scrolled back to the top when
-            // the query actually changes instead of once every re-creation event, but sadly
-            // that doesn't seem possible.
-            L.d("Update finished, scrolling to top")
-            binding.searchRecycler.scrollToPosition(0)
+            // Provider results usually arrive after the local section. Do not yank the list back
+            // to the top for that second publication while the user is already reading it.
+            if (scrollResultsToTop) {
+                scrollResultsToTop = false
+                L.d("Search intent changed, scrolling results to top")
+                binding.searchRecycler.scrollToPosition(0)
+            }
             if (results.isEmpty()) {
                 // Expand the appbar when we no longer have results.
                 // This way the user can't softlock themselves by scrolling then
@@ -340,7 +405,9 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
                 is Menu.ForPlaylist -> SearchFragmentDirections.openPlaylistMenu(menu.parcel)
                 is Menu.ForSelection -> SearchFragmentDirections.openSelectionMenu(menu.parcel)
             }
-        findNavController().navigateSafe(directions)
+        if (!findNavController().navigateSafe(directions)) {
+            listModel.menu.consume()
+        }
         // Keyboard is no longer needed.
         hideKeyboard()
     }

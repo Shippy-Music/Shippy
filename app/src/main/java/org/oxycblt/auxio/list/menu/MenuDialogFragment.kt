@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.list.menu
 
 import android.annotation.SuppressLint
@@ -100,6 +99,7 @@ abstract class MenuDialogFragment<M : Menu> :
         binding.menuOptionRecycler.adapter = null
     }
 
+    @SuppressLint("RestrictedApi")
     private fun updateMenu(menu: Menu?) {
         if (menu == null) {
             L.d("No menu to show, navigating away")
@@ -114,7 +114,7 @@ abstract class MenuDialogFragment<M : Menu> :
         // what options are available (ex. if an artist with no songs has had new songs added).
         // Since we don't have (and don't want) a dummy view to inflate this menu, just
         // depend on the AndroidX Toolbar internal API and hope for the best.
-        @SuppressLint("RestrictedApi") val builder = MenuBuilder(requireContext())
+        val builder = MenuBuilder(requireContext())
         SupportMenuInflater(requireContext()).inflate(casted.res, builder)
 
         // Disable any menu options as specified by the impl

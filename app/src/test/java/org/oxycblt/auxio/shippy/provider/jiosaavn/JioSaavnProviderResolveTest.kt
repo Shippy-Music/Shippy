@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * JioSaavnProviderResolveTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * JioSaavnProviderResolveTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.provider.jiosaavn
 
 import kotlinx.coroutines.runBlocking
@@ -54,37 +61,41 @@ class JioSaavnProviderResolveTest {
             )
 
         assertTrue(result is ProviderResult.Failure)
-        assertEquals(
-            ProviderFailureKind.UNSUPPORTED,
-            (result as ProviderResult.Failure).kind,
-        )
+        assertEquals(ProviderFailureKind.UNSUPPORTED, (result as ProviderResult.Failure).kind)
     }
 
     @Test
-    fun `resolve looks up exact song details when a shared candidate has no locator`() = runBlocking {
-        var requestedUrl: String? = null
-        val provider =
-            JioSaavnProvider(
-                object : ProviderHttpTransport {
-                    override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse {
-                        requestedUrl = request.url
-                        return ProviderHttpResponse(
-                            statusCode = 200,
-                            headers = emptyMap(),
-                            body =
-                                """{"songs":[{"id":"track","title":"Fixture","subtitle":"Artist","encrypted_media_url":"GcRAsZwDauvrg33FNzm387nSeNKjABoQsa1xxv++mkrP3qvFt5bTKvUcZXRcCSW8"}]}"""
-                                    .toByteArray(),
-                        )
+    fun `resolve looks up exact song details when a shared candidate has no locator`() =
+        runBlocking {
+            var requestedUrl: String? = null
+            val provider =
+                JioSaavnProvider(
+                    object : ProviderHttpTransport {
+                        override suspend fun execute(
+                            request: ProviderHttpRequest
+                        ): ProviderHttpResponse {
+                            requestedUrl = request.url
+                            return ProviderHttpResponse(
+                                statusCode = 200,
+                                headers = emptyMap(),
+                                body =
+                                    """{"songs":[{"id":"track","title":"Fixture","subtitle":"Artist","encrypted_media_url":"GcRAsZwDauvrg33FNzm387nSeNKjABoQsa1xxv++mkrP3qvFt5bTKvUcZXRcCSW8"}]}"""
+                                        .toByteArray(),
+                            )
+                        }
                     }
-                }
-            )
+                )
 
-        val result = provider.resolve(candidate(maximumBitrate = 160_000).copy(locator = null), StreamConstraints())
+            val result =
+                provider.resolve(
+                    candidate(maximumBitrate = 160_000).copy(locator = null),
+                    StreamConstraints(),
+                )
 
-        assertTrue(result is ProviderResult.Success)
-        assertTrue(requestedUrl!!.contains("__call=song.getDetails"))
-        assertTrue(requestedUrl!!.contains("pids=track"))
-    }
+            assertTrue(result is ProviderResult.Success)
+            assertTrue(requestedUrl!!.contains("__call=song.getDetails"))
+            assertTrue(requestedUrl!!.contains("pids=track"))
+        }
 
     @Test
     fun `resolve accepts the donor keyed exact song response`() = runBlocking {
@@ -111,10 +122,7 @@ class JioSaavnProviderResolveTest {
         assertTrue(result is ProviderResult.Success)
     }
 
-    private fun candidate(
-        maximumBitrate: Int,
-        providerId: ProviderId = ProviderId("jiosaavn"),
-    ) =
+    private fun candidate(maximumBitrate: Int, providerId: ProviderId = ProviderId("jiosaavn")) =
         TrackCandidate(
             id = CandidateId("jiosaavn:track"),
             trackId = TrackId("jiosaavn:track"),

@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewSettings.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewSettings.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.settings
 
 import android.content.Context
@@ -27,12 +34,13 @@ import org.oxycblt.auxio.shippy.crew.invite.CrewRelayLocator
 interface CrewSettings : Settings<CrewSettings.Listener> {
     /** Whether active-Crew members may temporarily share missing media with each other. */
     val pushPullEnabled: Boolean
+
     fun setPushPullEnabled(enabled: Boolean)
 
     /**
-     * Optional self-hosted relay endpoint. This is an HTTPS locator; the relay adapter changes
-     * only its scheme when opening the WebSocket. Invalid persisted values are intentionally
-     * unavailable to callers.
+     * Optional self-hosted relay endpoint. This is an HTTPS locator; the relay adapter changes only
+     * its scheme when opening the WebSocket. Invalid persisted values are intentionally unavailable
+     * to callers.
      */
     val relayLocator: CrewRelayLocator?
 
@@ -81,28 +89,29 @@ object CrewRelayLocatorSettingInput {
     }
 }
 
-class CrewSettingsImpl
-@Inject
-constructor(
-    @ApplicationContext context: Context,
-) : Settings.Impl<CrewSettings.Listener>(context), CrewSettings {
+class CrewSettingsImpl @Inject constructor(@ApplicationContext context: Context) :
+    Settings.Impl<CrewSettings.Listener>(context), CrewSettings {
     override val pushPullEnabled: Boolean
-        get() = sharedPreferences.getBoolean(getString(R.string.set_key_crew_push_pull_enabled), false)
+        get() =
+            sharedPreferences.getBoolean(getString(R.string.set_key_crew_push_pull_enabled), false)
 
     override fun setPushPullEnabled(enabled: Boolean) {
-        sharedPreferences.edit { putBoolean(getString(R.string.set_key_crew_push_pull_enabled), enabled) }
+        sharedPreferences.edit {
+            putBoolean(getString(R.string.set_key_crew_push_pull_enabled), enabled)
+        }
     }
 
     override val relayLocator: CrewRelayLocator?
         get() =
             runCatching {
-                sharedPreferences.getString(getString(R.string.set_key_crew_relay_locator), null)
-            }
+                    sharedPreferences.getString(
+                        getString(R.string.set_key_crew_relay_locator),
+                        null,
+                    )
+                }
                 .getOrNull()
                 ?.let(CrewRelayLocatorSettingInput::parse)
-                ?.let { result ->
-                    (result as? CrewRelayLocatorSettingResult.Configured)?.locator
-                }
+                ?.let { result -> (result as? CrewRelayLocatorSettingResult.Configured)?.locator }
 
     override fun setRelayLocator(input: String): CrewRelayLocatorSettingResult {
         val result = CrewRelayLocatorSettingInput.parse(input)
@@ -131,7 +140,5 @@ constructor(
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class CrewSettingsModule {
-    @Binds
-    @Singleton
-    abstract fun settings(implementation: CrewSettingsImpl): CrewSettings
+    @Binds @Singleton abstract fun settings(implementation: CrewSettingsImpl): CrewSettings
 }

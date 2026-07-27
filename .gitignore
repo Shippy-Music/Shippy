@@ -18,3 +18,11 @@ captures/
 .env
 **/graphify-out/
 /graph.json
+
+# Codex/local verification output
+/.codex-*.out
+/.codex-*.err
+
+# Release artifacts are attached to GitHub releases, not committed.
+*.apk
+*.aab

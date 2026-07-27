@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * RecentListeningRepository.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * RecentListeningRepository.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.history
 
 import android.content.Context
@@ -19,9 +31,9 @@ import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -43,7 +55,8 @@ data class RecentListeningEntry(
         require(artists.size <= RecentListeningCodec.MAX_ARTISTS)
         require(artists.all { it.isBounded(RecentListeningCodec.MAX_ARTIST_BYTES) })
         require(album == null || album.isBounded(RecentListeningCodec.MAX_ALBUM_BYTES))
-        // Artwork is display metadata only. Restricting it to HTTPS prevents local/content locators.
+        // Artwork is display metadata only. Restricting it to HTTPS prevents local/content
+        // locators.
         require(artwork == null || artwork.isHttpsArtworkUrl())
         require(lastPlayedAtEpochMs >= 0)
     }
@@ -76,15 +89,18 @@ class RecentListeningRepository @Inject constructor(@ApplicationContext context:
     private suspend fun load() {
         mutex.withLock {
             if (!backing.exists()) return
-            val entries = runCatching {
-                require(backing.length() in 1..RecentListeningCodec.MAX_FILE_BYTES.toLong())
-                file.openRead().use { input ->
-                    input.readBytes()
-                }.let(RecentListeningCodec::decode)
-            }.getOrElse {
-                file.delete()
-                emptyList()
-            }
+            val entries =
+                runCatching {
+                        require(backing.length() in 1..RecentListeningCodec.MAX_FILE_BYTES.toLong())
+                        file
+                            .openRead()
+                            .use { input -> input.readBytes() }
+                            .let(RecentListeningCodec::decode)
+                    }
+                    .getOrElse {
+                        file.delete()
+                        emptyList()
+                    }
             state.value = reduceRecentListening(entries)
         }
     }
@@ -154,21 +170,35 @@ internal object RecentListeningCodec {
 
     fun decode(bytes: ByteArray): List<RecentListeningEntry> {
         require(bytes.isNotEmpty() && bytes.size <= MAX_FILE_BYTES)
-        return DataInputStream(ByteArrayInputStream(bytes)).use { input ->
-            require(input.readInt() == MAGIC)
-            require(input.readInt() == VERSION)
-            val count = input.readInt().also { require(it in 0..MAX_ENTRIES) }
-            List(count) {
-                val trackId = input.readBoundedString(MAX_TRACK_ID_BYTES)
-                val realm = TrackRealm.entries.getOrNull(input.readInt()) ?: throw EOFException("Invalid realm")
-                val title = input.readBoundedString(MAX_TITLE_BYTES)
-                val artistCount = input.readInt().also { require(it in 0..MAX_ARTISTS) }
-                val artists = List(artistCount) { input.readBoundedString(MAX_ARTIST_BYTES) }
-                val album = input.readNullableString(MAX_ALBUM_BYTES)
-                val artwork = input.readNullableString(MAX_ARTWORK_BYTES)
-                RecentListeningEntry(trackId, realm, title, artists, album, artwork, input.readLong())
-            }.also { require(input.read() == -1) }
-        }.let(::reduceRecentListening)
+        return DataInputStream(ByteArrayInputStream(bytes))
+            .use { input ->
+                require(input.readInt() == MAGIC)
+                require(input.readInt() == VERSION)
+                val count = input.readInt().also { require(it in 0..MAX_ENTRIES) }
+                List(count) {
+                        val trackId = input.readBoundedString(MAX_TRACK_ID_BYTES)
+                        val realm =
+                            TrackRealm.entries.getOrNull(input.readInt())
+                                ?: throw EOFException("Invalid realm")
+                        val title = input.readBoundedString(MAX_TITLE_BYTES)
+                        val artistCount = input.readInt().also { require(it in 0..MAX_ARTISTS) }
+                        val artists =
+                            List(artistCount) { input.readBoundedString(MAX_ARTIST_BYTES) }
+                        val album = input.readNullableString(MAX_ALBUM_BYTES)
+                        val artwork = input.readNullableString(MAX_ARTWORK_BYTES)
+                        RecentListeningEntry(
+                            trackId,
+                            realm,
+                            title,
+                            artists,
+                            album,
+                            artwork,
+                            input.readLong(),
+                        )
+                    }
+                    .also { require(input.read() == -1) }
+            }
+            .let(::reduceRecentListening)
     }
 
     private fun DataOutputStream.writeBoundedString(value: String, maxBytes: Int) {

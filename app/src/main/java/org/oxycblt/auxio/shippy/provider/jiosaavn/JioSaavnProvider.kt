@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * JioSaavnProvider.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * JioSaavnProvider.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.provider.jiosaavn
 
 import java.io.IOException
@@ -31,9 +38,9 @@ import org.oxycblt.auxio.shippy.domain.TrackCandidate
 import org.oxycblt.auxio.shippy.domain.TrackId
 import org.oxycblt.auxio.shippy.domain.TrackRealm
 import org.oxycblt.auxio.shippy.provider.MusicProvider
+import org.oxycblt.auxio.shippy.provider.ProviderBrowsePage
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderDescriptor
-import org.oxycblt.auxio.shippy.provider.ProviderBrowsePage
 import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
@@ -45,11 +52,8 @@ import org.oxycblt.auxio.shippy.provider.StreamConstraints
 import org.oxycblt.auxio.shippy.provider.http.ProviderHttpRequest
 import org.oxycblt.auxio.shippy.provider.http.ProviderHttpTransport
 
-class JioSaavnProvider
-@Inject
-constructor(
-    private val transport: ProviderHttpTransport,
-) : MusicProvider {
+class JioSaavnProvider @Inject constructor(private val transport: ProviderHttpTransport) :
+    MusicProvider {
     override val descriptor =
         ProviderDescriptor(
             id = ID,
@@ -71,7 +75,8 @@ constructor(
     override suspend fun probeHealth(): ProviderHealth =
         when (val result = search("music", null)) {
             is ProviderResult.Success ->
-                if (result.value.tracks.isEmpty()) ProviderHealth.DEGRADED else ProviderHealth.AVAILABLE
+                if (result.value.tracks.isEmpty()) ProviderHealth.DEGRADED
+                else ProviderHealth.AVAILABLE
             is ProviderResult.Failure ->
                 when (result.kind) {
                     ProviderFailureKind.NETWORK,
@@ -80,18 +85,14 @@ constructor(
                 }
         }
 
-    override suspend fun search(
-        query: String,
-        continuation: String?,
-    ): ProviderResult<SearchPage> {
+    override suspend fun search(query: String, continuation: String?): ProviderResult<SearchPage> {
         val normalizedQuery = query.trim()
         if (normalizedQuery.isEmpty()) {
             return ProviderResult.Success(SearchPage(emptyList()))
         }
         val page = continuation?.toIntOrNull()?.takeIf { it > 0 } ?: 1
         return supervisorScope {
-            val entitySearch =
-                if (page == 1) async { searchEntities(normalizedQuery) } else null
+            val entitySearch = if (page == 1) async { searchEntities(normalizedQuery) } else null
             val response =
                 try {
                     request(searchUrl(normalizedQuery, page))
@@ -106,15 +107,14 @@ constructor(
 
             try {
                 val resultArray = JSONObject(response.bodyAsUtf8()).songResults()
-                val tracks =
-                    buildList {
-                        for (index in 0 until resultArray.length()) {
-                            val responseMap = resultArray.optJSONObject(index)?.toMap() ?: continue
-                            runCatching { JioSaavnResponseMapper.mapSong(responseMap).toTrack() }
-                                .getOrNull()
-                                ?.let(::add)
-                        }
+                val tracks = buildList {
+                    for (index in 0 until resultArray.length()) {
+                        val responseMap = resultArray.optJSONObject(index)?.toMap() ?: continue
+                        runCatching { JioSaavnResponseMapper.mapSong(responseMap).toTrack() }
+                            .getOrNull()
+                            ?.let(::add)
                     }
+                }
                 if (resultArray.length() > 0 && tracks.isEmpty()) {
                     entitySearch?.cancel()
                     ProviderResult.Failure(
@@ -155,10 +155,9 @@ constructor(
             )
         }
         val page =
-            continuation
-                ?.toIntOrNull()
-                ?.takeIf { entity.type == ProviderEntityType.ARTIST && it in 0..MAX_BROWSE_PAGE }
-                ?: 0
+            continuation?.toIntOrNull()?.takeIf {
+                entity.type == ProviderEntityType.ARTIST && it in 0..MAX_BROWSE_PAGE
+            } ?: 0
         val response =
             try {
                 request(browseUrl(entity, page))
@@ -168,9 +167,11 @@ constructor(
         if (response.statusCode !in 200..299) return response.statusFailure()
         return try {
             val body = JSONObject(response.bodyAsUtf8())
-            val tracks = body.browseSongResults(entity.type).mapNotNull { responseMap ->
-                runCatching { JioSaavnResponseMapper.mapSong(responseMap).toTrack() }.getOrNull()
-            }
+            val tracks =
+                body.browseSongResults(entity.type).mapNotNull { responseMap ->
+                    runCatching { JioSaavnResponseMapper.mapSong(responseMap).toTrack() }
+                        .getOrNull()
+                }
             ProviderResult.Success(
                 ProviderBrowsePage(
                     entity = body.updatedEntity(entity),
@@ -203,7 +204,8 @@ constructor(
                 message = "Candidate does not belong to JioSaavn",
             )
         }
-        val baseUrl = candidate.locator?.takeIf(String::isNotBlank) ?: resolveSongMediaUrl(candidate)
+        val baseUrl =
+            candidate.locator?.takeIf(String::isNotBlank) ?: resolveSongMediaUrl(candidate)
         if (baseUrl == null) {
             return ProviderResult.Failure(
                 kind = ProviderFailureKind.UNAVAILABLE,
@@ -227,14 +229,16 @@ constructor(
         return "$API_ENDPOINT&__call=search.getResults&p=$page&q=$encoded&n=$PAGE_SIZE"
     }
 
-    private suspend fun searchEntities(query: String): List<ProviderEntity> =
-        supervisorScope {
-            ProviderEntityType.entries.map { type ->
+    private suspend fun searchEntities(query: String): List<ProviderEntity> = supervisorScope {
+        ProviderEntityType.entries
+            .map { type ->
                 async {
                     try {
                         val response = request(entitySearchUrl(query, type))
                         if (response.statusCode !in 200..299) return@async emptyList()
-                        JSONObject(response.bodyAsUtf8()).entityResults().mapNotNull { it.toProviderEntity(type) }
+                        JSONObject(response.bodyAsUtf8())
+                            .entityResults()
+                            .mapNotNull { it.toProviderEntity(type) }
                             .take(ENTITY_PAGE_SIZE)
                     } catch (error: CancellationException) {
                         throw error
@@ -242,8 +246,9 @@ constructor(
                         emptyList()
                     }
                 }
-            }.flatMap { it.await() }
-        }
+            }
+            .flatMap { it.await() }
+    }
 
     private fun entitySearchUrl(query: String, type: ProviderEntityType): String {
         val encoded = URLEncoder.encode(query, StandardCharsets.UTF_8.name())
@@ -278,7 +283,9 @@ constructor(
             message = error.message,
         )
 
-    /** Deep links carry provenance but never an expiring media locator, so look up this exact song. */
+    /**
+     * Deep links carry provenance but never an expiring media locator, so look up this exact song.
+     */
     private suspend fun resolveSongMediaUrl(candidate: TrackCandidate): String? {
         val sourceItemId = candidate.sourceItemId.trim()
         if (sourceItemId.isEmpty()) return null
@@ -312,10 +319,8 @@ constructor(
         val requested = preferredBps ?: maximumBps ?: JioSaavnQuality.MEDIUM.bitrateKbps * 1_000
         return when {
             requested <= JioSaavnQuality.LOW.bitrateKbps * 1_000 -> JioSaavnQuality.LOW
-            requested <= JioSaavnQuality.MEDIUM.bitrateKbps * 1_000 ->
-                JioSaavnQuality.MEDIUM
-            maximumBps != null &&
-                maximumBps < JioSaavnQuality.HIGH.bitrateKbps * 1_000 ->
+            requested <= JioSaavnQuality.MEDIUM.bitrateKbps * 1_000 -> JioSaavnQuality.MEDIUM
+            maximumBps != null && maximumBps < JioSaavnQuality.HIGH.bitrateKbps * 1_000 ->
                 JioSaavnQuality.MEDIUM
             else -> JioSaavnQuality.HIGH
         }
@@ -367,10 +372,9 @@ constructor(
 
     private fun JSONObject.entityResults(): List<Map<String, Any?>> {
         val results =
-            optJSONArray("results")
-                ?: optJSONObject("data")?.optJSONArray("results")
-                ?: JSONArray()
-        return List(results.length()) { index -> results.optJSONObject(index)?.toMap() }.filterNotNull()
+            optJSONArray("results") ?: optJSONObject("data")?.optJSONArray("results") ?: JSONArray()
+        return List(results.length()) { index -> results.optJSONObject(index)?.toMap() }
+            .filterNotNull()
     }
 
     private fun JSONObject.browseSongResults(type: ProviderEntityType): List<Map<String, Any?>> {
@@ -381,7 +385,8 @@ constructor(
                 ProviderEntityType.ALBUM,
                 ProviderEntityType.PLAYLIST -> container.optJSONArray("list")
             } ?: JSONArray()
-        return List(results.length()) { index -> results.optJSONObject(index)?.toMap() }.filterNotNull()
+        return List(results.length()) { index -> results.optJSONObject(index)?.toMap() }
+            .filterNotNull()
     }
 
     private fun JSONObject.updatedEntity(fallback: ProviderEntity): ProviderEntity {
@@ -396,15 +401,18 @@ constructor(
         val title =
             sequenceOf(text("title"), text("name"), text("album"))
                 .mapNotNull { it?.decodeEntities()?.takeIf(String::isNotBlank) }
-                .firstOrNull()
-                ?: return null
+                .firstOrNull() ?: return null
         val subtitle =
             sequenceOf(text("subtitle"), text("role"), text("description"), text("artist"))
                 .mapNotNull { it?.decodeEntities()?.takeIf(String::isNotBlank) }
                 .distinct()
                 .joinToString(" · ")
                 .takeIf(String::isNotBlank)
-        val artwork = text("image")?.trim()?.takeIf(::isHttpsUrl)?.let(JioSaavnResponseMapper::normalizeArtworkUrl)
+        val artwork =
+            text("image")
+                ?.trim()
+                ?.takeIf(::isHttpsUrl)
+                ?.let(JioSaavnResponseMapper::normalizeArtworkUrl)
         return runCatching {
                 ProviderEntity(
                     providerId = ID,
@@ -420,18 +428,26 @@ constructor(
     }
 
     private fun browseToken(url: String): String? =
-        runCatching {
-                URI(url).path.trimEnd('/').substringAfterLast('/').trim()
-            }
+        runCatching { URI(url).path.trimEnd('/').substringAfterLast('/').trim() }
             .getOrNull()
             ?.takeIf { it.isNotBlank() && it.length <= 512 && !it.all(Char::isDigit) }
 
     private fun isHttpsUrl(value: String): Boolean =
-        runCatching { URI(value).scheme.equals("https", ignoreCase = true) && !URI(value).host.isNullOrBlank() }
+        runCatching {
+                URI(value).scheme.equals("https", ignoreCase = true) &&
+                    !URI(value).host.isNullOrBlank()
+            }
             .getOrDefault(false)
 
     private fun String.decodeEntities() =
-        replace("&amp;", "&").replace("&#039;", "'").replace("&#39;", "'").replace("&quot;", "\"").trim()
+        replace("&amp;", "&")
+            .replace("&#039;", "'")
+            .replace("&#39;", "'")
+            .replace("&quot;", "\"")
+            .trim()
+
+    private fun Map<String, Any?>.text(key: String): String? =
+        get(key)?.toString()?.takeUnless { it == "null" }
 
     private fun JSONObject.toMap(): Map<String, Any?> =
         keys().asSequence().associateWith { key -> get(key).toKotlinValue() }
@@ -450,7 +466,8 @@ constructor(
     private fun org.oxycblt.auxio.shippy.provider.http.ProviderHttpResponse.statusFailure():
         ProviderResult.Failure =
         when (statusCode) {
-            401, 403 ->
+            401,
+            403 ->
                 ProviderResult.Failure(
                     ProviderFailureKind.AUTHENTICATION,
                     retryable = false,

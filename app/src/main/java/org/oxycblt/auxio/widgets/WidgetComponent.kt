@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.widgets
 
 import android.content.Context
@@ -89,9 +88,7 @@ private constructor(
         val track = item.track
         val localSong = playbackManager.currentSong
         val title = localSong?.name?.resolve(context) ?: track.title
-        val artist =
-            localSong?.artists?.resolveNames(context)
-                ?: track.artists.joinToString(", ")
+        val artist = localSong?.artists?.resolveNames(context) ?: track.artists.joinToString(", ")
         val album = localSong?.album?.name?.resolve(context) ?: track.album.orEmpty()
 
         // Note: Store these values here so they remain consistent once the bitmap is loaded.

@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * AndroidKeystoreLastFmCredentialRepository.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.lastfm
 
 import android.content.Context
@@ -17,25 +34,53 @@ import javax.inject.Singleton
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Credentials never enter Room or preferences. A corrupt envelope is deleted and treated as signed out. */
+/**
+ * Credentials never enter Room or preferences. A corrupt envelope is deleted and treated as signed
+ * out.
+ */
 @Singleton
-class AndroidKeystoreLastFmCredentialRepository @Inject constructor(@ApplicationContext context: Context) : LastFmCredentialRepository {
+class AndroidKeystoreLastFmCredentialRepository
+@Inject
+constructor(@ApplicationContext context: Context) : LastFmCredentialRepository {
     private val backingFile = File(context.applicationContext.filesDir, "lastfm-credentials.bin")
     private val file = AtomicFile(backingFile)
     private val mutex = Mutex()
-    override suspend fun load(): LastFmCredentials? = mutex.withLock {
-        if (!backingFile.exists()) return@withLock null
-        runCatching { decode(decrypt(readBoundedEnvelope())) }.getOrElse {
-            file.delete()
-            null
+
+    override suspend fun load(): LastFmCredentials? =
+        mutex.withLock {
+            if (!backingFile.exists()) return@withLock null
+            runCatching { decode(decrypt(readBoundedEnvelope())) }
+                .getOrElse {
+                    file.delete()
+                    null
+                }
         }
-    }
-    override suspend fun save(credentials: LastFmCredentials) = mutex.withLock {
-        val output = file.startWrite(); try { output.write(encrypt(encode(credentials))); file.finishWrite(output) } catch (e: Throwable) { file.failWrite(output); throw e }
-    }
+
+    override suspend fun save(credentials: LastFmCredentials) =
+        mutex.withLock {
+            val output = file.startWrite()
+            try {
+                output.write(encrypt(encode(credentials)))
+                file.finishWrite(output)
+            } catch (e: Throwable) {
+                file.failWrite(output)
+                throw e
+            }
+        }
+
     override suspend fun clear() = mutex.withLock { file.delete() }
-    private fun encode(c: LastFmCredentials) = listOf(c.apiKey, c.apiSecret, c.sessionKey, c.username).joinToString("\u0000").toByteArray(Charsets.UTF_8)
-    private fun decode(bytes: ByteArray): LastFmCredentials { val v = bytes.toString(Charsets.UTF_8).split('\u0000'); require(v.size == 4 && v.all(String::isNotBlank)); return LastFmCredentials(v[0], v[1], v[2], v[3]) }
+
+    private fun encode(c: LastFmCredentials) =
+        listOf(c.apiKey, c.apiSecret, c.sessionKey, c.username)
+            .joinToString("\u0000")
+            .toByteArray(Charsets.UTF_8)
+
+    private fun decode(bytes: ByteArray): LastFmCredentials {
+        val v = bytes.toString(Charsets.UTF_8).split('\u0000')
+        require(v.size == 4 && v.all(String::isNotBlank))
+        return LastFmCredentials(v[0], v[1], v[2], v[3])
+    }
+
     private fun readBoundedEnvelope(): ByteArray {
         val length = backingFile.length()
         require(length in MIN_ENVELOPE_BYTES.toLong()..MAX_ENVELOPE_BYTES.toLong())
@@ -46,6 +91,7 @@ class AndroidKeystoreLastFmCredentialRepository @Inject constructor(@Application
             }
         }
     }
+
     private fun encrypt(plain: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
@@ -53,6 +99,7 @@ class AndroidKeystoreLastFmCredentialRepository @Inject constructor(@Application
         require(cipher.iv.size == GCM_NONCE_BYTES)
         return byteArrayOf(FORMAT_VERSION.toByte()) + cipher.iv + cipher.doFinal(plain)
     }
+
     private fun decrypt(envelope: ByteArray): ByteArray {
         require(envelope.size >= MIN_ENVELOPE_BYTES && envelope[0].toInt() == FORMAT_VERSION)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -64,7 +111,28 @@ class AndroidKeystoreLastFmCredentialRepository @Inject constructor(@Application
         cipher.updateAAD(AAD)
         return cipher.doFinal(envelope.copyOfRange(1 + GCM_NONCE_BYTES, envelope.size))
     }
-    private fun key(): SecretKey { val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }; (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }; return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply { init(KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).setKeySize(256).build()) }.generateKey() }
+
+    private fun key(): SecretKey {
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (store.getKey(ALIAS, null) as? SecretKey)?.let {
+            return it
+        }
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+            .apply {
+                init(
+                    KeyGenParameterSpec.Builder(
+                            ALIAS,
+                            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                        )
+                        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                        .setKeySize(256)
+                        .build()
+                )
+            }
+            .generateKey()
+    }
+
     private companion object {
         const val ALIAS = "shippy.lastfm.credentials.v1"
         const val FORMAT_VERSION = 1

@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * DownloadDestinationReconcilerTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * DownloadDestinationReconcilerTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.download
 
 import org.junit.Assert.assertEquals
@@ -81,7 +88,7 @@ class DownloadDestinationReconcilerTest {
                     reason = DownloadStorageFailure.PERMISSION_REVOKED,
                 ),
                 listOf(available),
-        )
+            )
 
         assertTrue(plan.missingArtifactJobIds.isEmpty())
         assertTrue(plan.relationshipRepairs.isEmpty())
@@ -109,13 +116,7 @@ class DownloadDestinationReconcilerTest {
     fun `terminal job repairs stale downloaded relationship`() {
         val removed =
             available("removed", "track:removed", "content://tree/removed", 100).let {
-                it.copy(
-                    job =
-                        it.job.copy(
-                            state = DownloadState.REMOVED,
-                            artifact = null,
-                        )
-                )
+                it.copy(job = it.job.copy(state = DownloadState.REMOVED, artifact = null))
             }
 
         val plan = DownloadReconciliationPlanner.plan(ready(), listOf(removed))
@@ -126,12 +127,7 @@ class DownloadDestinationReconcilerTest {
         )
     }
 
-    private fun available(
-        jobId: String,
-        trackId: String,
-        uri: String,
-        length: Long,
-    ) =
+    private fun available(jobId: String, trackId: String, uri: String, length: Long) =
         PersistedDownload(
             job =
                 DownloadJob(

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_play"
+        android:icon="@drawable/ic_play_24"
+        android:title="@string/lbl_play" />
+    <item
+        android:id="@+id/action_play_next"
+        android:icon="@drawable/ic_play_next_24"
+        android:title="@string/lbl_play_next" />
+    <item
+        android:id="@+id/action_queue_add"
+        android:icon="@drawable/ic_queue_add_24"
+        android:title="@string/lbl_queue_add" />
+    <item
+        android:id="@+id/action_provider_save"
+        android:icon="@drawable/ic_add_24"
+        android:title="@string/desc_save_to_liked" />
+    <item
+        android:id="@+id/action_provider_playlists"
+        android:icon="@drawable/ic_playlist_add_24"
+        android:title="@string/lbl_edit_playlists" />
+    <item
+        android:id="@+id/action_provider_download"
+        android:icon="@drawable/ic_download_24"
+        android:title="@string/desc_download" />
+    <item
+        android:id="@+id/action_open_queue"
+        android:icon="@drawable/ic_playlist_24"
+        android:title="@string/lbl_open_queue" />
+    <item
+        android:id="@+id/action_open_lyrics"
+        android:icon="@drawable/ic_song_24"
+        android:title="@string/lbl_lyrics"
+        android:visible="false" />
+    <item
+        android:id="@+id/action_sleep_timer"
+        android:icon="@drawable/ic_time_24"
+        android:title="@string/lbl_sleep_timer"
+        android:visible="false" />
+    <item
+        android:id="@+id/action_open_equalizer"
+        android:icon="@drawable/ic_config_24"
+        android:title="@string/lbl_equalizer"
+        android:visible="false" />
+    <item
+        android:id="@+id/action_provider_track_info"
+        android:icon="@drawable/ic_details_24"
+        android:title="@string/lbl_song_detail" />
+    <item
+        android:id="@+id/action_share_original_link"
+        android:icon="@drawable/ic_share_24"
+        android:title="@string/lbl_share_original_link" />
+    <item
+        android:id="@+id/action_share_with_shippy"
+        android:icon="@drawable/ic_share_24"
+        android:title="@string/lbl_share_with_shippy" />
+</menu>

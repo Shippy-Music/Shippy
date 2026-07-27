@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.search
 
 import android.view.ViewGroup
@@ -49,9 +48,10 @@ import org.oxycblt.musikr.Song
 class SearchAdapter(
     private val listener: SelectableListListener<Music>,
     private val onProviderTrackClick: (ProviderTrackItem) -> Unit,
+    private val onProviderTrackMenu: (ProviderTrackItem) -> Unit,
     private val onProviderEntityClick: (ProviderEntityItem) -> Unit,
-) :
-    SelectionIndicatorAdapter<Item, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
+    private val onRecentSearchClick: (RecentSearchItem) -> Unit,
+) : SelectionIndicatorAdapter<Item, RecyclerView.ViewHolder>(DIFF_CALLBACK) {
 
     override fun getItemViewType(position: Int) =
         when (getItem(position)) {
@@ -63,6 +63,7 @@ class SearchAdapter(
             is PlainDivider -> DividerViewHolder.VIEW_TYPE
             is BasicHeader -> BasicHeaderViewHolder.VIEW_TYPE
             is SearchTextHeader -> SearchTextHeaderViewHolder.VIEW_TYPE
+            is RecentSearchItem -> RecentSearchViewHolder.VIEW_TYPE
             is ProviderTrackItem -> ProviderTrackViewHolder.VIEW_TYPE
             is ProviderEntityItem -> ProviderEntityViewHolder.VIEW_TYPE
             is ProviderSearchFailureItem -> ProviderSearchFailureViewHolder.VIEW_TYPE
@@ -79,6 +80,7 @@ class SearchAdapter(
             DividerViewHolder.VIEW_TYPE -> DividerViewHolder.from(parent)
             BasicHeaderViewHolder.VIEW_TYPE -> BasicHeaderViewHolder.from(parent)
             SearchTextHeaderViewHolder.VIEW_TYPE -> SearchTextHeaderViewHolder.from(parent)
+            RecentSearchViewHolder.VIEW_TYPE -> RecentSearchViewHolder.from(parent)
             ProviderTrackViewHolder.VIEW_TYPE -> ProviderTrackViewHolder.from(parent)
             ProviderEntityViewHolder.VIEW_TYPE -> ProviderEntityViewHolder.from(parent)
             ProviderSearchFailureViewHolder.VIEW_TYPE ->
@@ -95,12 +97,17 @@ class SearchAdapter(
             is Playlist -> (holder as PlaylistViewHolder).bind(item, listener)
             is BasicHeader -> (holder as BasicHeaderViewHolder).bind(item)
             is SearchTextHeader -> (holder as SearchTextHeaderViewHolder).bind(item)
+            is RecentSearchItem ->
+                (holder as RecentSearchViewHolder).bind(item, onRecentSearchClick)
             is ProviderTrackItem ->
-                (holder as ProviderTrackViewHolder).bind(item, onProviderTrackClick)
+                (holder as ProviderTrackViewHolder).bind(
+                    item,
+                    onProviderTrackClick,
+                    onProviderTrackMenu,
+                )
             is ProviderEntityItem ->
                 (holder as ProviderEntityViewHolder).bind(item, onProviderEntityClick)
-            is ProviderSearchFailureItem ->
-                (holder as ProviderSearchFailureViewHolder).bind(item)
+            is ProviderSearchFailureItem -> (holder as ProviderSearchFailureViewHolder).bind(item)
         }
     }
 
@@ -125,6 +132,8 @@ class SearchAdapter(
                         oldItem is BasicHeader && newItem is BasicHeader ->
                             BasicHeaderViewHolder.DIFF_CALLBACK.areContentsTheSame(oldItem, newItem)
                         oldItem is SearchTextHeader && newItem is SearchTextHeader ->
+                            oldItem == newItem
+                        oldItem is RecentSearchItem && newItem is RecentSearchItem ->
                             oldItem == newItem
                         oldItem is ProviderTrackItem && newItem is ProviderTrackItem ->
                             oldItem == newItem

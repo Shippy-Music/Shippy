@@ -1,27 +1,17 @@
-<!-- Please fill out all this information. -->
+## What changed
 
-#### What is it?
-- [ ] Bugfix (user facing)
-- [ ] Feature (user facing)
-- [ ] Codebase improvement (dev facing)
-- [ ] Meta improvement to the project (dev facing)
+<!-- Describe the user-visible result and why it belongs in Shippy. -->
 
-#### Description of changes
-<!-- Bullet points or free-form text -->
-- Do this
-- Fix that
-- Listen to music
+## Verification
 
-#### Fixes the following issues
-<!-- Also add any other links relevant to your change. -->
+- [ ] `spotlessCheck`
+- [ ] JVM tests
+- [ ] Android lint
+- [ ] APK assembly
+- [ ] Physical-device behavior (state device/Android version, or explain why not)
 
-#### Any additional information
-<!-- Also add any information relevant to this PR. -->
+## Safety
 
-#### APK testing
-<!-- Please create a debug APK for your changes, if possible. -->
-debug.zip
-
-#### Due diligence
-- [ ] I have read the [Contribution Guidelines](https://github.com/OxygenCobalt/Auxio/blob/dev/.github/CONTRIBUTING.md).
-- [ ] I have read the [Why Are These Features Missing?](https://github.com/OxygenCobalt/Auxio/wiki/Why-Are-These-Features-Missing%3F) page.
+- [ ] No credentials, private media, generated build output, or reusable secrets
+- [ ] New dependencies are documented and GPL-compatible
+- [ ] Relevant documentation and tests are updated

@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewSessionOrchestrator.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewSessionOrchestrator.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.rejoin
 
 import kotlinx.coroutines.sync.Mutex
@@ -20,7 +32,10 @@ fun interface CrewSessionEngineFactory {
 
 /** Connector implementations must attach only authenticated [CrewPeerTransport] instances. */
 fun interface CrewRejoinConnector {
-    suspend fun reconnect(lease: CrewRejoinLease, engine: CrewSessionEngine): CrewRejoinConnectResult
+    suspend fun reconnect(
+        lease: CrewRejoinLease,
+        engine: CrewSessionEngine,
+    ): CrewRejoinConnectResult
 }
 
 sealed interface CrewRejoinConnectResult {
@@ -60,8 +75,11 @@ class CrewSessionOrchestrator(
 
     suspend fun restoreAfterProcessStart(): CrewRestoreResult =
         mutex.withLock {
-            active?.let { return@withLock reconnectLocked(it.first, it.second) }
-            val checkpoint = (checkpoints.load() as? CrewCheckpointLoadResult.Loaded)?.checkpoint?.snapshot
+            active?.let {
+                return@withLock reconnectLocked(it.first, it.second)
+            }
+            val checkpoint =
+                (checkpoints.load() as? CrewCheckpointLoadResult.Loaded)?.checkpoint?.snapshot
             val lease = leases.load()
             val decision = CrewRejoinRestorePolicy.decide(checkpoint, lease, nowEpochMs())
             if (decision != CrewRejoinRestoreDecision.RESTORE) {
@@ -84,18 +102,18 @@ class CrewSessionOrchestrator(
     suspend fun onNetworkAvailable(): CrewRestoreResult =
         if (mutex.withLock { active == null }) {
             restoreAfterProcessStart()
-        } else mutex.withLock {
-            val current = active
-                ?: return@withLock CrewRestoreResult.NothingToRestore
-            if (nowEpochMs() >= current.first.expiresAtEpochMs) {
-                cleanupLocked(current.first.sessionId, current.first.sessionId)
-                current.second.close()
-                active = null
-                CrewRestoreResult.Discarded(CrewRejoinRestoreDecision.DISCARD_EXPIRED_LEASE)
-            } else {
-                reconnectLocked(current.first, current.second)
+        } else
+            mutex.withLock {
+                val current = active ?: return@withLock CrewRestoreResult.NothingToRestore
+                if (nowEpochMs() >= current.first.expiresAtEpochMs) {
+                    cleanupLocked(current.first.sessionId, current.first.sessionId)
+                    current.second.close()
+                    active = null
+                    CrewRestoreResult.Discarded(CrewRejoinRestoreDecision.DISCARD_EXPIRED_LEASE)
+                } else {
+                    reconnectLocked(current.first, current.second)
+                }
             }
-        }
 
     /** Call only after an accepted Leave/End event has revoked this local membership. */
     suspend fun revokeAfterAcceptedLeave(sessionId: CrewSessionId) {
@@ -123,8 +141,11 @@ class CrewSessionOrchestrator(
             }
         }
 
-    private suspend fun cleanupLocked(checkpointSessionId: CrewSessionId?, leaseSessionId: CrewSessionId?) {
-        checkpointSessionId?.let(checkpoints::clear)
-        leaseSessionId?.let(leases::clear)
+    private suspend fun cleanupLocked(
+        checkpointSessionId: CrewSessionId?,
+        leaseSessionId: CrewSessionId?,
+    ) {
+        if (checkpointSessionId != null) checkpoints.clear(checkpointSessionId)
+        if (leaseSessionId != null) leases.clear(leaseSessionId)
     }
 }

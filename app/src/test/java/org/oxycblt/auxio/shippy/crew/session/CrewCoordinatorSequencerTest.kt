@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewCoordinatorSequencerTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewCoordinatorSequencerTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.session
 
 import org.junit.Assert.assertEquals
@@ -115,10 +122,7 @@ class CrewCoordinatorSequencerTest {
             )
 
         assertEquals(
-            CrewSequenceResult.Rejected(
-                CrewSequenceRejection.ACTION_REJECTED,
-                fixture.state,
-            ),
+            CrewSequenceResult.Rejected(CrewSequenceRejection.ACTION_REJECTED, fixture.state),
             rejected,
         )
         assertTrue(accepted is CrewSequenceResult.Published)
@@ -141,10 +145,7 @@ class CrewCoordinatorSequencerTest {
             )
 
         assertEquals(
-            CrewSequenceResult.Rejected(
-                CrewSequenceRejection.REQUESTER_MISMATCH,
-                fixture.state,
-            ),
+            CrewSequenceResult.Rejected(CrewSequenceRejection.REQUESTER_MISMATCH, fixture.state),
             result,
         )
     }
@@ -153,15 +154,12 @@ class CrewCoordinatorSequencerTest {
     fun `ordinary member cannot admit or remove another member`() {
         val fixture = Fixture()
         val sequencer = CrewCoordinatorSequencer(fixture.state, fixture.coordinatorId)
-        val outsider = CrewMember(CrewMemberId("outsider", fixture.memberId.protocolVersion), "Outsider")
+        val outsider =
+            CrewMember(CrewMemberId("outsider", fixture.memberId.protocolVersion), "Outsider")
 
         val admit =
             sequencer.sequence(
-                fixture.request(
-                    "admit",
-                    fixture.memberId,
-                    CrewAction.MemberJoined(outsider),
-                ),
+                fixture.request("admit", fixture.memberId, CrewAction.MemberJoined(outsider)),
                 fixture.memberId,
             )
         val remove =
@@ -188,12 +186,7 @@ class CrewCoordinatorSequencerTest {
 
         val result =
             sequencer.sequence(
-                CrewActionRequest(
-                    replayId,
-                    fixture.memberId,
-                    100,
-                    CrewAction.ShuffleChanged(true),
-                ),
+                CrewActionRequest(replayId, fixture.memberId, 100, CrewAction.ShuffleChanged(true)),
                 fixture.memberId,
             )
 
@@ -248,10 +241,7 @@ class CrewCoordinatorSequencerTest {
                 fixture.coordinatorId,
             )
         assertEquals(
-            CrewSequenceResult.Rejected(
-                CrewSequenceRejection.NOT_COORDINATOR,
-                transfer.state,
-            ),
+            CrewSequenceResult.Rejected(CrewSequenceRejection.NOT_COORDINATOR, transfer.state),
             afterTransfer,
         )
     }
@@ -268,10 +258,7 @@ class CrewCoordinatorSequencerTest {
                 CoordinatorTerm(1),
                 EventSequence(0),
                 coordinatorId,
-                listOf(
-                    CrewMember(coordinatorId, "Coordinator"),
-                    CrewMember(memberId, "Member"),
-                ),
+                listOf(CrewMember(coordinatorId, "Coordinator"), CrewMember(memberId, "Member")),
             )
         val queueItem =
             QueueItem(
@@ -290,21 +277,13 @@ class CrewCoordinatorSequencerTest {
                                 "local",
                                 "song",
                                 CandidateAvailability.AVAILABLE,
-                            ),
+                            )
                         ),
                 ),
                 contributorId = memberId.value,
             )
 
-        fun request(
-            id: String,
-            issuer: CrewMemberId,
-            action: CrewAction,
-        ) = CrewActionRequest(
-            DurableEventId(id),
-            issuer,
-            100,
-            action,
-        )
+        fun request(id: String, issuer: CrewMemberId, action: CrewAction) =
+            CrewActionRequest(DurableEventId(id), issuer, 100, action)
     }
 }

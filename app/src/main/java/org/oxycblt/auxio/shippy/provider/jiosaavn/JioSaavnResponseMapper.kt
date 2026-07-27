@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * JioSaavnResponseMapper.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * JioSaavnResponseMapper.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.provider.jiosaavn
 
 import java.util.Locale
@@ -46,15 +53,19 @@ object JioSaavnResponseMapper {
             album = (response.text("album") ?: moreInfo?.text("album"))?.decodeEntities(),
             artist = artist(response, moreInfo),
             durationSeconds =
-                (response["duration"] ?: moreInfo?.get("duration")).asLongOrNull()
-                    ?.takeIf { it >= 0 },
+                (response["duration"] ?: moreInfo?.get("duration")).asLongOrNull()?.takeIf {
+                    it >= 0
+                },
             language =
-                (response.text("language") ?: moreInfo?.text("language"))
-                    ?.replaceFirstChar { it.titlecase(Locale.ROOT) },
-            supports320Kbps =
-                (response["320kbps"] ?: moreInfo?.get("320kbps")).asBooleanOrNull(),
+                (response.text("language") ?: moreInfo?.text("language"))?.replaceFirstChar {
+                    it.titlecase(Locale.ROOT)
+                },
+            supports320Kbps = (response["320kbps"] ?: moreInfo?.get("320kbps")).asBooleanOrNull(),
             hasLyrics = (response["has_lyrics"] ?: moreInfo?.get("has_lyrics")).asBooleanOrNull(),
-            artworkUrl = response.text("image")?.let(::normalizeArtworkUrl),
+            artworkUrl =
+                (response.text("image") ?: moreInfo?.text("image"))
+                    ?.takeIf(String::isNotBlank)
+                    ?.let(::normalizeArtworkUrl),
             permanentUrl = response.text("perma_url"),
             mediaUrl = encryptedMediaUrl?.takeIf(String::isNotBlank)?.let(JioSaavnMediaUrl::decode),
         )
@@ -72,16 +83,13 @@ object JioSaavnResponseMapper {
             } else {
                 trimmed
             }
-        return secure
-            .replace(Regex("(?:50|150|500)x(?:50|150|500)"), "${size}x$size")
+        return secure.replace(Regex("(?:50|150|500)x(?:50|150|500)"), "${size}x$size")
     }
 
-    private fun artist(
-        response: Map<String, Any?>,
-        moreInfo: Map<String, Any?>?,
-    ): String {
+    private fun artist(response: Map<String, Any?>, moreInfo: Map<String, Any?>?): String {
         val primaryArtists =
-            moreInfo?.map("artistMap")
+            moreInfo
+                ?.map("artistMap")
                 ?.list("primary_artists")
                 .orEmpty()
                 .mapNotNull { (it as? Map<*, *>)?.get("name")?.toString()?.decodeEntities() }
@@ -90,12 +98,12 @@ object JioSaavnResponseMapper {
             return primaryArtists.joinToString(", ")
         }
 
-        moreInfo
-            ?.text("primary_artists")
-            ?.decodeEntities()
-            ?.takeIf(String::isNotBlank)
-            ?.let { return it }
-        moreInfo?.text("music")?.decodeEntities()?.takeIf(String::isNotBlank)?.let { return it }
+        moreInfo?.text("primary_artists")?.decodeEntities()?.takeIf(String::isNotBlank)?.let {
+            return it
+        }
+        moreInfo?.text("music")?.decodeEntities()?.takeIf(String::isNotBlank)?.let {
+            return it
+        }
         return response.text("subtitle")?.decodeEntities()?.takeIf(String::isNotBlank) ?: "Unknown"
     }
 
@@ -127,8 +135,10 @@ object JioSaavnResponseMapper {
             is Number -> toInt() != 0
             is String ->
                 when (trim().lowercase(Locale.ROOT)) {
-                    "true", "1" -> true
-                    "false", "0" -> false
+                    "true",
+                    "1" -> true
+                    "false",
+                    "0" -> false
                     else -> null
                 }
             else -> null

@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * DownloadJob.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * DownloadJob.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.download
 
 import org.oxycblt.auxio.shippy.domain.CandidateId
@@ -47,9 +54,7 @@ data class DownloadJob(
 ) {
     init {
         require(bytesTransferred >= 0) { "Transferred bytes cannot be negative" }
-        require(expectedBytes == null || expectedBytes >= 0) {
-            "Expected bytes cannot be negative"
-        }
+        require(expectedBytes == null || expectedBytes >= 0) { "Expected bytes cannot be negative" }
         require(expectedBytes == null || bytesTransferred <= expectedBytes) {
             "Transferred bytes cannot exceed expected bytes"
         }
@@ -75,10 +80,7 @@ data class DownloadArtifact(
     }
 }
 
-data class DownloadFailure(
-    val code: String,
-    val message: String? = null,
-) {
+data class DownloadFailure(val code: String, val message: String? = null) {
     init {
         require(code.isNotBlank()) { "Download failure code cannot be blank" }
     }
@@ -115,10 +117,7 @@ sealed interface DownloadEvent {
 sealed interface DownloadTransition {
     data class Applied(val job: DownloadJob) : DownloadTransition
 
-    data class Rejected(
-        val state: DownloadState,
-        val event: DownloadEvent,
-    ) : DownloadTransition
+    data class Rejected(val state: DownloadState, val event: DownloadEvent) : DownloadTransition
 }
 
 class DownloadReducer {

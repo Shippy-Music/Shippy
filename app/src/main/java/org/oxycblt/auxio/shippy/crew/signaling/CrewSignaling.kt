@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewSignaling.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewSignaling.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.signaling
 
 import java.io.ByteArrayInputStream
@@ -73,7 +80,7 @@ object CrewSignalMessageCodec {
                             when (message.value.type) {
                                 CrewSessionDescriptionType.OFFER -> 1
                                 CrewSessionDescriptionType.ANSWER -> 2
-                            },
+                            }
                         )
                         output.writeLong(message.value.generation)
                         output.writeSizedString(message.value.sdp, MAX_SDP_BYTES)
@@ -82,9 +89,7 @@ object CrewSignalMessageCodec {
                         output.writeByte(2)
                         output.writeLong(message.value.generation)
                         output.writeBoolean(message.value.sdpMid != null)
-                        message.value.sdpMid?.let {
-                            output.writeSizedString(it, MAX_SDP_MID_BYTES)
-                        }
+                        message.value.sdpMid?.let { output.writeSizedString(it, MAX_SDP_MID_BYTES) }
                         output.writeInt(message.value.sdpMLineIndex)
                         output.writeSizedString(message.value.sdp, MAX_ICE_SDP_BYTES)
                     }
@@ -126,15 +131,14 @@ object CrewSignalMessageCodec {
                                     when (input.readUnsignedByte()) {
                                         1 -> CrewSessionDescriptionType.OFFER
                                         2 -> CrewSessionDescriptionType.ANSWER
-                                        else ->
-                                            return CrewSignalDecodeResult.Rejected.MALFORMED
+                                        else -> return CrewSignalDecodeResult.Rejected.MALFORMED
                                     }
                                 CrewSignalMessage.SessionDescription(
                                     CrewSessionDescription(
                                         type,
                                         input.readLong(),
                                         input.readSizedString(MAX_SDP_BYTES),
-                                    ),
+                                    )
                                 )
                             }
                             2 -> {
@@ -143,8 +147,7 @@ object CrewSignalMessageCodec {
                                     when (input.readUnsignedByte()) {
                                         0 -> null
                                         1 -> input.readSizedString(MAX_SDP_MID_BYTES)
-                                        else ->
-                                            return CrewSignalDecodeResult.Rejected.MALFORMED
+                                        else -> return CrewSignalDecodeResult.Rejected.MALFORMED
                                     }
                                 CrewSignalMessage.IceCandidate(
                                     CrewIceCandidate(
@@ -152,7 +155,7 @@ object CrewSignalMessageCodec {
                                         sdpMid,
                                         input.readInt(),
                                         input.readSizedString(MAX_ICE_SDP_BYTES),
-                                    ),
+                                    )
                                 )
                             }
                             3 -> CrewSignalMessage.EndOfCandidates(input.readLong())
@@ -160,14 +163,12 @@ object CrewSignalMessageCodec {
                             5 -> {
                                 CrewSignalMessage.Close(
                                     decodeCloseReason(input.readUnsignedByte())
-                                        ?: return CrewSignalDecodeResult.Rejected.MALFORMED,
+                                        ?: return CrewSignalDecodeResult.Rejected.MALFORMED
                                 )
                             }
                             else -> return CrewSignalDecodeResult.Rejected.MALFORMED
                         }
-                    require(input.available() == 0) {
-                        "Crew signaling payload has trailing data"
-                    }
+                    require(input.available() == 0) { "Crew signaling payload has trailing data" }
                     decoded
                 }
             CrewSignalDecodeResult.Accepted(message)

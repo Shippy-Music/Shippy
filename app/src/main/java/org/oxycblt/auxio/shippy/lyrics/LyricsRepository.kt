@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * LyricsRepository.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * LyricsRepository.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.lyrics
 
 import dagger.Binds
@@ -40,9 +47,7 @@ data class LyricsRequest(
     init {
         require(title.isNotBlank()) { "Lyrics title cannot be blank" }
         require(artists.none(String::isBlank)) { "Lyrics artists cannot contain blank values" }
-        require(durationMs == null || durationMs >= 0) {
-            "Lyrics duration cannot be negative"
-        }
+        require(durationMs == null || durationMs >= 0) { "Lyrics duration cannot be negative" }
     }
 }
 
@@ -78,10 +83,7 @@ data class LyricsRecord(
 }
 
 sealed interface LyricsLookupResult {
-    data class Found(
-        val record: LyricsRecord,
-        val lyrics: ParsedLyrics,
-    ) : LyricsLookupResult
+    data class Found(val record: LyricsRecord, val lyrics: ParsedLyrics) : LyricsLookupResult
 
     data object NotFound : LyricsLookupResult
 
@@ -130,10 +132,11 @@ constructor(
                         return found
                     }
                     found
-                } ?: run {
-                    cache.removeSafely(request)
-                    null
                 }
+                    ?: run {
+                        cache.removeSafely(request)
+                        null
+                    }
             }
 
         var lastFailure: LyricsLookupResult.Failure? = null
@@ -188,11 +191,8 @@ constructor(
 }
 
 @Singleton
-class LrclibLyricsRepository
-@Inject
-constructor(
-    private val transport: ProviderHttpTransport,
-) : LyricsSource {
+class LrclibLyricsRepository @Inject constructor(private val transport: ProviderHttpTransport) :
+    LyricsSource {
     override val id = "lrclib"
     override val priority = 100
 
@@ -201,7 +201,9 @@ constructor(
         if (exactUrl != null) {
             when (val exact = execute(exactUrl)) {
                 is HttpLyricsResult.Records -> {
-                    selectBestLyrics(request, exact.records)?.toFound()?.let { return it }
+                    selectBestLyrics(request, exact.records)?.toFound()?.let {
+                        return it
+                    }
                 }
                 HttpLyricsResult.NotFound -> Unit
                 is HttpLyricsResult.Failure -> return exact.value
@@ -210,8 +212,7 @@ constructor(
 
         return when (val search = execute(searchUrl(request))) {
             is HttpLyricsResult.Records ->
-                selectBestLyrics(request, search.records)?.toFound()
-                    ?: LyricsLookupResult.NotFound
+                selectBestLyrics(request, search.records)?.toFound() ?: LyricsLookupResult.NotFound
             HttpLyricsResult.NotFound -> LyricsLookupResult.NotFound
             is HttpLyricsResult.Failure -> search.value
         }
@@ -224,10 +225,7 @@ constructor(
                     ProviderHttpRequest(
                         url = url,
                         headers =
-                            mapOf(
-                                "Accept" to "application/json",
-                                "User-Agent" to CLIENT_USER_AGENT,
-                            ),
+                            mapOf("Accept" to "application/json", "User-Agent" to CLIENT_USER_AGENT),
                     )
                 )
             } catch (error: IOException) {
@@ -329,15 +327,11 @@ constructor(
 
     private companion object {
         const val BASE_URL = "https://lrclib.net"
-        const val CLIENT_USER_AGENT =
-            "Shippy/0.1 Android (https://github.com/OxygenCobalt/Auxio)"
+        const val CLIENT_USER_AGENT = "Shippy/0.1 Android (https://github.com/OxygenCobalt/Auxio)"
     }
 }
 
-internal fun selectBestLyrics(
-    request: LyricsRequest,
-    records: List<LyricsRecord>,
-): LyricsRecord? {
+internal fun selectBestLyrics(request: LyricsRequest, records: List<LyricsRecord>): LyricsRecord? {
     val ranked =
         records
             .map { record -> record to lyricsIdentityScore(request, record) }
@@ -358,17 +352,13 @@ internal fun selectBestLyrics(
         ?.first
 }
 
-internal fun lyricsIdentityScore(
-    request: LyricsRequest,
-    record: LyricsRecord,
-): Double {
+internal fun lyricsIdentityScore(request: LyricsRequest, record: LyricsRecord): Double {
     val title = tokenSimilarity(request.title, record.trackName)
     val artist = tokenSimilarity(request.artists.joinToString(" "), record.artistName)
     val album =
-        request.album
-            ?.takeIf(String::isNotBlank)
-            ?.let { tokenSimilarity(it, record.albumName.orEmpty()) }
-            ?: 1.0
+        request.album?.takeIf(String::isNotBlank)?.let {
+            tokenSimilarity(it, record.albumName.orEmpty())
+        } ?: 1.0
     val duration =
         if (request.durationMs != null && record.durationSeconds != null) {
             val difference = kotlin.math.abs(request.durationMs / 1000.0 - record.durationSeconds)
@@ -388,15 +378,11 @@ private fun tokenSimilarity(left: String, right: String): Double {
     val leftTokens = normalize(left).split(' ').filter(String::isNotBlank).toSet()
     val rightTokens = normalize(right).split(' ').filter(String::isNotBlank).toSet()
     if (leftTokens.isEmpty() || rightTokens.isEmpty()) return 0.0
-    return 2.0 * leftTokens.intersect(rightTokens).size /
-        (leftTokens.size + rightTokens.size)
+    return 2.0 * leftTokens.intersect(rightTokens).size / (leftTokens.size + rightTokens.size)
 }
 
 private fun normalize(value: String): String =
-    value
-        .lowercase(Locale.ROOT)
-        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
-        .trim()
+    value.lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
 private fun query(vararg values: Pair<String, String?>): String =
     values
@@ -408,12 +394,11 @@ private fun query(vararg values: Pair<String, String?>): String =
 private fun urlEncode(value: String): String =
     URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
-private fun JSONArray.toRecords(): List<LyricsRecord> =
-    buildList {
-        for (index in 0 until length()) {
-            optJSONObject(index)?.let { value -> runCatching(value::toRecord).getOrNull()?.let(::add) }
-        }
+private fun JSONArray.toRecords(): List<LyricsRecord> = buildList {
+    for (index in 0 until length()) {
+        optJSONObject(index)?.let { value -> runCatching(value::toRecord).getOrNull()?.let(::add) }
     }
+}
 
 private fun JSONObject.toRecord(): LyricsRecord =
     LyricsRecord(
@@ -437,23 +422,15 @@ private const val SYNCED_PREFERENCE_MARGIN = 0.05
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class LyricsModule {
-    @Binds
-    @Singleton
-    abstract fun repository(repository: ChainedLyricsRepository): LyricsRepository
+    @Binds @Singleton abstract fun repository(repository: ChainedLyricsRepository): LyricsRepository
 
-    @Binds
-    @IntoSet
-    abstract fun lrclib(repository: LrclibLyricsRepository): LyricsSource
+    @Binds @IntoSet abstract fun lrclib(repository: LrclibLyricsRepository): LyricsSource
 
     @Binds
     @IntoSet
     abstract fun musixmatchBroker(repository: MusixmatchBrokerLyricsSource): LyricsSource
 
-    @Binds
-    @Singleton
-    abstract fun cache(cache: RoomLyricsCache): LyricsCache
+    @Binds @Singleton abstract fun cache(cache: RoomLyricsCache): LyricsCache
 
-    @Binds
-    @Singleton
-    abstract fun cacheClock(clock: SystemLyricsCacheClock): LyricsCacheClock
+    @Binds @Singleton abstract fun cacheClock(clock: SystemLyricsCacheClock): LyricsCacheClock
 }

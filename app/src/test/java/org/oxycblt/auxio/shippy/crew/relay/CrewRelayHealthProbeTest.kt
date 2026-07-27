@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewRelayHealthProbeTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewRelayHealthProbeTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.relay
 
 import org.junit.Assert.assertEquals
@@ -22,7 +34,10 @@ class CrewRelayHealthProbeTest {
     fun `health parser accepts bounded nonnegative counts`() {
         assertEquals(
             CrewRelayHealth.Healthy(sessions = 2, routes = 3, connections = 4),
-            CrewRelayHealthResponseParser.parse(200, "{\"ok\":true,\"sessions\":2,\"routes\":3,\"connections\":4}"),
+            CrewRelayHealthResponseParser.parse(
+                200,
+                "{\"ok\":true,\"sessions\":2,\"routes\":3,\"connections\":4}",
+            ),
         )
     }
 
@@ -30,19 +45,31 @@ class CrewRelayHealthProbeTest {
     fun `health parser rejects malformed or unbounded fields`() {
         assertEquals(
             CrewRelayHealth.InvalidResponse,
-            CrewRelayHealthResponseParser.parse(200, "{\"ok\":true,\"sessions\":-1,\"routes\":3,\"connections\":4}"),
+            CrewRelayHealthResponseParser.parse(
+                200,
+                "{\"ok\":true,\"sessions\":-1,\"routes\":3,\"connections\":4}",
+            ),
         )
         assertEquals(
             CrewRelayHealth.InvalidResponse,
-            CrewRelayHealthResponseParser.parse(200, "{\"ok\":true,\"sessions\":2.0,\"routes\":3,\"connections\":4}"),
+            CrewRelayHealthResponseParser.parse(
+                200,
+                "{\"ok\":true,\"sessions\":2.0,\"routes\":3,\"connections\":4}",
+            ),
         )
         assertEquals(
             CrewRelayHealth.InvalidResponse,
-            CrewRelayHealthResponseParser.parse(503, "{\"ok\":true,\"sessions\":0,\"routes\":0,\"connections\":0}"),
+            CrewRelayHealthResponseParser.parse(
+                503,
+                "{\"ok\":true,\"sessions\":0,\"routes\":0,\"connections\":0}",
+            ),
         )
         assertEquals(
             CrewRelayHealth.InvalidResponse,
-            CrewRelayHealthResponseParser.parse(200, "{\"ok\":false,\"sessions\":0,\"routes\":0,\"connections\":0}"),
+            CrewRelayHealthResponseParser.parse(
+                200,
+                "{\"ok\":false,\"sessions\":0,\"routes\":0,\"connections\":0}",
+            ),
         )
     }
 }

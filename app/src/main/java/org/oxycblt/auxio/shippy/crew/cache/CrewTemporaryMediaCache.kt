@@ -1,4 +1,20 @@
-/* Copyright (c) 2026 Shippy contributors */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * CrewTemporaryMediaCache.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.crew.cache
 
 import java.io.File
@@ -18,7 +34,9 @@ class CrewTemporaryMediaCache(
     private var sessionId: CrewSessionId? = null
     private var usedBytes = 0L
 
-    init { require(maxBytes in 1..CREW_MEDIA_MAX_OBJECT_BYTES) { "Invalid Crew cache limit" } }
+    init {
+        require(maxBytes in 1..CREW_MEDIA_MAX_OBJECT_BYTES) { "Invalid Crew cache limit" }
+    }
 
     @Synchronized
     fun beginSession(session: CrewSessionId) {
@@ -34,9 +52,13 @@ class CrewTemporaryMediaCache(
 
     @Synchronized
     fun put(manifest: CrewMediaManifest, bytes: ByteArray): File {
-        require(sessionId == manifest.sessionId) { "Temporary media is only valid for the active Crew" }
+        require(sessionId == manifest.sessionId) {
+            "Temporary media is only valid for the active Crew"
+        }
         require(bytes.size.toLong() == manifest.objectSizeBytes) { "Temporary media size mismatch" }
-        require(CrewMediaDigest.sha256(bytes) == manifest.objectIntegrity) { "Temporary media integrity mismatch" }
+        require(CrewMediaDigest.sha256(bytes) == manifest.objectIntegrity) {
+            "Temporary media integrity mismatch"
+        }
         val target = objectFile(manifest)
         val replaced = if (target.exists()) target.length() else 0L
         require(usedBytes - replaced + bytes.size <= maxBytes) { "Crew cache capacity exceeded" }
@@ -63,10 +85,20 @@ class CrewTemporaryMediaCache(
         }
     }
 
-    private fun objectFile(manifest: CrewMediaManifest) = objectFile(manifest.sessionId, manifest.objectIntegrity)
-    private fun objectFile(session: CrewSessionId, integrity: CrewMediaDigest) = File(sessionPath(session), "${integrity}.media")
+    private fun objectFile(manifest: CrewMediaManifest) =
+        objectFile(manifest.sessionId, manifest.objectIntegrity)
+
+    private fun objectFile(session: CrewSessionId, integrity: CrewMediaDigest) =
+        File(sessionPath(session), "${integrity}.media")
+
     private fun sessionPath(session: CrewSessionId) =
-        File(root, CrewMediaDigest.sha256("${session.protocolVersion.value}:${session.value}".toByteArray()).toString())
+        File(
+            root,
+            CrewMediaDigest.sha256(
+                    "${session.protocolVersion.value}:${session.value}".toByteArray()
+                )
+                .toString(),
+        )
 
     private fun deleteRecursively(file: File) {
         file.listFiles()?.forEach(::deleteRecursively)

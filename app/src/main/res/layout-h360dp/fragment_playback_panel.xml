@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<org.oxycblt.auxio.playback.ui.PlaybackCollapseLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -43,7 +43,7 @@
         android:layout_marginEnd="@dimen/spacing_mid_medium"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="@+id/playback_pager"
-        app:layout_constraintEnd_toStartOf="@+id/playback_more"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.5"
         app:layout_constraintStart_toEndOf="@+id/playback_pager"
         app:layout_constraintTop_toTopOf="@+id/playback_pager"
@@ -93,7 +93,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:contentDescription="@string/desc_download"
-                app:icon="@drawable/ic_down_24" />
+                app:icon="@drawable/ic_download_24" />
 
             <org.oxycblt.auxio.ui.RippleFixMaterialButton
                 android:id="@+id/playback_queue"
@@ -106,18 +106,6 @@
         </LinearLayout>
 
     </LinearLayout>
-
-    <org.oxycblt.auxio.ui.RippleFixMaterialButton
-        android:id="@+id/playback_more"
-        style="@style/Widget.Auxio.Button.Playback.More"
-        app:materialSizeOverlay="@style/SizeOverlay.Material3Expressive.Button.IconButton.Small"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:icon="@drawable/ic_more_24"
-        android:layout_marginEnd="@dimen/spacing_mid_medium"
-        app:layout_constraintBottom_toBottomOf="@+id/playback_info_container"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@+id/playback_info_container" />
 
     <org.oxycblt.auxio.playback.ui.StyledSeekBar
         android:id="@+id/playback_seek_bar"
@@ -187,7 +175,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:contentDescription="@string/desc_shuffle"
-                app:icon="@drawable/sel_shuffle_state_24"
+                app:icon="@drawable/ic_shuffle_off_24"
                 app:materialSizeOverlay="@style/SizeOverlay.Material3Expressive.Button.IconButton.Medium"
                 app:tint="@color/sel_activatable_icon" />
 
@@ -196,4 +184,4 @@
     </org.oxycblt.auxio.playback.ui.ForcedLTRFrameLayout>
 
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+</org.oxycblt.auxio.playback.ui.PlaybackCollapseLayout>

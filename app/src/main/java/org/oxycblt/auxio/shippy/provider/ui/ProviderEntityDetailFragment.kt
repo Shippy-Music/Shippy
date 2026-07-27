@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ProviderEntityDetailFragment.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ProviderEntityDetailFragment.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.provider.ui
 
 import android.os.Bundle
@@ -16,26 +23,23 @@ import androidx.core.view.isGone
 import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
 import androidx.navigation.fragment.findNavController
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentProviderEntityDetailBinding
 import org.oxycblt.auxio.shippy.domain.ProviderId
-import org.oxycblt.auxio.shippy.library.CollectionRowDownloadPresentation
-import org.oxycblt.auxio.shippy.library.ShippyCollectionTrackRow
 import org.oxycblt.auxio.shippy.library.ui.ShippyCollectionTrackAdapter
 import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderEntity
 import org.oxycblt.auxio.shippy.provider.ProviderEntityType
 import org.oxycblt.auxio.ui.ViewBindingFragment
+import org.oxycblt.auxio.util.applyBottomContentInset
 import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.showToast
 
 /** Auxio-native provider album/artist/playlist detail with one canonical queue action path. */
 @AndroidEntryPoint
-class ProviderEntityDetailFragment :
-    ViewBindingFragment<FragmentProviderEntityDetailBinding>() {
+class ProviderEntityDetailFragment : ViewBindingFragment<FragmentProviderEntityDetailBinding>() {
     private val model: ProviderEntityDetailViewModel by viewModels()
     private lateinit var entity: ProviderEntity
     private lateinit var tracksAdapter: ShippyCollectionTrackAdapter
@@ -49,6 +53,7 @@ class ProviderEntityDetailFragment :
         savedInstanceState: Bundle?,
     ) {
         super.onBindingCreated(binding, savedInstanceState)
+        binding.providerEntityScroll.applyBottomContentInset()
         entity = requireArguments().toProviderEntity()
         tracksAdapter =
             ShippyCollectionTrackAdapter(
@@ -56,7 +61,7 @@ class ProviderEntityDetailFragment :
                     val index = currentState?.rows?.indexOf(row) ?: -1
                     if (index >= 0) model.play(index, shuffled = false)
                 },
-                onDownloadAction = ::onDownloadAction,
+                onMenu = { row -> ProviderTrackActionsSheet.show(parentFragmentManager, row.track) },
             )
 
         binding.providerEntityToolbar.setNavigationOnClickListener {
@@ -120,20 +125,20 @@ class ProviderEntityDetailFragment :
         val binding = requireBinding()
         val displayEntity = state?.entity ?: entity
         binding.providerEntityToolbar.title = displayEntity.title
-        binding.providerEntityArtwork.bindArtwork(
-            displayEntity.artwork,
-            displayEntity.title,
-        )
+        binding.providerEntityArtwork.bindArtwork(displayEntity.artwork, displayEntity.title)
         binding.providerEntityTitle.text = displayEntity.title
         binding.providerEntitySubtitle.text = displayEntity.subtitle.orEmpty()
         binding.providerEntitySubtitle.isGone = displayEntity.subtitle.isNullOrBlank()
 
-        binding.providerEntityProgress.isVisible = state is ProviderEntityDetailState.Loading
+        binding.providerEntityProgress.isVisible =
+            state is ProviderEntityDetailState.Loading ||
+                (state as? ProviderEntityDetailState.Content)?.playbackStarting == true
         binding.providerEntityRetry.isVisible =
             state is ProviderEntityDetailState.Error && state.retryable
         val message =
             when {
-                state is ProviderEntityDetailState.Error -> R.string.lng_provider_catalog_unavailable
+                state is ProviderEntityDetailState.Error ->
+                    R.string.lng_provider_catalog_unavailable
                 state is ProviderEntityDetailState.Content && state.page.tracks.isEmpty() ->
                     R.string.lng_collection_empty
                 else -> null
@@ -146,8 +151,8 @@ class ProviderEntityDetailFragment :
         currentState = content
         tracksAdapter.submitList(content?.rows.orEmpty())
         val hasTracks = !page?.tracks.isNullOrEmpty()
-        binding.providerEntityPlay.isEnabled = hasTracks
-        binding.providerEntityShuffle.isEnabled = hasTracks
+        binding.providerEntityPlay.isEnabled = hasTracks && content?.playbackStarting != true
+        binding.providerEntityShuffle.isEnabled = hasTracks && content?.playbackStarting != true
         binding.providerEntityCount.isVisible = state is ProviderEntityDetailState.Content
         binding.providerEntityCount.text =
             resources.getQuantityString(
@@ -164,19 +169,6 @@ class ProviderEntityDetailFragment :
                 else -> R.string.lbl_load_more
             }
         )
-    }
-
-    private fun onDownloadAction(row: ShippyCollectionTrackRow) {
-        if (row.download is CollectionRowDownloadPresentation.Available) {
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.desc_remove_download)
-                .setMessage(R.string.lng_remove_download_confirmation)
-                .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(R.string.lbl_delete) { _, _ -> model.performDownloadAction(row) }
-                .show()
-        } else {
-            model.performDownloadAction(row)
-        }
     }
 
     private fun renderSavedEntity(saved: SavedProviderEntity?) {

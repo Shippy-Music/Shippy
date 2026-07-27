@@ -178,6 +178,18 @@
         <item>@string/set_transition_crossfade</item>
     </string-array>
 
+    <string-array name="entries_stream_quality">
+        <item>@string/set_quality_low</item>
+        <item>@string/set_quality_medium</item>
+        <item>@string/set_quality_high</item>
+    </string-array>
+
+    <string-array name="values_stream_quality">
+        <item>96000</item>
+        <item>160000</item>
+        <item>320000</item>
+    </string-array>
+
     <integer-array name="values_transition_mode">
         <item>0</item>
         <item>1</item>

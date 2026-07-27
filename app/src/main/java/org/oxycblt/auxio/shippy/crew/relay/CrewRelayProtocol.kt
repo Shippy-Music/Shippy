@@ -1,6 +1,19 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * Copyright (c) 2026 Auxio Project
+ * CrewRelayProtocol.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 package org.oxycblt.auxio.shippy.crew.relay
 
@@ -43,7 +56,8 @@ class CrewRelayRouteId(source: ByteArray) {
         require(raw.size == ROUTE_BYTES) { "Relay route IDs are 16 bytes" }
     }
 
-    val bytes get() = raw.copyOf()
+    val bytes
+        get() = raw.copyOf()
 
     override fun equals(other: Any?) = other is CrewRelayRouteId && raw.contentEquals(other.raw)
 
@@ -74,9 +88,11 @@ sealed interface CrewRelayFrame {
         val resumeToken: ByteArray? = null,
     ) : CrewRelayFrame
 
-    data class RouteOpen(val routeId: CrewRelayRouteId, val reason: ByteArray = ByteArray(0)) : CrewRelayFrame
+    data class RouteOpen(val routeId: CrewRelayRouteId, val reason: ByteArray = ByteArray(0)) :
+        CrewRelayFrame
 
-    data class RouteClose(val routeId: CrewRelayRouteId, val reason: ByteArray = ByteArray(0)) : CrewRelayFrame
+    data class RouteClose(val routeId: CrewRelayRouteId, val reason: ByteArray = ByteArray(0)) :
+        CrewRelayFrame
 
     data class Data(val routeId: CrewRelayRouteId, val payload: ByteArray) : CrewRelayFrame
 
@@ -134,8 +150,10 @@ object CrewRelayCodec {
                         frame.routeId?.let { output.write(it.bytes) }
                         frame.resumeToken?.let(output::write)
                     }
-                    is CrewRelayFrame.RouteOpen -> writeRoute(output, CrewRelayType.ROUTE_OPEN, frame.routeId, frame.reason)
-                    is CrewRelayFrame.RouteClose -> writeRoute(output, CrewRelayType.ROUTE_CLOSE, frame.routeId, frame.reason)
+                    is CrewRelayFrame.RouteOpen ->
+                        writeRoute(output, CrewRelayType.ROUTE_OPEN, frame.routeId, frame.reason)
+                    is CrewRelayFrame.RouteClose ->
+                        writeRoute(output, CrewRelayType.ROUTE_CLOSE, frame.routeId, frame.reason)
                     is CrewRelayFrame.Data -> {
                         bounded(frame.payload, CREW_RELAY_MAX_DATA_BYTES)
                         output.writeByte(CrewRelayType.DATA.wire)
@@ -156,12 +174,20 @@ object CrewRelayCodec {
         }
 
     fun decode(input: ByteArray): CrewRelayFrame {
-        require(input.size in 2..MAX_FRAME_BYTES && input[0].toInt() == VERSION) { "Invalid relay frame" }
+        require(input.size in 2..MAX_FRAME_BYTES && input[0].toInt() == VERSION) {
+            "Invalid relay frame"
+        }
         return DataInputStream(ByteArrayInputStream(input)).use { data ->
             data.readUnsignedByte()
             val frame =
                 when (data.readUnsignedByte()) {
-                    1 -> CrewRelayFrame.Register(role(data.readUnsignedByte()), data.readUnsignedByte(), read(data, data.readUnsignedByte(), MAX_LOCATOR), read(data, data.readUnsignedByte(), MAX_INVITE))
+                    1 ->
+                        CrewRelayFrame.Register(
+                            role(data.readUnsignedByte()),
+                            data.readUnsignedByte(),
+                            read(data, data.readUnsignedByte(), MAX_LOCATOR),
+                            read(data, data.readUnsignedByte(), MAX_INVITE),
+                        )
                     2 -> {
                         val registeredRole = role(data.readUnsignedByte())
                         val hasRoute = data.readUnsignedByte()
@@ -169,17 +195,32 @@ object CrewRelayCodec {
                         when (registeredRole) {
                             CrewRelayRole.HOST -> {
                                 require(hasRoute == 0)
-                                CrewRelayFrame.Registered(registeredRole, resumeToken = read(data, CREW_RELAY_RESUME_TOKEN_BYTES, CREW_RELAY_RESUME_TOKEN_BYTES))
+                                CrewRelayFrame.Registered(
+                                    registeredRole,
+                                    resumeToken =
+                                        read(
+                                            data,
+                                            CREW_RELAY_RESUME_TOKEN_BYTES,
+                                            CREW_RELAY_RESUME_TOKEN_BYTES,
+                                        ),
+                                )
                             }
                             CrewRelayRole.JOIN -> {
                                 require(hasRoute == 1)
-                                CrewRelayFrame.Registered(registeredRole, CrewRelayRouteId(read(data, ROUTE_BYTES, ROUTE_BYTES)))
+                                CrewRelayFrame.Registered(
+                                    registeredRole,
+                                    CrewRelayRouteId(read(data, ROUTE_BYTES, ROUTE_BYTES)),
+                                )
                             }
                         }
                     }
                     3 -> readRoute(data, true)
                     4 -> readRoute(data, false)
-                    5 -> CrewRelayFrame.Data(CrewRelayRouteId(read(data, ROUTE_BYTES, ROUTE_BYTES)), read(data, data.available(), CREW_RELAY_MAX_DATA_BYTES))
+                    5 ->
+                        CrewRelayFrame.Data(
+                            CrewRelayRouteId(read(data, ROUTE_BYTES, ROUTE_BYTES)),
+                            read(data, data.available(), CREW_RELAY_MAX_DATA_BYTES),
+                        )
                     6 -> CrewRelayFrame.Error(read(data, data.readUnsignedByte(), MAX_REASON))
                     7 -> CrewRelayFrame.Ping
                     8 -> CrewRelayFrame.Pong
@@ -200,7 +241,12 @@ object CrewRelayCodec {
         }
     }
 
-    private fun writeRoute(output: DataOutputStream, type: CrewRelayType, id: CrewRelayRouteId, reason: ByteArray) {
+    private fun writeRoute(
+        output: DataOutputStream,
+        type: CrewRelayType,
+        id: CrewRelayRouteId,
+        reason: ByteArray,
+    ) {
         boundedAllowEmpty(reason, MAX_REASON)
         output.writeByte(type.wire)
         output.write(id.bytes)
@@ -211,12 +257,20 @@ object CrewRelayCodec {
     private fun readRoute(data: DataInputStream, opened: Boolean): CrewRelayFrame {
         val id = CrewRelayRouteId(read(data, ROUTE_BYTES, ROUTE_BYTES))
         val reason = read(data, data.readUnsignedByte(), MAX_REASON, empty = true)
-        return if (opened) CrewRelayFrame.RouteOpen(id, reason) else CrewRelayFrame.RouteClose(id, reason)
+        return if (opened) CrewRelayFrame.RouteOpen(id, reason)
+        else CrewRelayFrame.RouteClose(id, reason)
     }
 
-    private fun role(value: Int) = CrewRelayRole.entries.firstOrNull { it.wire == value } ?: throw IllegalArgumentException("Bad relay role")
+    private fun role(value: Int) =
+        CrewRelayRole.entries.firstOrNull { it.wire == value }
+            ?: throw IllegalArgumentException("Bad relay role")
 
-    private fun read(data: DataInputStream, size: Int, max: Int, empty: Boolean = false): ByteArray {
+    private fun read(
+        data: DataInputStream,
+        size: Int,
+        max: Int,
+        empty: Boolean = false,
+    ): ByteArray {
         require(size <= max && (empty || size > 0))
         return ByteArray(size).also(data::readFully)
     }
@@ -231,6 +285,12 @@ object CrewRelayCodec {
 /** The relay locator is an HTTPS URL; only its scheme changes for the WebSocket connection. */
 fun CrewRelayLocatorWebSocketUrl(locator: String): String {
     val uri = URI(locator)
-    require(uri.scheme == "https" && uri.rawQuery == null && uri.rawFragment == null && uri.rawUserInfo == null && uri.host != null)
+    require(
+        uri.scheme == "https" &&
+            uri.rawQuery == null &&
+            uri.rawFragment == null &&
+            uri.rawUserInfo == null &&
+            uri.host != null
+    )
     return "wss" + locator.removePrefix("https")
 }

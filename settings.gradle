@@ -14,6 +14,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven { url 'https://jitpack.io' }
     }
 }
 
@@ -21,6 +22,6 @@ gradle.ext.androidxMediaModulePrefix = 'media-'
 gradle.ext.androidxMediaProjectName = 'media-'
 apply from: file("media/core_settings.gradle")
 
-rootProject.name = "Auxio"
+rootProject.name = "Shippy"
 include ':app'
 include ':musikr'

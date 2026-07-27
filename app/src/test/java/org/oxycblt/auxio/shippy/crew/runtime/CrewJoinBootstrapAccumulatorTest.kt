@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewJoinBootstrapAccumulatorTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewJoinBootstrapAccumulatorTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import org.junit.Assert.assertEquals
@@ -58,7 +65,10 @@ class CrewJoinBootstrapAccumulatorTest {
         assertEquals(CrewJoinBootstrapResult.Waiting, accept(coordinatorId, event, 0))
 
         val snapshot = state().toSnapshot()
-        assertEquals(CrewJoinBootstrapResult.Accepted(snapshot), accept(coordinatorId, CrewControlMessage.SnapshotInstalled(snapshot), 1))
+        assertEquals(
+            CrewJoinBootstrapResult.Accepted(snapshot),
+            accept(coordinatorId, CrewControlMessage.SnapshotInstalled(snapshot), 1),
+        )
     }
 
     @Test
@@ -71,7 +81,8 @@ class CrewJoinBootstrapAccumulatorTest {
 
     @Test
     fun `snapshot without joining member is rejected`() {
-        val snapshot = state(members = listOf(CrewMember(coordinatorId, "Coordinator"))).toSnapshot()
+        val snapshot =
+            state(members = listOf(CrewMember(coordinatorId, "Coordinator"))).toSnapshot()
 
         assertEquals(
             CrewJoinBootstrapResult.Rejected.LocalMemberMissingOrDuplicate,
@@ -106,7 +117,11 @@ class CrewJoinBootstrapAccumulatorTest {
 
         assertEquals(
             CrewJoinBootstrapResult.Rejected.ElectionCertificateBootstrap,
-            accept(coordinatorId, CrewControlMessage.SnapshotInstalled(state.toSnapshot(), listOf(vote)), 0),
+            accept(
+                coordinatorId,
+                CrewControlMessage.SnapshotInstalled(state.toSnapshot(), listOf(vote)),
+                0,
+            ),
         )
     }
 
@@ -119,7 +134,10 @@ class CrewJoinBootstrapAccumulatorTest {
             accumulator.accept(authenticatedMemberId, it, nowMonotonicMs)
         }
 
-    private fun state(members: List<CrewMember> = listOf(CrewMember(coordinatorId, "Coordinator"), CrewMember(joiningMemberId, "Joining"))) =
+    private fun state(
+        members: List<CrewMember> =
+            listOf(CrewMember(coordinatorId, "Coordinator"), CrewMember(joiningMemberId, "Joining"))
+    ) =
         CrewState(
             sessionId = sessionId,
             protocolVersion = protocol,

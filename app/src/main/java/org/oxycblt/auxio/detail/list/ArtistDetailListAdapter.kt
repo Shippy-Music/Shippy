@@ -15,9 +15,9 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.detail.list
 
+import android.annotation.SuppressLint
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.IntegerTable
@@ -132,6 +132,7 @@ private class ArtistAlbumViewHolder private constructor(private val binding: Ite
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Album>() {
+                @SuppressLint("DiffUtilEquals")
                 override fun areContentsTheSame(oldItem: Album, newItem: Album) =
                     oldItem.name == newItem.name && oldItem.dates == newItem.dates
             }
@@ -184,6 +185,7 @@ private class ArtistSongViewHolder private constructor(private val binding: Item
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Song>() {
+                @SuppressLint("DiffUtilEquals")
                 override fun areContentsTheSame(oldItem: Song, newItem: Song) =
                     oldItem.name == newItem.name && oldItem.album.name == newItem.album.name
             }

@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * PlaybackResolutionCoordinatorTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * PlaybackResolutionCoordinatorTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.domain
 
 import java.io.File
@@ -44,10 +51,7 @@ import org.oxycblt.auxio.shippy.provider.StreamConstraints
 class PlaybackResolutionCoordinatorTest {
     private val provider = FakeProvider()
     private val coordinator =
-        PlaybackResolutionCoordinator(
-            PlaybackResolver(),
-            ProviderRegistry(setOf(provider)),
-        )
+        PlaybackResolutionCoordinator(PlaybackResolver(), ProviderRegistry(setOf(provider)))
 
     @Test
     fun `provider resolution becomes canonical resolved playback`() = runBlocking {
@@ -75,7 +79,10 @@ class PlaybackResolutionCoordinatorTest {
         val firstReady = coordinator.prepare(first, policy) as PlaybackPreparation.Ready
         val secondReady = coordinator.prepare(second, policy) as PlaybackPreparation.Ready
 
-        assertNotEquals(firstReady.value.playback.queueItemId, secondReady.value.playback.queueItemId)
+        assertNotEquals(
+            firstReady.value.playback.queueItemId,
+            secondReady.value.playback.queueItemId,
+        )
         assertEquals(first.track.id, second.track.id)
     }
 
@@ -140,31 +147,35 @@ class PlaybackResolutionCoordinatorTest {
     }
 
     @Test
-    fun `exact active Crew temporary media wins ahead of verified download without another player path`() = runBlocking {
-        val item = queueItem("crew-occurrence")
-        val file = crewTemporaryFile()
-        try {
-            val index = activeCrewIndex(item, file)
-            val expected = requireNotNull(index.augmentActive(item)).track.candidates.last()
-            val coordinator = coordinatorWithCrewTemporary(index, { verifiedDownload(item) })
-            val callsBefore = provider.resolveCalls
+    fun `exact active Crew temporary media wins ahead of verified download without another player path`() =
+        runBlocking {
+            val item = queueItem("crew-occurrence")
+            val file = crewTemporaryFile()
+            try {
+                val index = activeCrewIndex(item, file)
+                val expected = requireNotNull(index.augmentActive(item)).track.candidates.last()
+                val coordinator = coordinatorWithCrewTemporary(index, { verifiedDownload(item) })
+                val callsBefore = provider.resolveCalls
 
-            val result =
-                coordinator.prepare(
-                    item,
-                    ResolutionPolicy(listOf(provider.descriptor.id), pushPullEnabled = false),
-                ) as PlaybackPreparation.Ready
+                val result =
+                    coordinator.prepare(
+                        item,
+                        ResolutionPolicy(listOf(provider.descriptor.id), pushPullEnabled = false),
+                    ) as PlaybackPreparation.Ready
 
-            assertEquals(item.id, result.value.item.id)
-            assertEquals(item.id, result.value.playback.queueItemId)
-            assertEquals(expected.id, result.value.playback.candidateId)
-            assertEquals(expected.locator, result.value.playback.uri)
-            assertEquals(CandidateKind.CREW_TEMPORARY, result.value.item.track.candidates.first { it.id == expected.id }.kind)
-            assertEquals(callsBefore, provider.resolveCalls)
-        } finally {
-            file.delete()
+                assertEquals(item.id, result.value.item.id)
+                assertEquals(item.id, result.value.playback.queueItemId)
+                assertEquals(expected.id, result.value.playback.candidateId)
+                assertEquals(expected.locator, result.value.playback.uri)
+                assertEquals(
+                    CandidateKind.CREW_TEMPORARY,
+                    result.value.item.track.candidates.first { it.id == expected.id }.kind,
+                )
+                assertEquals(callsBefore, provider.resolveCalls)
+            } finally {
+                file.delete()
+            }
         }
-    }
 
     @Test
     fun `ended Crew overlay leaves verified download behavior unchanged`() = runBlocking {
@@ -183,7 +194,9 @@ class PlaybackResolutionCoordinatorTest {
 
             assertEquals(item.id, result.value.playback.queueItemId)
             assertEquals("content://shippy/download/verified", result.value.playback.uri)
-            assertTrue(result.value.item.track.candidates.none { it.kind == CandidateKind.CREW_TEMPORARY })
+            assertTrue(
+                result.value.item.track.candidates.none { it.kind == CandidateKind.CREW_TEMPORARY }
+            )
         } finally {
             file.delete()
         }
@@ -215,7 +228,9 @@ class PlaybackResolutionCoordinatorTest {
             listOf(
                 valid.copy(job = valid.job.copy(candidateId = CandidateId("provider:other"))),
                 valid.copy(job = valid.job.copy(trackId = TrackId("provider:other"))),
-                valid.copy(job = valid.job.copy(artifact = valid.job.artifact!!.copy(contentLength = 0))),
+                valid.copy(
+                    job = valid.job.copy(artifact = valid.job.artifact!!.copy(contentLength = 0))
+                ),
                 valid.copy(job = valid.job.copy(state = DownloadState.VERIFYING, artifact = null)),
             )
 
@@ -282,7 +297,7 @@ class PlaybackResolutionCoordinatorTest {
     }
 
     private fun coordinatorWithDownload(
-        latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?,
+        latestDownloadForTrack: suspend (TrackId) -> PersistedDownload?
     ): PlaybackResolutionCoordinator =
         PlaybackResolutionCoordinator(
             PlaybackResolver(),
@@ -318,7 +333,8 @@ class PlaybackResolutionCoordinatorTest {
                 mimeType = "audio/mpeg",
                 objectSizeBytes = bytes.size.toLong(),
                 objectIntegrity = CrewMediaDigest.sha256(bytes),
-                chunks = listOf(CrewMediaChunkDescriptor(0, bytes.size, CrewMediaDigest.sha256(bytes))),
+                chunks =
+                    listOf(CrewMediaChunkDescriptor(0, bytes.size, CrewMediaDigest.sha256(bytes))),
             )
         return CrewTemporaryMediaIndex().also {
             it.beginSession(session)

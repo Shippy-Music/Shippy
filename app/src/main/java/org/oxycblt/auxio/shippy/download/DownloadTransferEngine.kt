@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * DownloadTransferEngine.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * DownloadTransferEngine.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.download
 
 import android.content.ContentResolver
@@ -29,11 +36,11 @@ import java.net.URISyntaxException
 import java.net.UnknownHostException
 import javax.inject.Inject
 import javax.net.ssl.SSLException
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
 
 data class DownloadTransferRequest(
     val uri: String,
@@ -41,16 +48,11 @@ data class DownloadTransferRequest(
     val expectedLength: Long? = null,
 )
 
-data class DownloadTransferProgress(
-    val bytesTransferred: Long,
-    val expectedBytes: Long?,
-)
+data class DownloadTransferProgress(val bytesTransferred: Long, val expectedBytes: Long?)
 
 sealed interface DownloadTransferResult {
-    data class Success(
-        val bytesTransferred: Long,
-        val declaredLength: Long?,
-    ) : DownloadTransferResult
+    data class Success(val bytesTransferred: Long, val declaredLength: Long?) :
+        DownloadTransferResult
 
     data class Failure(val reason: DownloadTransferFailure) : DownloadTransferResult
 }
@@ -98,17 +100,13 @@ sealed interface DownloadTransferFailure {
         override val retryable = false
     }
 
-    data class PrematureEof(
-        val expectedBytes: Long,
-        val actualBytes: Long,
-    ) : DownloadTransferFailure {
+    data class PrematureEof(val expectedBytes: Long, val actualBytes: Long) :
+        DownloadTransferFailure {
         override val retryable = true
     }
 
-    data class LengthExceeded(
-        val expectedBytes: Long,
-        val bytesBeforeRejectedChunk: Long,
-    ) : DownloadTransferFailure {
+    data class LengthExceeded(val expectedBytes: Long, val bytesBeforeRejectedChunk: Long) :
+        DownloadTransferFailure {
         override val retryable = false
     }
 }
@@ -128,7 +126,7 @@ internal constructor(
 ) {
     @Inject
     constructor(
-        @ApplicationContext context: Context,
+        @ApplicationContext context: Context
     ) : this(
         sourceFactory = AndroidDownloadTransferSourceFactory(context.contentResolver),
         monotonicTimeMs = { System.nanoTime() / 1_000_000 },
@@ -253,9 +251,7 @@ internal constructor(
                 } catch (_: SocketTimeoutException) {
                     return DownloadTransferResult.Failure(DownloadTransferFailure.Timeout)
                 } catch (_: IOException) {
-                    return DownloadTransferResult.Failure(
-                        DownloadTransferFailure.SourceReadFailed
-                    )
+                    return DownloadTransferResult.Failure(DownloadTransferFailure.SourceReadFailed)
                 }
             if (read == -1) break
             if (read == 0) continue
@@ -360,9 +356,8 @@ internal fun interface DownloadTransferSourceFactory {
     ): DownloadTransferSource
 }
 
-private class AndroidDownloadTransferSourceFactory(
-    private val contentResolver: ContentResolver,
-) : DownloadTransferSourceFactory {
+private class AndroidDownloadTransferSourceFactory(private val contentResolver: ContentResolver) :
+    DownloadTransferSourceFactory {
     override fun open(
         uri: URI,
         headers: Map<String, String>,
@@ -371,13 +366,7 @@ private class AndroidDownloadTransferSourceFactory(
     ): DownloadTransferSource =
         when (uri.scheme?.lowercase()) {
             "http",
-            "https" ->
-                HttpDownloadTransferSource(
-                    uri,
-                    headers,
-                    connectTimeoutMs,
-                    readTimeoutMs,
-                )
+            "https" -> HttpDownloadTransferSource(uri, headers, connectTimeoutMs, readTimeoutMs)
             "content" -> ContentDownloadTransferSource(contentResolver, uri)
             "file" -> FileDownloadTransferSource(uri)
             else -> throw IOException("Unsupported transfer source")
@@ -418,15 +407,12 @@ private class ContentDownloadTransferSource(
     override val declaredLength: Long? = null
 
     override fun openInput(): InputStream =
-        contentResolver.openInputStream(Uri.parse(uri.toString()))
-            ?: throw FileNotFoundException()
+        contentResolver.openInputStream(Uri.parse(uri.toString())) ?: throw FileNotFoundException()
 
     override fun close() = Unit
 }
 
-private class FileDownloadTransferSource(
-    uri: URI,
-) : DownloadTransferSource {
+private class FileDownloadTransferSource(uri: URI) : DownloadTransferSource {
     private val file = File(uri)
 
     override val httpStatusCode: Int? = null

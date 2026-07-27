@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * SafDownloadStorage.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * SafDownloadStorage.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.download
 
 import android.content.Context
@@ -18,6 +25,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.OutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.music.MusicSettings
@@ -96,17 +104,13 @@ constructor(
                             Intent.FLAG_GRANT_WRITE_URI_PERMISSION),
                 )
             } catch (_: SecurityException) {
-                return@withContext StorageResult.Failure(
-                    DownloadStorageFailure.PERMISSION_REVOKED
-                )
+                return@withContext StorageResult.Failure(DownloadStorageFailure.PERMISSION_REVOKED)
             }
             val root =
                 DocumentFile.fromTreeUri(context, treeUri)
                     ?: run {
                         releaseNewGrantIfUnused(treeUri, hadPersistedGrant, existingSourceUris)
-                        return@withContext StorageResult.Failure(
-                            DownloadStorageFailure.NOT_A_TREE
-                        )
+                        return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_A_TREE)
                     }
             if (!root.canRead()) {
                 releaseNewGrantIfUnused(treeUri, hadPersistedGrant, existingSourceUris)
@@ -120,7 +124,9 @@ constructor(
                 runCatching { Location.Unopened.from(context, treeUri)?.open(context) }.getOrNull()
                     ?: run {
                         releaseNewGrantIfUnused(treeUri, hadPersistedGrant, existingSourceUris)
-                        return@withContext StorageResult.Failure(DownloadStorageFailure.PERMISSION_REVOKED)
+                        return@withContext StorageResult.Failure(
+                            DownloadStorageFailure.PERMISSION_REVOKED
+                        )
                     }
             val destination =
                 DownloadDestination(
@@ -151,12 +157,15 @@ constructor(
                 musicSettings.forceLocationUpdate()
             }
             settings.setDestination(destination, sourcePlan.autoAddedDestinationUri)
-            previous?.treeUri?.takeIf { it != destination.treeUri }?.let(Uri::parse)?.let {
-                previousUri ->
-                if (sourcePlan.sourceUris.none { it == previousUri.toString() }) {
-                    releasePersistedGrant(previousUri)
+            previous
+                ?.treeUri
+                ?.takeIf { it != destination.treeUri }
+                ?.let(Uri::parse)
+                ?.let { previousUri ->
+                    if (sourcePlan.sourceUris.none { it == previousUri.toString() }) {
+                        releasePersistedGrant(previousUri)
+                    }
                 }
-            }
             StorageResult.Success(destination)
         }
 
@@ -164,31 +173,39 @@ constructor(
         withContext(Dispatchers.IO) {
             val destination =
                 settings.destination ?: return@withContext DownloadDestinationState.NotSelected
-            val treeUri = Uri.parse(destination.treeUri)
-            if (!hasPersistedReadWriteGrant(treeUri)) {
-                return@withContext DownloadDestinationState.Unavailable(
+            try {
+                val treeUri = Uri.parse(destination.treeUri)
+                if (!hasPersistedReadWriteGrant(treeUri)) {
+                    return@withContext DownloadDestinationState.Unavailable(
+                        destination,
+                        DownloadStorageFailure.PERMISSION_REVOKED,
+                    )
+                }
+                val root =
+                    DocumentFile.fromTreeUri(context, treeUri)
+                        ?: return@withContext DownloadDestinationState.Unavailable(
+                            destination,
+                            DownloadStorageFailure.NOT_A_TREE,
+                        )
+                when {
+                    !root.canRead() ->
+                        DownloadDestinationState.Unavailable(
+                            destination,
+                            DownloadStorageFailure.NOT_READABLE,
+                        )
+                    !root.canWrite() ->
+                        DownloadDestinationState.Unavailable(
+                            destination,
+                            DownloadStorageFailure.NOT_WRITABLE,
+                        )
+                    else -> DownloadDestinationState.Ready(destination, scan(root))
+                }
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                DownloadDestinationState.Unavailable(
                     destination,
                     DownloadStorageFailure.PERMISSION_REVOKED,
                 )
-            }
-            val root =
-                DocumentFile.fromTreeUri(context, treeUri)
-                    ?: return@withContext DownloadDestinationState.Unavailable(
-                        destination,
-                        DownloadStorageFailure.NOT_A_TREE,
-                    )
-            when {
-                !root.canRead() ->
-                    DownloadDestinationState.Unavailable(
-                        destination,
-                        DownloadStorageFailure.NOT_READABLE,
-                    )
-                !root.canWrite() ->
-                    DownloadDestinationState.Unavailable(
-                        destination,
-                        DownloadStorageFailure.NOT_WRITABLE,
-                    )
-                else -> DownloadDestinationState.Ready(destination, scan(root))
             }
         }
 
@@ -211,9 +228,7 @@ constructor(
             }
             val root =
                 DocumentFile.fromTreeUri(context, Uri.parse(ready.destination.treeUri))
-                    ?: return@withContext StorageResult.Failure(
-                        DownloadStorageFailure.NOT_A_TREE
-                    )
+                    ?: return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_A_TREE)
             val normalizedMime = mimeType?.takeIf(String::isNotBlank) ?: DEFAULT_MIME
             val fileName = uniqueFileName(root, title, jobId, normalizedMime)
             val document =
@@ -253,10 +268,10 @@ constructor(
                         DownloadStorageFailure.VERIFY_FAILED
                     )
             val length = file.length()
-            if (!file.exists() || length <= 0L || (expectedBytes != null && length != expectedBytes)) {
-                return@withContext StorageResult.Failure(
-                    DownloadStorageFailure.VERIFY_FAILED
-                )
+            if (
+                !file.exists() || length <= 0L || (expectedBytes != null && length != expectedBytes)
+            ) {
+                return@withContext StorageResult.Failure(DownloadStorageFailure.VERIFY_FAILED)
             }
             StorageResult.Success(
                 DownloadArtifact(
@@ -328,14 +343,14 @@ constructor(
         mimeType: String,
     ): String {
         val base =
-            title
-                .replace(UNSAFE_FILE_NAME, "_")
-                .trim(' ', '.', '_')
-                .take(MAX_BASE_LENGTH)
-                .ifBlank { "Track" }
+            title.replace(UNSAFE_FILE_NAME, "_").trim(' ', '.', '_').take(MAX_BASE_LENGTH).ifBlank {
+                "Track"
+            }
         val extension = extensionFor(mimeType)
         val suffix = jobId.value.filter(Char::isLetterOrDigit).take(8).ifBlank { "download" }
-        var candidate = "$base-$suffix.$extension"
+        var candidate = "$base.$extension"
+        if (root.findFile(candidate) == null) return candidate
+        candidate = "$base-$suffix.$extension"
         var attempt = 2
         while (root.findFile(candidate) != null) {
             candidate = "$base-$suffix-$attempt.$extension"
@@ -354,12 +369,17 @@ constructor(
     private fun extensionFor(mimeType: String): String =
         when (mimeType.lowercase()) {
             "audio/mpeg" -> "mp3"
-            "audio/mp4", "audio/x-m4a" -> "m4a"
-            "audio/flac", "audio/x-flac" -> "flac"
-            "audio/ogg", "application/ogg" -> "ogg"
+            "audio/mp4",
+            "audio/x-m4a" -> "m4a"
+            "audio/flac",
+            "audio/x-flac" -> "flac"
+            "audio/ogg",
+            "application/ogg" -> "ogg"
             "audio/opus" -> "opus"
-            "audio/wav", "audio/x-wav" -> "wav"
-            "audio/aac", "audio/aacp" -> "aac"
+            "audio/wav",
+            "audio/x-wav" -> "wav"
+            "audio/aac",
+            "audio/aacp" -> "aac"
             else -> "m4a"
         }
 

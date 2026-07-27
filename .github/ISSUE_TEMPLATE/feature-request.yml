@@ -1,57 +1,31 @@
-name: Feature Request
-description: Propose new functionality
+name: Feature request
+description: Propose a focused improvement consistent with Shippy's product direction
 labels: ["enhancement"]
-assignees:
-  - OxygenCobalt
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Welcome to Auxio's feature request form.
-        Please note that there have been several major features that Auxio has already **rejected**, due to either technical issues or due to it not being in scope for the app. To ensure that you are not requesting a feature that was already rejected, please read the [Why Are These Features Missing?](https://github.com/OxygenCobalt/Auxio/wiki/Why-Are-These-Features-Missing%3F) page.
-  - type: textarea
-    id: desc
-    attributes:
-      label: Description 
-      description: Provide a clear and concise description of the feature to implement.
-      placeholder: I want...
-    validations:
-      required: true
   - type: textarea
     id: problem
     attributes:
-      label: Problem solved
-      description: Is your feature request related to a problem? Please describe.
-      placeholder: I'm always frustrated when...
-  - type: textarea
-    id: others
-    attributes:
-      label: Other implementations
-      description: How do other music players handle this? Please describe.
-      placeholder: This music player does...
+      label: User problem
+      description: What friction or missing workflow should Shippy solve?
     validations:
-      required: true 
+      required: true
   - type: textarea
-    id: why
+    id: proposal
     attributes:
-      label: Benefit
-      description: >
-        How will this addition benefit **everyone's** usage of Auxio? A convincing argument increases the likelihood
-        that this feature is accepted.
-      placeholder: This feature allows...
+      label: Proposed behavior
+      description: Describe the smallest coherent user-facing solution.
     validations:
-      required: true 
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
   - type: checkboxes
-    id: terms
+    id: checks
     attributes:
-      label: Duplicates
-      description: By submitting this issue, you aknowledge the following
+      label: Checks
       options:
-        - label: I have checked this feature request for duplicates.
+        - label: I searched for an existing request.
           required: true
-        - label: I have checked that this feature is not implemented in the [lastest version](https://github.com/OxygenCobalt/Auxio/releases).
+        - label: This fits local, provider, download, playback, library, or Crew workflows.
           required: true
-        - label: I have checked the [Why Are These Features Missing?](https://github.com/OxygenCobalt/Auxio/wiki/Why-Are-These-Features-Missing%3F) page.
-          required: true
-        - label: I agree to the [Contribution Guidelines](https://github.com/OxygenCobalt/Auxio/blob/dev/.github/CONTRIBUTING.md).
-          required: true          

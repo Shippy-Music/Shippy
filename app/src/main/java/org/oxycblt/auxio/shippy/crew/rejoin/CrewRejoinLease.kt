@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewRejoinLease.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewRejoinLease.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.rejoin
 
 import java.io.ByteArrayInputStream
@@ -17,8 +29,8 @@ import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
-import org.oxycblt.auxio.shippy.crew.invite.CrewInviteId
 import org.oxycblt.auxio.shippy.crew.invite.CrewInvite
+import org.oxycblt.auxio.shippy.crew.invite.CrewInviteId
 import org.oxycblt.auxio.shippy.crew.invite.CrewInviteSecret
 import org.oxycblt.auxio.shippy.crew.invite.CrewRelayLocator
 import org.oxycblt.auxio.shippy.crew.invite.CrewSessionLocator
@@ -40,7 +52,9 @@ class CrewRejoinLease(
             "Crew rejoin member protocol must match session"
         }
         require(credentialId.isBoundedCredentialId()) { "Crew credential ID is invalid" }
-        require(credentialSecret.isEncodedCredentialSecret()) { "Crew credential secret is invalid" }
+        require(credentialSecret.isEncodedCredentialSecret()) {
+            "Crew credential secret is invalid"
+        }
         require(issuedAtEpochMs >= 0L && expiresAtEpochMs > issuedAtEpochMs) {
             "Crew credential lifetime is invalid"
         }
@@ -49,14 +63,19 @@ class CrewRejoinLease(
         }
     }
 
-    val protocolVersion: ProtocolVersion get() = sessionId.protocolVersion
+    val protocolVersion: ProtocolVersion
+        get() = sessionId.protocolVersion
 
     override fun equals(other: Any?) =
         other is CrewRejoinLease &&
-            sessionId == other.sessionId && memberId == other.memberId &&
-            sessionLocator == other.sessionLocator && relayLocator == other.relayLocator &&
-            rendezvousInviteId == other.rendezvousInviteId && credentialId == other.credentialId &&
-            credentialSecret == other.credentialSecret && issuedAtEpochMs == other.issuedAtEpochMs &&
+            sessionId == other.sessionId &&
+            memberId == other.memberId &&
+            sessionLocator == other.sessionLocator &&
+            relayLocator == other.relayLocator &&
+            rendezvousInviteId == other.rendezvousInviteId &&
+            credentialId == other.credentialId &&
+            credentialSecret == other.credentialSecret &&
+            issuedAtEpochMs == other.issuedAtEpochMs &&
             expiresAtEpochMs == other.expiresAtEpochMs
 
     override fun hashCode() =
@@ -84,7 +103,10 @@ class CrewRejoinLease(
 sealed interface CrewRejoinLeaseDecodeResult {
     data class Accepted(val lease: CrewRejoinLease) : CrewRejoinLeaseDecodeResult
 
-    /** Includes legacy v1 envelopes, which intentionally cannot be migrated because they embed invite secrets. */
+    /**
+     * Includes legacy v1 envelopes, which intentionally cannot be migrated because they embed
+     * invite secrets.
+     */
     data object Rejected : CrewRejoinLeaseDecodeResult
 }
 
@@ -108,7 +130,7 @@ object CrewRejoinLeaseCodec {
                 output.writeString(lease.memberId.value)
                 output.writeString(lease.sessionLocator.value)
                 output.writeBoolean(lease.relayLocator != null)
-                lease.relayLocator?.let(output::writeString)
+                lease.relayLocator?.let { relayLocator -> output.writeString(relayLocator.value) }
                 output.writeString(lease.rendezvousInviteId.value)
                 output.writeString(lease.credentialId)
                 output.writeString(lease.credentialSecret)
@@ -122,7 +144,8 @@ object CrewRejoinLeaseCodec {
         try {
             DataInputStream(ByteArrayInputStream(bytes)).use { input ->
                 // v1 carried a full public invite secret. Reject rather than migrate it.
-                if (input.readUnsignedByte() != FORMAT_VERSION) return CrewRejoinLeaseDecodeResult.Rejected
+                if (input.readUnsignedByte() != FORMAT_VERSION)
+                    return CrewRejoinLeaseDecodeResult.Rejected
                 val protocol = ProtocolVersion(input.readInt())
                 val sessionId = CrewSessionId(input.readString(), protocol)
                 val memberId = CrewMemberId(input.readString(), protocol)
@@ -184,6 +207,7 @@ fun interface CrewCredentialRandom {
 
 object SecureCrewCredentialRandom : CrewCredentialRandom {
     private val random = SecureRandom()
+
     override fun nextBytes(size: Int) = ByteArray(size).also(random::nextBytes)
 }
 
@@ -193,7 +217,7 @@ object SecureCrewCredentialRandom : CrewCredentialRandom {
  * transport. The registry stores SHA-256 verifiers, never raw member secrets.
  */
 class CrewRejoinCredentialRegistry(
-    private val random: CrewCredentialRandom = SecureCrewCredentialRandom,
+    private val random: CrewCredentialRandom = SecureCrewCredentialRandom
 ) {
     private val records = linkedMapOf<String, CredentialRecord>()
 
@@ -208,7 +232,9 @@ class CrewRejoinCredentialRegistry(
         issuedAtEpochMs: Long,
         expiresAtEpochMs: Long,
     ): CrewRejoinLease {
-        require(sessionId.protocolVersion == memberId.protocolVersion) { "Crew member protocol must match session" }
+        require(sessionId.protocolVersion == memberId.protocolVersion) {
+            "Crew member protocol must match session"
+        }
         require(expiresAtEpochMs - issuedAtEpochMs <= CrewRejoinLease.MAX_LIFETIME_MS) {
             "Crew credential lifetime exceeds maximum"
         }
@@ -239,21 +265,27 @@ class CrewRejoinCredentialRegistry(
     @Synchronized
     fun verify(lease: CrewRejoinLease, nowEpochMs: Long): Boolean {
         val record = records[lease.credentialId] ?: return false
-        if (nowEpochMs >= record.expiresAtEpochMs || nowEpochMs < record.issuedAtEpochMs) return false
+        if (nowEpochMs >= record.expiresAtEpochMs || nowEpochMs < record.issuedAtEpochMs)
+            return false
         if (
-            record.sessionId != lease.sessionId || record.memberId != lease.memberId ||
-                record.protocolVersion != lease.protocolVersion || record.sessionLocator != lease.sessionLocator ||
-                record.relayLocator != lease.relayLocator || record.rendezvousInviteId != lease.rendezvousInviteId ||
-                record.issuedAtEpochMs != lease.issuedAtEpochMs || record.expiresAtEpochMs != lease.expiresAtEpochMs
-        ) return false
+            record.sessionId != lease.sessionId ||
+                record.memberId != lease.memberId ||
+                record.protocolVersion != lease.protocolVersion ||
+                record.sessionLocator != lease.sessionLocator ||
+                record.relayLocator != lease.relayLocator ||
+                record.rendezvousInviteId != lease.rendezvousInviteId ||
+                record.issuedAtEpochMs != lease.issuedAtEpochMs ||
+                record.expiresAtEpochMs != lease.expiresAtEpochMs
+        )
+            return false
         return MessageDigest.isEqual(record.secretVerifier, sha256(lease.credentialSecret))
     }
 
     /**
      * Returns only currently usable reconnect invitations for this exact rendezvous. These are
-     * synthetic private invitations: their secret is the stored SHA-256 verifier, never the
-     * lease secret. The host uses them only to decrypt a joiner's first encrypted hello and then
-     * verifies the hello's claimed member against the candidate record.
+     * synthetic private invitations: their secret is the stored SHA-256 verifier, never the lease
+     * secret. The host uses them only to decrypt a joiner's first encrypted hello and then verifies
+     * the hello's claimed member against the candidate record.
      */
     @Synchronized
     fun activeInviteCandidates(
@@ -264,9 +296,11 @@ class CrewRejoinCredentialRegistry(
         limit: Int = MAX_ACTIVE_CANDIDATES,
     ): List<CrewRejoinInviteCandidate> {
         require(limit in 1..MAX_ACTIVE_CANDIDATES) { "Crew reconnect candidate limit is invalid" }
-        return records.values.asSequence()
+        return records.values
+            .asSequence()
             .filter {
-                it.sessionId == sessionId && it.sessionLocator == sessionLocator &&
+                it.sessionId == sessionId &&
+                    it.sessionLocator == sessionLocator &&
                     it.rendezvousInviteId == rendezvousInviteId &&
                     nowEpochMs in it.issuedAtEpochMs until it.expiresAtEpochMs
             }
@@ -294,12 +328,17 @@ class CrewRejoinCredentialRegistry(
     fun exportTransferSnapshot(sessionId: CrewSessionId): CrewRejoinCredentialTransferSnapshot =
         CrewRejoinCredentialTransferSnapshot(
             sessionId = sessionId,
-            records = records.values.filter { it.sessionId == sessionId }.map(CredentialRecord::toTransfer),
+            records =
+                records.values
+                    .filter { it.sessionId == sessionId }
+                    .map(CredentialRecord::toTransfer),
         )
 
     @Synchronized
     fun importTransferSnapshot(snapshot: CrewRejoinCredentialTransferSnapshot) {
-        require(snapshot.records.size <= MAX_TRANSFER_RECORDS) { "Crew rejoin transfer is too large" }
+        require(snapshot.records.size <= MAX_TRANSFER_RECORDS) {
+            "Crew rejoin transfer is too large"
+        }
         snapshot.records.forEach { transfer ->
             require(transfer.sessionId == snapshot.sessionId) { "Crew transfer session mismatch" }
             val record = CredentialRecord.from(transfer)
@@ -308,7 +347,8 @@ class CrewRejoinCredentialRegistry(
         }
     }
 
-    private fun encodeRandom(size: Int) = Base64.getUrlEncoder().withoutPadding().encodeToString(random.nextBytes(size))
+    private fun encodeRandom(size: Int) =
+        Base64.getUrlEncoder().withoutPadding().encodeToString(random.nextBytes(size))
 
     private companion object {
         const val CREDENTIAL_ID_BYTES = 16
@@ -341,7 +381,10 @@ data class CrewRejoinCredentialTransferRecord(
     val expiresAtEpochMs: Long,
 ) {
     init {
-        require(sessionId.protocolVersion == protocolVersion && memberId.protocolVersion == protocolVersion)
+        require(
+            sessionId.protocolVersion == protocolVersion &&
+                memberId.protocolVersion == protocolVersion
+        )
         require(credentialId.isBoundedCredentialId())
         require(secretVerifier.size == SHA256_BYTES)
         require(issuedAtEpochMs >= 0L && expiresAtEpochMs > issuedAtEpochMs)
@@ -370,39 +413,62 @@ private data class CredentialRecord(
             protocolVersion = protocolVersion,
             sessionLocator = sessionLocator,
             inviteId = rendezvousInviteId,
-            secret = CrewInviteSecret(Base64.getUrlEncoder().withoutPadding().encodeToString(secretVerifier)),
+            secret =
+                CrewInviteSecret(
+                    Base64.getUrlEncoder().withoutPadding().encodeToString(secretVerifier)
+                ),
             issuedAtEpochMs = issuedAtEpochMs,
             expiresAtEpochMs = expiresAtEpochMs,
             relayLocator = relayLocator,
         )
+
     fun toTransfer() =
         CrewRejoinCredentialTransferRecord(
-            sessionId, memberId, protocolVersion, sessionLocator, relayLocator, rendezvousInviteId,
-            credentialId, secretVerifier.copyOf(), issuedAtEpochMs, expiresAtEpochMs,
+            sessionId,
+            memberId,
+            protocolVersion,
+            sessionLocator,
+            relayLocator,
+            rendezvousInviteId,
+            credentialId,
+            secretVerifier.copyOf(),
+            issuedAtEpochMs,
+            expiresAtEpochMs,
         )
 
     companion object {
         fun from(lease: CrewRejoinLease) =
             CredentialRecord(
-                lease.sessionId, lease.memberId, lease.protocolVersion, lease.sessionLocator,
-                lease.relayLocator, lease.rendezvousInviteId, lease.credentialId,
-                sha256(lease.credentialSecret), lease.issuedAtEpochMs, lease.expiresAtEpochMs,
+                lease.sessionId,
+                lease.memberId,
+                lease.protocolVersion,
+                lease.sessionLocator,
+                lease.relayLocator,
+                lease.rendezvousInviteId,
+                lease.credentialId,
+                sha256(lease.credentialSecret),
+                lease.issuedAtEpochMs,
+                lease.expiresAtEpochMs,
             )
 
         fun from(transfer: CrewRejoinCredentialTransferRecord) =
             CredentialRecord(
-                transfer.sessionId, transfer.memberId, transfer.protocolVersion, transfer.sessionLocator,
-                transfer.relayLocator, transfer.rendezvousInviteId, transfer.credentialId,
-                transfer.secretVerifier.copyOf(), transfer.issuedAtEpochMs, transfer.expiresAtEpochMs,
+                transfer.sessionId,
+                transfer.memberId,
+                transfer.protocolVersion,
+                transfer.sessionLocator,
+                transfer.relayLocator,
+                transfer.rendezvousInviteId,
+                transfer.credentialId,
+                transfer.secretVerifier.copyOf(),
+                transfer.issuedAtEpochMs,
+                transfer.expiresAtEpochMs,
             )
     }
 }
 
 /** A bounded candidate the host can try after the ordinary public invite has expired. */
-data class CrewRejoinInviteCandidate(
-    val memberId: CrewMemberId,
-    val invite: CrewInvite,
-)
+data class CrewRejoinInviteCandidate(val memberId: CrewMemberId, val invite: CrewInvite)
 
 /**
  * Derives the same private reconnect invitation on the joining device without retaining a QR
@@ -414,7 +480,12 @@ object CrewRejoinInviteFactory {
             protocolVersion = lease.protocolVersion,
             sessionLocator = lease.sessionLocator,
             inviteId = lease.rendezvousInviteId,
-            secret = CrewInviteSecret(Base64.getUrlEncoder().withoutPadding().encodeToString(sha256(lease.credentialSecret))),
+            secret =
+                CrewInviteSecret(
+                    Base64.getUrlEncoder()
+                        .withoutPadding()
+                        .encodeToString(sha256(lease.credentialSecret))
+                ),
             issuedAtEpochMs = lease.issuedAtEpochMs,
             expiresAtEpochMs = lease.expiresAtEpochMs,
             relayLocator = lease.relayLocator,

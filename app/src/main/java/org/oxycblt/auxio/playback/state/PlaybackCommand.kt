@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.state
 
 import javax.inject.Inject
@@ -229,8 +228,9 @@ constructor(
         val candidate =
             track.candidates.singleOrNull { it.kind == CandidateKind.LOCAL }
                 ?: error("Local queue item must contain exactly one local candidate")
-        val uri = candidate.locator?.takeIf(String::isNotBlank)
-            ?: error("Local queue item candidate must contain a playable URI")
+        val uri =
+            candidate.locator?.takeIf(String::isNotBlank)
+                ?: error("Local queue item candidate must contain a playable URI")
         return ResolvedQueueItem(
             item = this,
             playback =

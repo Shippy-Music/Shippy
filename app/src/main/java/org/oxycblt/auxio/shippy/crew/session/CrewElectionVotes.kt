@@ -1,17 +1,24 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewElectionVotes.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewElectionVotes.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.session
 
-import org.oxycblt.auxio.shippy.crew.core.CrewElectionVote
 import org.oxycblt.auxio.shippy.crew.core.CrewElectionCheckpoint
+import org.oxycblt.auxio.shippy.crew.core.CrewElectionVote
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
 import org.oxycblt.auxio.shippy.crew.core.CrewState
@@ -37,9 +44,9 @@ sealed interface CrewElectionVoteResult {
 /**
  * Bounded in-memory collection of independently authenticated election votes.
  *
- * A transport-authenticated peer may contribute only its own vote. Collection is tied to the
- * exact persisted checkpoint and the liveness policy's deterministic candidate. Any state
- * advance resets the certificate, preventing votes from leaking across terms or sequences.
+ * A transport-authenticated peer may contribute only its own vote. Collection is tied to the exact
+ * persisted checkpoint and the liveness policy's deterministic candidate. Any state advance resets
+ * the certificate, preventing votes from leaking across terms or sequences.
  */
 class CrewElectionVoteCollector {
     private var checkpoint: CrewElectionCheckpoint? = null
@@ -80,10 +87,7 @@ class CrewElectionVoteCollector {
             )
         }
 
-        if (
-            checkpoint != currentCheckpoint ||
-                candidateMemberId != eligibility.candidateMemberId
-        ) {
+        if (checkpoint != currentCheckpoint || candidateMemberId != eligibility.candidateMemberId) {
             checkpoint = currentCheckpoint
             candidateMemberId = eligibility.candidateMemberId
             votes.clear()
@@ -132,28 +136,21 @@ class CrewElectionVoteCollector {
         votes.clear()
     }
 
-    private fun recorded(
-        state: CrewState,
-        vote: CrewElectionVote,
-    ) =
+    private fun recorded(state: CrewState, vote: CrewElectionVote) =
         CrewElectionVoteResult.Recorded(
             vote = vote,
             authenticatedVotes = orderedVotes(),
             hasStrictMajority = votes.size > state.members.size / 2,
         )
 
-    private fun duplicate(
-        state: CrewState,
-        vote: CrewElectionVote,
-    ) =
+    private fun duplicate(state: CrewState, vote: CrewElectionVote) =
         CrewElectionVoteResult.Duplicate(
             vote = vote,
             authenticatedVotes = orderedVotes(),
             hasStrictMajority = votes.size > state.members.size / 2,
         )
 
-    private fun orderedVotes() =
-        votes.values.sortedBy { it.voterMemberId.value }
+    private fun orderedVotes() = votes.values.sortedBy { it.voterMemberId.value }
 }
 
 fun CrewState.toElectedSnapshot(candidateMemberId: CrewMemberId): CrewSnapshot {

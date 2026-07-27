@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * JioSaavnProviderBrowseTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * JioSaavnProviderBrowseTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.provider.jiosaavn
 
 import kotlinx.coroutines.runBlocking
@@ -36,7 +43,10 @@ class JioSaavnProviderBrowseTest {
             setOf(ProviderEntityType.ALBUM, ProviderEntityType.ARTIST, ProviderEntityType.PLAYLIST),
             page.entities.map { it.type }.toSet(),
         )
-        assertEquals("fixture-album", page.entities.first { it.type == ProviderEntityType.ALBUM }.sourceItemId)
+        assertEquals(
+            "fixture-album",
+            page.entities.first { it.type == ProviderEntityType.ALBUM }.sourceItemId,
+        )
         assertTrue(page.entities.all { it.originalUrl?.startsWith("https://") == true })
     }
 
@@ -58,7 +68,12 @@ class JioSaavnProviderBrowseTest {
 
             assertTrue(result is ProviderResult.Success)
             assertEquals(1, (result as ProviderResult.Success).value.tracks.size)
-            assertTrue(transport.urls.any { it.contains("token=fixture-$type") && it.contains("type=${type.name.lowercase()}") })
+            assertTrue(
+                transport.urls.any {
+                    it.contains("token=fixture-$type") &&
+                        it.contains("type=${type.name.lowercase()}")
+                }
+            )
         }
     }
 
@@ -106,7 +121,9 @@ class JioSaavnProviderBrowseTest {
         val provider =
             JioSaavnProvider(
                 object : ProviderHttpTransport {
-                    override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse {
+                    override suspend fun execute(
+                        request: ProviderHttpRequest
+                    ): ProviderHttpResponse {
                         val body = if (request.url.contains("search.getResults")) SONGS else "{"
                         return ProviderHttpResponse(200, emptyMap(), body.toByteArray())
                     }
@@ -138,10 +155,14 @@ class JioSaavnProviderBrowseTest {
     }
 
     private companion object {
-        const val SONG = """{"id":"fixture-song","title":"Fixture Song","subtitle":"Fixture Artist"}"""
+        const val SONG =
+            """{"id":"fixture-song","title":"Fixture Song","subtitle":"Fixture Artist"}"""
         const val SONGS = """{"results":[$SONG]}"""
-        const val ALBUM = """{"results":[{"title":"Fixture Album","subtitle":"Album Artist","image":"https://c.saavncdn.com/a-150x150.jpg","perma_url":"https://www.jiosaavn.com/album/fixture-album"},{"title":"Bad Numeric Token","perma_url":"https://www.jiosaavn.com/album/12345"}]}"""
-        const val ARTIST = """{"results":[{"title":"Fixture Artist","role":"Singer","image":"https://c.saavncdn.com/b-150x150.jpg","perma_url":"https://www.jiosaavn.com/artist/fixture-artist"}]}"""
-        const val PLAYLIST = """{"results":[{"title":"Fixture Playlist","description":"A fixture","image":"https://c.saavncdn.com/c-150x150.jpg","perma_url":"https://www.jiosaavn.com/featured/fixture-playlist"}]}"""
+        const val ALBUM =
+            """{"results":[{"title":"Fixture Album","subtitle":"Album Artist","image":"https://c.saavncdn.com/a-150x150.jpg","perma_url":"https://www.jiosaavn.com/album/fixture-album"},{"title":"Bad Numeric Token","perma_url":"https://www.jiosaavn.com/album/12345"}]}"""
+        const val ARTIST =
+            """{"results":[{"title":"Fixture Artist","role":"Singer","image":"https://c.saavncdn.com/b-150x150.jpg","perma_url":"https://www.jiosaavn.com/artist/fixture-artist"}]}"""
+        const val PLAYLIST =
+            """{"results":[{"title":"Fixture Playlist","description":"A fixture","image":"https://c.saavncdn.com/c-150x150.jpg","perma_url":"https://www.jiosaavn.com/featured/fixture-playlist"}]}"""
     }
 }

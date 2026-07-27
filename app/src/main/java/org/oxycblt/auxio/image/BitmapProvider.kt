@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.image
 
 import android.content.Context
@@ -84,8 +83,7 @@ constructor(
      * @param song The song to load a [Bitmap] of it's album cover from.
      * @param target The [Target] to deliver the [Bitmap] to asynchronously.
      */
-    @Synchronized
-    fun load(song: Song, target: Target) = load(song.cover, target)
+    @Synchronized fun load(song: Song, target: Target) = load(song.cover, target)
 
     /**
      * Load a remote artwork [Bitmap] from a canonical HTTPS URL.
@@ -149,14 +147,13 @@ constructor(
         /** True only for absolute, credential-free HTTPS URLs with a host. */
         internal fun isValidArtworkUrl(url: String?): Boolean {
             if (url.isNullOrBlank() || url != url.trim()) return false
-            return
-                runCatching { URI(url) }
-                    .getOrNull()
-                    ?.let { uri ->
-                        uri.scheme.equals("https", ignoreCase = true) &&
-                            !uri.host.isNullOrBlank() &&
-                            uri.userInfo == null
-                    } ?: false
+            return runCatching { URI(url) }
+                .getOrNull()
+                ?.let { uri ->
+                    uri.scheme.equals("https", ignoreCase = true) &&
+                        !uri.host.isNullOrBlank() &&
+                        uri.userInfo == null
+                } ?: false
         }
     }
 }

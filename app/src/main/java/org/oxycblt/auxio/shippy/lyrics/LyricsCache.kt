@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * LyricsCache.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * LyricsCache.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.lyrics
 
 import androidx.room.Dao
@@ -41,14 +48,18 @@ internal fun LyricsRequest.cacheKey(): LyricsCacheKey {
     val durationSeconds = durationMs?.div(1_000) ?: -1L
     val fingerprint =
         listOf(titleKey, artistsKey, albumKey, durationSeconds.toString()).joinToString("\u001F")
-    return LyricsCacheKey(trackId.value, fingerprint, titleKey, artistsKey, albumKey, durationSeconds)
+    return LyricsCacheKey(
+        trackId.value,
+        fingerprint,
+        titleKey,
+        artistsKey,
+        albumKey,
+        durationSeconds,
+    )
 }
 
 internal fun normalizeLyricsIdentity(value: String): String =
-    value
-        .lowercase(Locale.ROOT)
-        .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
-        .trim()
+    value.lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
 @Entity(
     tableName = "lyrics_cache",
@@ -118,28 +129,19 @@ interface LyricsCache {
     suspend fun remove(request: LyricsRequest)
 }
 
-data class CachedLyrics(
-    val record: LyricsRecord,
-    val cachedAtEpochMs: Long,
-)
+data class CachedLyrics(val record: LyricsRecord, val cachedAtEpochMs: Long)
 
 fun interface LyricsCacheClock {
     fun nowEpochMs(): Long
 }
 
 @Singleton
-class SystemLyricsCacheClock
-@Inject
-constructor() : LyricsCacheClock {
+class SystemLyricsCacheClock @Inject constructor() : LyricsCacheClock {
     override fun nowEpochMs(): Long = System.currentTimeMillis()
 }
 
 @Singleton
-class RoomLyricsCache
-@Inject
-constructor(
-    private val dao: LyricsCacheDao,
-) : LyricsCache {
+class RoomLyricsCache @Inject constructor(private val dao: LyricsCacheDao) : LyricsCache {
     override suspend fun get(request: LyricsRequest): CachedLyrics? {
         val key = request.cacheKey()
         return dao.get(key.trackId, key.fingerprint)?.let { entity ->
@@ -147,11 +149,7 @@ constructor(
         }
     }
 
-    override suspend fun put(
-        request: LyricsRequest,
-        record: LyricsRecord,
-        cachedAtEpochMs: Long,
-    ) {
+    override suspend fun put(request: LyricsRequest, record: LyricsRecord, cachedAtEpochMs: Long) {
         val key = request.cacheKey()
         dao.putBounded(
             LyricsCacheEntity(

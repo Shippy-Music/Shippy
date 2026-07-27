@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.service
 
 import android.content.Context
@@ -35,9 +34,9 @@ import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
-import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleTracker
-import org.oxycblt.auxio.shippy.history.RecentListeningTracker
 import org.oxycblt.auxio.shippy.crew.playback.CrewPlaybackBridge
+import org.oxycblt.auxio.shippy.history.RecentListeningTracker
+import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleTracker
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
 import org.oxycblt.auxio.widgets.WidgetComponent
 import org.oxycblt.musikr.MusicParent

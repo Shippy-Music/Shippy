@@ -1,39 +1,154 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingStart="@dimen/spacing_medium"
-    android:paddingTop="@dimen/spacing_small"
-    android:paddingEnd="@dimen/spacing_medium">
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurfaceContainer"
+    android:minHeight="640dp"
+    android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/lyrics_current"
-        style="@style/Widget.Auxio.TextView.Item.Primary"
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/spacing_small"
+        android:paddingStart="@dimen/spacing_small"
+        android:paddingEnd="@dimen/spacing_small">
+
+        <org.oxycblt.auxio.ui.RippleFixMaterialButton
+            android:id="@+id/lyrics_close"
+            style="@style/Widget.Auxio.Button.Icon.Small"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/lbl_close"
+            app:icon="@drawable/ic_down_24"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/lyrics_track_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:paddingStart="@dimen/size_touchable_small"
+            android:paddingEnd="@dimen/size_touchable_small"
+            android:singleLine="true"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textColor="?attr/colorOnSurface"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            tools:text="Take on Me" />
+
+        <TextView
+            android:id="@+id/lyrics_track_artist"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:singleLine="true"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?android:attr/textColorSecondary"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="@id/lyrics_track_title"
+            app:layout_constraintStart_toStartOf="@id/lyrics_track_title"
+            app:layout_constraintTop_toBottomOf="@id/lyrics_track_title"
+            tools:text="a-ha" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ScrollView
+        android:id="@+id/lyrics_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/spacing_medium"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:fadingEdgeLength="@dimen/size_touchable_small"
+        android:fillViewport="true"
+        android:overScrollMode="never"
+        android:paddingStart="@dimen/spacing_medium"
+        android:paddingEnd="@dimen/spacing_medium"
+        android:paddingBottom="@dimen/spacing_large"
+        android:requiresFadingEdge="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/lyrics_current"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/lyrics_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="@dimen/spacing_mid_medium"
+                android:textAppearance="?attr/textAppearanceHeadlineSmall"
+                android:textColor="?android:attr/textColorSecondary"
+                tools:text="Talking away&#10;I don't know what I'm to say&#10;I'll say it anyway" />
+
+            <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                android:id="@+id/lyrics_retry"
+                style="@style/Widget.Auxio.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/spacing_medium"
+                android:text="@string/lbl_retry"
+                android:visibility="gone" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/size_touchable_large"
+        android:layout_marginStart="@dimen/spacing_small"
+        android:layout_marginEnd="@dimen/spacing_small">
+
+        <org.oxycblt.auxio.ui.RippleFixMaterialButton
+            android:id="@+id/lyrics_download"
+            style="@style/Widget.Auxio.Button.Icon.Small"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/desc_download"
+            app:icon="@drawable/ic_download_24"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <org.oxycblt.auxio.ui.RippleFixMaterialButton
+            android:id="@+id/lyrics_more"
+            style="@style/Widget.Auxio.Button.Icon.Small"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/lbl_more"
+            app:icon="@drawable/ic_more_vert_24"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <org.oxycblt.auxio.playback.ui.StyledSeekBar
+        android:id="@+id/lyrics_seek_bar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/spacing_tiny"
-        android:fillViewport="true"
-        android:maxHeight="360dp">
-
-        <TextView
-            android:id="@+id/lyrics_body"
-            style="@style/Widget.Auxio.TextView.Item.Secondary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingBottom="@dimen/spacing_small" />
-    </ScrollView>
-
     <org.oxycblt.auxio.ui.RippleFixMaterialButton
-        android:id="@+id/lyrics_retry"
-        style="@style/Widget.Auxio.Button.TextButton"
+        android:id="@+id/lyrics_play_pause"
+        style="@style/Widget.Auxio.Button.Playback.PlayPause"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/lbl_retry"
-        android:visibility="gone" />
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="40dp"
+        android:contentDescription="@string/desc_play_pause"
+        app:icon="@drawable/sel_playing_state_24"
+        app:materialSizeOverlay="@style/SizeOverlay.Material3Expressive.Button.IconButton.Large" />
 
 </LinearLayout>

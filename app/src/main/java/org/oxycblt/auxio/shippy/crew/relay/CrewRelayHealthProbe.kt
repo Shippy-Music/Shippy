@@ -1,14 +1,27 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewRelayHealthProbe.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewRelayHealthProbe.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.relay
 
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -17,20 +30,17 @@ import okhttp3.Request
 import okhttp3.Response
 import org.json.JSONObject
 import org.oxycblt.auxio.shippy.crew.invite.CrewRelayLocator
-import kotlin.coroutines.resume
 
 /** A bounded, unauthenticated liveness check for a configured hosted Crew relay. */
 class CrewRelayHealthProbe
 @Inject
-constructor(
-    @CrewRelayHttpClient private val client: OkHttpClient,
-) {
+constructor(@CrewRelayHttpClient private val client: OkHttpClient) {
     suspend fun probe(locator: CrewRelayLocator): CrewRelayHealth {
         val request =
-            runCatching {
-                Request.Builder().url(CrewRelayHealthUrl.derive(locator)).get().build()
-            }
-                .getOrElse { return CrewRelayHealth.InvalidResponse }
+            runCatching { Request.Builder().url(CrewRelayHealthUrl.derive(locator)).get().build() }
+                .getOrElse {
+                    return CrewRelayHealth.InvalidResponse
+                }
 
         return suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
@@ -55,7 +65,7 @@ constructor(
                                 .getOrElse { CrewRelayHealth.InvalidResponse }
                         if (continuation.isActive) continuation.resume(health)
                     }
-                },
+                }
             )
         }
     }
@@ -108,9 +118,13 @@ object CrewRelayHealthResponseParser {
                     return CrewRelayHealth.InvalidResponse
                 }
                 CrewRelayHealth.Healthy(
-                    sessions = response.boundedCount("sessions") ?: return CrewRelayHealth.InvalidResponse,
-                    routes = response.boundedCount("routes") ?: return CrewRelayHealth.InvalidResponse,
-                    connections = response.boundedCount("connections") ?: return CrewRelayHealth.InvalidResponse,
+                    sessions =
+                        response.boundedCount("sessions") ?: return CrewRelayHealth.InvalidResponse,
+                    routes =
+                        response.boundedCount("routes") ?: return CrewRelayHealth.InvalidResponse,
+                    connections =
+                        response.boundedCount("connections")
+                            ?: return CrewRelayHealth.InvalidResponse,
                 )
             }
             .getOrElse { CrewRelayHealth.InvalidResponse }

@@ -1,4 +1,20 @@
-/* Copyright (c) 2026 Shippy contributors */
+/*
+ * Copyright (c) 2026 Auxio Project
+ * CrewMediaSessionRouterTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.crew.media
 
 import java.io.ByteArrayInputStream
@@ -32,7 +48,7 @@ class CrewMediaSessionRouterTest {
             fixture.supplierRouter.onMediaFrame(
                 fixture.supplierPeer,
                 CrewTransportFrame(CrewTransportChannel.MEDIA, byteArrayOf(1, 2, 3)),
-            ) is CrewMediaFrameResult.Rejected,
+            ) is CrewMediaFrameResult.Rejected
         )
         assertEquals(0, fixture.supplierAuthorizations)
     }
@@ -43,13 +59,25 @@ class CrewMediaSessionRouterTest {
         fixture.supplierRouter.onPeerAttached(fixture.supplierPeer)
         fixture.targetRouter.onPeerAttached(fixture.targetPeer)
 
-        assertEquals(CrewMediaFrameResult.Accepted, fixture.supplierRouter.onMediaFrame(fixture.supplierPeer, requestFrame(fixture.transfer)))
+        assertEquals(
+            CrewMediaFrameResult.Accepted,
+            fixture.supplierRouter.onMediaFrame(
+                fixture.supplierPeer,
+                requestFrame(fixture.transfer),
+            ),
+        )
         drain(fixture)
 
         assertEquals(1, fixture.supplierAuthorizations)
         assertEquals(1, fixture.completed.size)
         assertTrue(fixture.completed.single().second.isFile)
-        assertArrayEquals(fixture.bytes, fixture.targetCache.read(fixture.session, fixture.completed.single().first.objectIntegrity))
+        assertArrayEquals(
+            fixture.bytes,
+            fixture.targetCache.read(
+                fixture.session,
+                fixture.completed.single().first.objectIntegrity,
+            ),
+        )
     }
 
     @Test
@@ -58,7 +86,10 @@ class CrewMediaSessionRouterTest {
         fixture.supplierRouter.onPeerAttached(fixture.supplierPeer)
         val wrong = fixture.transfer.copy(targetMemberId = member("intruder"))
 
-        assertTrue(fixture.supplierRouter.onMediaFrame(fixture.supplierPeer, requestFrame(wrong)) is CrewMediaFrameResult.Rejected)
+        assertTrue(
+            fixture.supplierRouter.onMediaFrame(fixture.supplierPeer, requestFrame(wrong))
+                is CrewMediaFrameResult.Rejected
+        )
         assertEquals(0, fixture.supplierAuthorizations)
     }
 
@@ -69,7 +100,7 @@ class CrewMediaSessionRouterTest {
         fixture.supplierRouter.onPeerDetached(fixture.supplierPeer)
 
         assertEquals(
-            CrewMediaFrameResult.Accepted,
+            CrewMediaFrameResult.Rejected("media peer is not attached"),
             fixture.supplierRouter.onMediaFrame(
                 fixture.supplierPeer,
                 requestFrame(fixture.transfer),
@@ -78,11 +109,17 @@ class CrewMediaSessionRouterTest {
     }
 
     @Test
-    fun `push pull disabled rejects media without sending or authorizing`() {
+    fun `push pull disabled ignores media without sending or authorizing`() {
         val fixture = fixture(enabled = false)
         fixture.supplierRouter.onPeerAttached(fixture.supplierPeer)
 
-        assertTrue(fixture.supplierRouter.onMediaFrame(fixture.supplierPeer, requestFrame(fixture.transfer)) is CrewMediaFrameResult.Rejected)
+        assertEquals(
+            CrewMediaFrameResult.Accepted,
+            fixture.supplierRouter.onMediaFrame(
+                fixture.supplierPeer,
+                requestFrame(fixture.transfer),
+            ),
+        )
         assertEquals(0, fixture.supplierAuthorizations)
         assertTrue(fixture.supplierTransport.sent.isEmpty())
     }
@@ -92,10 +129,26 @@ class CrewMediaSessionRouterTest {
         val fixture = fixture()
         fixture.targetRouter.onPeerAttached(fixture.targetPeer)
 
-        assertTrue(fixture.targetRouter.requestTemporaryMedia(fixture.transfer.supplierMemberId, fixture.transfer) is CrewSendResult.Sent)
-        assertTrue(fixture.targetRouter.cancelTemporaryMediaRequest(fixture.transfer.supplierMemberId, fixture.transfer) is CrewSendResult.Sent)
-        assertEquals(null, fixture.targetRouter.requestTemporaryMedia(member("intruder"), fixture.transfer))
-        assertEquals(null, fixture.targetRouter.cancelTemporaryMediaRequest(member("intruder"), fixture.transfer))
+        assertTrue(
+            fixture.targetRouter.requestTemporaryMedia(
+                fixture.transfer.supplierMemberId,
+                fixture.transfer,
+            ) is CrewSendResult.Sent
+        )
+        assertTrue(
+            fixture.targetRouter.cancelTemporaryMediaRequest(
+                fixture.transfer.supplierMemberId,
+                fixture.transfer,
+            ) is CrewSendResult.Sent
+        )
+        assertEquals(
+            null,
+            fixture.targetRouter.requestTemporaryMedia(member("intruder"), fixture.transfer),
+        )
+        assertEquals(
+            null,
+            fixture.targetRouter.cancelTemporaryMediaRequest(member("intruder"), fixture.transfer),
+        )
     }
 
     @Test
@@ -116,13 +169,13 @@ class CrewMediaSessionRouterTest {
         assertTrue(fixture.completed.isEmpty())
     }
 
-    private fun drain(
-        fixture: Fixture,
-        expectTargetRejection: Boolean = false,
-    ) {
+    private fun drain(fixture: Fixture, expectTargetRejection: Boolean = false) {
         var guard = 16
         var targetRejected = false
-        while ((fixture.supplierTransport.sent.isNotEmpty() || fixture.targetTransport.sent.isNotEmpty()) && guard-- > 0) {
+        while (
+            (fixture.supplierTransport.sent.isNotEmpty() ||
+                fixture.targetTransport.sent.isNotEmpty()) && guard-- > 0
+        ) {
             fixture.supplierTransport.sent.removeFirstOrNull()?.let { frame ->
                 when (fixture.targetRouter.onMediaFrame(fixture.targetPeer, frame)) {
                     CrewMediaFrameResult.Accepted -> Unit
@@ -130,7 +183,10 @@ class CrewMediaSessionRouterTest {
                 }
             }
             fixture.targetTransport.sent.removeFirstOrNull()?.let { frame ->
-                assertEquals(CrewMediaFrameResult.Accepted, fixture.supplierRouter.onMediaFrame(fixture.supplierPeer, frame))
+                assertEquals(
+                    CrewMediaFrameResult.Accepted,
+                    fixture.supplierRouter.onMediaFrame(fixture.supplierPeer, frame),
+                )
             }
         }
         assertTrue("transfer should settle without a loop", guard > 0)
@@ -138,16 +194,24 @@ class CrewMediaSessionRouterTest {
     }
 
     private fun requestFrame(transfer: CrewMediaTransferRef) =
-        CrewTransportFrame(CrewTransportChannel.MEDIA, CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(transfer)))
+        CrewTransportFrame(
+            CrewTransportChannel.MEDIA,
+            CrewMediaWireCodec.encode(CrewMediaWireFrame.Request(transfer)),
+        )
 
-    private fun fixture(
-        enabled: Boolean = true,
-        completionAccepted: Boolean = true,
-    ): Fixture {
+    private fun fixture(enabled: Boolean = true, completionAccepted: Boolean = true): Fixture {
         val session = CrewSessionId("crew", ProtocolVersion(1))
         val supplier = member("not-host-supplier")
         val target = member("target")
-        val transfer = CrewMediaTransferRef(session, CrewMediaRequestId("request"), QueueItemId("queue-item"), CandidateId("candidate"), target, supplier)
+        val transfer =
+            CrewMediaTransferRef(
+                session,
+                CrewMediaRequestId("request"),
+                QueueItemId("queue-item"),
+                CandidateId("candidate"),
+                target,
+                supplier,
+            )
         val policy = ActiveCrewPushPullPolicy().also { it.activate(session, enabled) }
         val supplierTransport = FakePeer(target)
         val targetTransport = FakePeer(supplier)
@@ -155,39 +219,67 @@ class CrewMediaSessionRouterTest {
         val bytes = byteArrayOf(3, 1, 4, 1)
         val completed = mutableListOf<Pair<CrewMediaManifest, File>>()
         var authorizations = 0
-        val supplierCallbacks = object : CrewMediaSessionCallbacks {
-            override fun authorizeSupplierSource(transfer: CrewMediaTransferRef, requestingMemberId: CrewMemberId): CrewAuthorizedMediaSource? {
-                authorizations++
-                return object : CrewAuthorizedMediaSource {
-                    override val lengthBytes = bytes.size.toLong()
-                    override val mimeType = "audio/test"
-                    override fun open() = ByteArrayInputStream(bytes)
+        val supplierCallbacks =
+            object : CrewMediaSessionCallbacks {
+                override fun authorizeSupplierSource(
+                    transfer: CrewMediaTransferRef,
+                    requestingMemberId: CrewMemberId,
+                ): CrewAuthorizedMediaSource? {
+                    authorizations++
+                    return object : CrewAuthorizedMediaSource {
+                        override val lengthBytes = bytes.size.toLong()
+                        override val mimeType = "audio/test"
+
+                        override fun open() = ByteArrayInputStream(bytes)
+                    }
+                }
+
+                override fun onTemporaryMediaComplete(
+                    manifest: CrewMediaManifest,
+                    supplyingMemberId: CrewMemberId,
+                    file: File,
+                ) = true
+            }
+        val targetCallbacks =
+            object : CrewMediaSessionCallbacks {
+                override fun authorizeSupplierSource(
+                    transfer: CrewMediaTransferRef,
+                    requestingMemberId: CrewMemberId,
+                ) = null
+
+                override fun onTemporaryMediaComplete(
+                    manifest: CrewMediaManifest,
+                    supplyingMemberId: CrewMemberId,
+                    file: File,
+                ): Boolean {
+                    if (completionAccepted) completed += manifest to file
+                    return completionAccepted
                 }
             }
-            override fun onTemporaryMediaComplete(
-                manifest: CrewMediaManifest,
-                supplyingMemberId: CrewMemberId,
-                file: File,
-            ) = true
-        }
-        val targetCallbacks = object : CrewMediaSessionCallbacks {
-            override fun authorizeSupplierSource(transfer: CrewMediaTransferRef, requestingMemberId: CrewMemberId) = null
-            override fun onTemporaryMediaComplete(
-                manifest: CrewMediaManifest,
-                supplyingMemberId: CrewMemberId,
-                file: File,
-            ): Boolean {
-                if (completionAccepted) completed += manifest to file
-                return completionAccepted
-            }
-        }
         return Fixture(
-            session, transfer, bytes, targetCache, completed,
-            CrewMediaSessionRouter(session, supplier, policy, CrewMediaReceiver(session, targetCache), supplierCallbacks),
-            CrewMediaSessionRouter(session, target, policy, CrewMediaReceiver(session, targetCache), targetCallbacks),
+            session,
+            transfer,
+            bytes,
+            targetCache,
+            completed,
+            CrewMediaSessionRouter(
+                session,
+                supplier,
+                policy,
+                CrewMediaReceiver(session, targetCache),
+                supplierCallbacks,
+            ),
+            CrewMediaSessionRouter(
+                session,
+                target,
+                policy,
+                CrewMediaReceiver(session, targetCache),
+                targetCallbacks,
+            ),
             CrewAuthenticatedMediaPeer(target, supplierTransport),
             CrewAuthenticatedMediaPeer(supplier, targetTransport),
-            supplierTransport, targetTransport,
+            supplierTransport,
+            targetTransport,
             { authorizations },
         )
     }
@@ -205,21 +297,29 @@ class CrewMediaSessionRouterTest {
         val supplierTransport: FakePeer,
         val targetTransport: FakePeer,
         private val authorizationCount: () -> Int,
-    ) { val supplierAuthorizations get() = authorizationCount() }
+    ) {
+        val supplierAuthorizations
+            get() = authorizationCount()
+    }
 
     private class FakePeer(override val remoteMemberId: CrewMemberId) : CrewPeerTransport {
         override val state = MutableStateFlow(CrewTransportState.CONNECTED)
         override val incoming = emptyFlow<CrewTransportFrame>()
         override val drops = emptyFlow<CrewTransportDrop>()
         val sent = ArrayDeque<CrewTransportFrame>()
+
         override fun trySend(frame: CrewTransportFrame): CrewSendResult {
             sent.addLast(frame)
             return CrewSendResult.Sent(0)
         }
+
         override fun bufferedBytes(channel: CrewTransportChannel) = 0L
+
         override fun close() = Unit
     }
 
     private fun member(value: String) = CrewMemberId(value, ProtocolVersion(1))
-    private fun tempDirectory(): File = File.createTempFile("crew-router", "").also { require(it.delete() && it.mkdirs()) }
+
+    private fun tempDirectory(): File =
+        File.createTempFile("crew-router", "").also { require(it.delete() && it.mkdirs()) }
 }

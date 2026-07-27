@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * DownloadDestinationReconciler.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * DownloadDestinationReconciler.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.download
 
 import javax.inject.Inject
@@ -36,10 +43,7 @@ constructor(
     ): DownloadReconciliationResult =
         publicationGate.run {
             val plan =
-                DownloadReconciliationPlanner.plan(
-                    storage.inspectDestination(),
-                    jobs.getAll(),
-                )
+                DownloadReconciliationPlanner.plan(storage.inspectDestination(), jobs.getAll())
 
             plan.missingArtifactJobIds.forEach { jobId ->
                 jobs.apply(jobId, DownloadEvent.Remove, nowEpochMs)
@@ -58,10 +62,7 @@ data class DownloadReconciliationResult(
     val unmanagedDocuments: List<StoredAudioDocument>,
 )
 
-internal data class DownloadRelationshipRepair(
-    val trackId: TrackId,
-    val downloaded: Boolean,
-)
+internal data class DownloadRelationshipRepair(val trackId: TrackId, val downloaded: Boolean)
 
 internal data class DownloadReconciliationPlan(
     val result: DownloadReconciliationResult,
@@ -75,13 +76,12 @@ internal object DownloadReconciliationPlanner {
         downloads: List<PersistedDownload>,
     ): DownloadReconciliationPlan {
         val available = downloads.filter { it.job.state == DownloadState.AVAILABLE }
-        val knownDocumentUris =
-            buildSet {
-                downloads.forEach { download ->
-                    download.job.artifact?.contentUri?.let(::add)
-                    download.pendingDocument?.contentUri?.let(::add)
-                }
+        val knownDocumentUris = buildSet {
+            downloads.forEach { download ->
+                download.job.artifact?.contentUri?.let(::add)
+                download.pendingDocument?.contentUri?.let(::add)
             }
+        }
 
         if (destinationState !is DownloadDestinationState.Ready) {
             return DownloadReconciliationPlan(
@@ -90,13 +90,14 @@ internal object DownloadReconciliationPlanner {
                         destinationState = destinationState,
                         repairedMissingArtifactJobIds = emptyList(),
                         unmanagedDocuments = emptyList(),
-                ),
+                    ),
                 missingArtifactJobIds = emptyList(),
                 relationshipRepairs = emptyList(),
             )
         }
 
-        val documentsByUri = destinationState.existingAudio.associateBy(StoredAudioDocument::contentUri)
+        val documentsByUri =
+            destinationState.existingAudio.associateBy(StoredAudioDocument::contentUri)
         val verifiedArtifactJobIds =
             available.mapNotNullTo(mutableSetOf()) { download ->
                 download.job.artifact
@@ -127,7 +128,7 @@ internal object DownloadReconciliationPlanner {
     }
 
     private fun List<PersistedDownload>.relationshipRepairs(
-        verifiedTracks: Set<TrackId>,
+        verifiedTracks: Set<TrackId>
     ): List<DownloadRelationshipRepair> =
         map { it.track.id }
             .distinct()

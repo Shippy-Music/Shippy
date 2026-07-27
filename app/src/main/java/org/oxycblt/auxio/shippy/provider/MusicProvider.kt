@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * MusicProvider.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * MusicProvider.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.provider
 
 import org.oxycblt.auxio.shippy.domain.CandidateId
@@ -39,7 +46,10 @@ enum class ProviderEntityType {
     PLAYLIST,
 }
 
-/** Metadata-only provider browse target. [sourceItemId] is an opaque provider token, never media data. */
+/**
+ * Metadata-only provider browse target. [sourceItemId] is an opaque provider token, never media
+ * data.
+ */
 data class ProviderEntity(
     val providerId: ProviderId,
     val sourceItemId: String,
@@ -54,14 +64,19 @@ data class ProviderEntity(
             "Provider entity source item ID must be a bounded nonblank token"
         }
         require(!sourceItemId.contains("://")) { "Provider entity source item ID cannot be a URL" }
-        require(title.isNotBlank() && title.length <= 512) { "Provider entity title must be bounded and nonblank" }
+        require(title.isNotBlank() && title.length <= 512) {
+            "Provider entity title must be bounded and nonblank"
+        }
         require(subtitle == null || (subtitle.isNotBlank() && subtitle.length <= 512)) {
             "Provider entity subtitle must be bounded and nonblank when present"
         }
         require(artwork == null || (artwork.isNotBlank() && artwork.length <= 2_048)) {
             "Provider entity artwork must be bounded and nonblank when present"
         }
-        require(originalUrl == null || (originalUrl.startsWith("https://") && originalUrl.length <= 2_048)) {
+        require(
+            originalUrl == null ||
+                (originalUrl.startsWith("https://") && originalUrl.length <= 2_048)
+        ) {
             "Provider entity original URL must be a bounded HTTPS URL when present"
         }
     }
@@ -113,9 +128,7 @@ data class ResolvedStream(
     init {
         require(uri.isNotBlank()) { "Resolved stream URI cannot be blank" }
         require(bitrateBps == null || bitrateBps > 0) { "Bitrate must be positive" }
-        require(contentLength == null || contentLength >= 0) {
-            "Content length cannot be negative"
-        }
+        require(contentLength == null || contentLength >= 0) { "Content length cannot be negative" }
     }
 }
 

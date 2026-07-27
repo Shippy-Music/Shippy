@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewPreparation.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewPreparation.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.preparation
 
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
@@ -18,10 +25,10 @@ import org.oxycblt.auxio.shippy.domain.QueueItemId
  * Capability-only state sent over Crew control messages. It deliberately contains no paths,
  * provider URLs, or media locators.
  *
- * [PEER_ONLY] means a compatible active-Crew supplier may have the item. [BLOCKED] is a
- * definitive local policy/capability denial, not a synonym for a temporarily disabled
- * Push & Pull toggle. A PEER_ONLY member becomes blocked for *this preparation attempt* when
- * Push & Pull is disabled, while its published capability remains PEER_ONLY.
+ * [PEER_ONLY] means a compatible active-Crew supplier may have the item. [BLOCKED] is a definitive
+ * local policy/capability denial, not a synonym for a temporarily disabled Push & Pull toggle. A
+ * PEER_ONLY member becomes blocked for *this preparation attempt* when Push & Pull is disabled,
+ * while its published capability remains PEER_ONLY.
  */
 enum class CrewAvailability {
     LOCAL_EXACT,
@@ -34,13 +41,9 @@ enum class CrewAvailability {
     UNAVAILABLE;
 
     val isPlayableWithoutPeer: Boolean
-        get() = this in setOf(
-            LOCAL_EXACT,
-            TEMPORARY_CACHE,
-            DOWNLOAD,
-            PREFERRED_PROVIDER,
-            FALLBACK_PROVIDER,
-        )
+        get() =
+            this in
+                setOf(LOCAL_EXACT, TEMPORARY_CACHE, DOWNLOAD, PREFERRED_PROVIDER, FALLBACK_PROVIDER)
 
     val isEligibleSupplier: Boolean
         get() = this in setOf(LOCAL_EXACT, TEMPORARY_CACHE, DOWNLOAD)
@@ -71,8 +74,8 @@ data class QueueItemAvailabilitySummary(
 }
 
 /**
- * Target-specific, ephemeral connection telemetry. It is not durable Crew state and cannot
- * reveal a local path. The completion estimate includes connection setup and transfer time.
+ * Target-specific, ephemeral connection telemetry. It is not durable Crew state and cannot reveal a
+ * local path. The completion estimate includes connection setup and transfer time.
  */
 data class SupplierCandidateMetrics(
     val targetMemberId: CrewMemberId,
@@ -89,7 +92,8 @@ data class SupplierCandidateMetrics(
         require(activeUploadCount >= 0) { "Upload pressure cannot be negative" }
     }
 
-    val isEligible: Boolean get() = batteryEligible && networkEligible
+    val isEligible: Boolean
+        get() = batteryEligible && networkEligible
 }
 
 enum class PeerSupplySource {
@@ -101,22 +105,21 @@ enum class PeerSupplySource {
 sealed interface SupplierDecision {
     data object AlreadyPlayable : SupplierDecision
 
-    data class Selected(
-        val supplierMemberId: CrewMemberId,
-        val source: PeerSupplySource,
-    ) : SupplierDecision
+    data class Selected(val supplierMemberId: CrewMemberId, val source: PeerSupplySource) :
+        SupplierDecision
 
     /** Published PEER_ONLY capability, but the listener has disabled peer-media for this Crew. */
     data object PushPullDisabled : SupplierDecision
 
     /** Peer media is allowed, but no candidate can safely supply this item now. */
     data object NoEligibleSupplier : SupplierDecision
+
     data class NotPlayable(val availability: CrewAvailability) : SupplierDecision
 }
 
 /**
- * Chooses a supplier using session-visible capability plus short-lived connection telemetry.
- * There is intentionally no coordinator parameter: every active member can supply an item.
+ * Chooses a supplier using session-visible capability plus short-lived connection telemetry. There
+ * is intentionally no coordinator parameter: every active member can supply an item.
  */
 object CrewSupplierSelector {
     fun select(
@@ -126,9 +129,13 @@ object CrewSupplierSelector {
         candidateMetrics: Collection<SupplierCandidateMetrics> = emptyList(),
         activeMemberIds: Collection<CrewMemberId> = summary.members.map { it.memberId },
     ): SupplierDecision {
-        val targetAvailability = summary.availabilityFor(targetMemberId) ?: CrewAvailability.UNAVAILABLE
+        val targetAvailability =
+            summary.availabilityFor(targetMemberId) ?: CrewAvailability.UNAVAILABLE
         if (targetAvailability.isPlayableWithoutPeer) return SupplierDecision.AlreadyPlayable
-        if (targetAvailability == CrewAvailability.BLOCKED || targetAvailability == CrewAvailability.UNAVAILABLE) {
+        if (
+            targetAvailability == CrewAvailability.BLOCKED ||
+                targetAvailability == CrewAvailability.UNAVAILABLE
+        ) {
             return SupplierDecision.NotPlayable(targetAvailability)
         }
         if (targetAvailability != CrewAvailability.PEER_ONLY) {
@@ -137,8 +144,10 @@ object CrewSupplierSelector {
         if (!pushPullEnabled) return SupplierDecision.PushPullDisabled
 
         val activeMembers = activeMemberIds.toSet()
-        val matchingMetrics = candidateMetrics
-            .filter { it.targetMemberId == targetMemberId && it.supplierMemberId != targetMemberId }
+        val matchingMetrics =
+            candidateMetrics.filter {
+                it.targetMemberId == targetMemberId && it.supplierMemberId != targetMemberId
+            }
         require(matchingMetrics.groupBy { it.supplierMemberId }.values.all { it.size == 1 }) {
             "A target may publish one candidate metric per supplier"
         }
@@ -171,28 +180,31 @@ object CrewSupplierSelector {
         val metrics: SupplierCandidateMetrics?,
     )
 
-    private val supplierComparator = compareBy<SupplierCandidate>(
-        { it.source.priority },
-        { it.metrics?.estimatedCompletionMs ?: Long.MAX_VALUE },
-        { it.metrics?.connectionEstimateMs ?: Long.MAX_VALUE },
-        { it.metrics?.activeUploadCount ?: Int.MAX_VALUE },
-        { it.memberId.value },
-        { it.memberId.protocolVersion.value },
-    )
+    private val supplierComparator =
+        compareBy<SupplierCandidate>(
+            { it.source.priority },
+            { it.metrics?.estimatedCompletionMs ?: Long.MAX_VALUE },
+            { it.metrics?.connectionEstimateMs ?: Long.MAX_VALUE },
+            { it.metrics?.activeUploadCount ?: Int.MAX_VALUE },
+            { it.memberId.value },
+            { it.memberId.protocolVersion.value },
+        )
 
     private val PeerSupplySource.priority: Int
-        get() = when (this) {
-            PeerSupplySource.LOCAL_EXACT -> 0
-            PeerSupplySource.TEMPORARY_CACHE -> 1
-            PeerSupplySource.DOWNLOAD -> 2
-        }
+        get() =
+            when (this) {
+                PeerSupplySource.LOCAL_EXACT -> 0
+                PeerSupplySource.TEMPORARY_CACHE -> 1
+                PeerSupplySource.DOWNLOAD -> 2
+            }
 
-    private fun CrewAvailability.toSupplySource(): PeerSupplySource = when (this) {
-        CrewAvailability.LOCAL_EXACT -> PeerSupplySource.LOCAL_EXACT
-        CrewAvailability.TEMPORARY_CACHE -> PeerSupplySource.TEMPORARY_CACHE
-        CrewAvailability.DOWNLOAD -> PeerSupplySource.DOWNLOAD
-        else -> error("Only supplier availability may be converted to a source")
-    }
+    private fun CrewAvailability.toSupplySource(): PeerSupplySource =
+        when (this) {
+            CrewAvailability.LOCAL_EXACT -> PeerSupplySource.LOCAL_EXACT
+            CrewAvailability.TEMPORARY_CACHE -> PeerSupplySource.TEMPORARY_CACHE
+            CrewAvailability.DOWNLOAD -> PeerSupplySource.DOWNLOAD
+            else -> error("Only supplier availability may be converted to a source")
+        }
 }
 
 data class CrewReadinessPolicy(
@@ -213,10 +225,7 @@ enum class CrewReadinessProblemReason {
     DEADLINE_EXPIRED,
 }
 
-data class CrewReadinessProblem(
-    val memberId: CrewMemberId,
-    val reason: CrewReadinessProblemReason,
-)
+data class CrewReadinessProblem(val memberId: CrewMemberId, val reason: CrewReadinessProblemReason)
 
 sealed interface CrewStartDecision {
     data class StartTogether(val readyMembers: List<CrewMemberId>) : CrewStartDecision
@@ -252,24 +261,24 @@ object CrewReadinessPlanner {
         val problems = mutableListOf<CrewReadinessProblem>()
 
         for (memberId in members) {
-            when (val decision = CrewSupplierSelector.select(
-                summary,
-                memberId,
-                pushPullEnabled,
-                candidateMetrics,
-                members,
-            )) {
+            when (
+                val decision =
+                    CrewSupplierSelector.select(
+                        summary,
+                        memberId,
+                        pushPullEnabled,
+                        candidateMetrics,
+                        members,
+                    )
+            ) {
                 SupplierDecision.AlreadyPlayable -> ready += memberId
                 is SupplierDecision.Selected -> pending += memberId
-                SupplierDecision.PushPullDisabled -> problems += memberId.problem(
-                    CrewReadinessProblemReason.PUSH_PULL_DISABLED,
-                )
-                SupplierDecision.NoEligibleSupplier -> problems += memberId.problem(
-                    CrewReadinessProblemReason.NO_ELIGIBLE_SUPPLIER,
-                )
-                is SupplierDecision.NotPlayable -> problems += memberId.problem(
-                    decision.availability.toProblemReason(),
-                )
+                SupplierDecision.PushPullDisabled ->
+                    problems += memberId.problem(CrewReadinessProblemReason.PUSH_PULL_DISABLED)
+                SupplierDecision.NoEligibleSupplier ->
+                    problems += memberId.problem(CrewReadinessProblemReason.NO_ELIGIBLE_SUPPLIER)
+                is SupplierDecision.NotPlayable ->
+                    problems += memberId.problem(decision.availability.toProblemReason())
             }
         }
 
@@ -285,14 +294,15 @@ object CrewReadinessPlanner {
             return CrewStartDecision.StartReadyMembersWithLateJoin(ready, pending)
         }
         return CrewStartDecision.Unavailable(
-            pending.map { it.problem(CrewReadinessProblemReason.DEADLINE_EXPIRED) },
+            pending.map { it.problem(CrewReadinessProblemReason.DEADLINE_EXPIRED) }
         )
     }
 
-    private fun CrewAvailability.toProblemReason() = when (this) {
-        CrewAvailability.BLOCKED -> CrewReadinessProblemReason.BLOCKED
-        else -> CrewReadinessProblemReason.UNAVAILABLE
-    }
+    private fun CrewAvailability.toProblemReason() =
+        when (this) {
+            CrewAvailability.BLOCKED -> CrewReadinessProblemReason.BLOCKED
+            else -> CrewReadinessProblemReason.UNAVAILABLE
+        }
 }
 
 data class CrewPrefetchPolicy(val lookAheadItems: Int) {
@@ -321,7 +331,9 @@ data class CrewPrefetchPlan(
     val cancellations: List<CrewPrefetchKey>,
 )
 
-/** Plans current-plus-upcoming preparation while retaining reusable transfers across queue edits. */
+/**
+ * Plans current-plus-upcoming preparation while retaining reusable transfers across queue edits.
+ */
 object CrewPrefetchPlanner {
     fun plan(
         queue: List<QueueItem>,
@@ -340,59 +352,73 @@ object CrewPrefetchPlanner {
             "A Crew prefetch key may have one active request"
         }
         val members = activeMembers.distinct().sortedMemberIds()
-        val currentIndex = currentQueueItemId?.let { currentId ->
-            queue.indexOfFirst { it.id == currentId }.takeIf { it >= 0 }
-        }
-        val window = buildList {
-            currentIndex?.let(queue::get)?.let(::add)
-            val nextStart = currentIndex?.plus(1) ?: 0
-            addAll(queue.drop(nextStart).take(policy.lookAheadItems))
-        }.distinctBy { it.id }
-        val desired = window.flatMapIndexed { index, item ->
-            val summary = summaries[item.id] ?: return@flatMapIndexed emptyList()
-            val priority = window.size - index
-            members.mapNotNull { memberId ->
-                val selected = CrewSupplierSelector.select(
-                    summary,
-                    memberId,
-                    pushPullEnabled,
-                    candidateMetricsByItem[item.id].orEmpty(),
-                    members,
-                )
-                (selected as? SupplierDecision.Selected)?.let { supplier ->
-                    CrewPrefetchRequest(
-                        CrewPrefetchKey(item.id, memberId, supplier.supplierMemberId),
-                        supplier.source,
-                        priority,
-                    )
-                }
+        val currentIndex =
+            currentQueueItemId?.let { currentId ->
+                queue.indexOfFirst { it.id == currentId }.takeIf { it >= 0 }
             }
-        }.sortedWith(prefetchRequestComparator)
+        val window =
+            buildList {
+                    currentIndex?.let(queue::get)?.let(::add)
+                    val nextStart = currentIndex?.plus(1) ?: 0
+                    addAll(queue.drop(nextStart).take(policy.lookAheadItems))
+                }
+                .distinctBy { it.id }
+        val desired =
+            window
+                .flatMapIndexed { index, item ->
+                    val summary = summaries[item.id] ?: return@flatMapIndexed emptyList()
+                    val priority = window.size - index
+                    members.mapNotNull { memberId ->
+                        val selected =
+                            CrewSupplierSelector.select(
+                                summary,
+                                memberId,
+                                pushPullEnabled,
+                                candidateMetricsByItem[item.id].orEmpty(),
+                                members,
+                            )
+                        (selected as? SupplierDecision.Selected)?.let { supplier ->
+                            CrewPrefetchRequest(
+                                CrewPrefetchKey(item.id, memberId, supplier.supplierMemberId),
+                                supplier.source,
+                                priority,
+                            )
+                        }
+                    }
+                }
+                .sortedWith(prefetchRequestComparator)
         val existingByKey = existingRequests.associateBy { it.key }
         val desiredByKey = desired.associateBy { it.key }
         val start = desired.filter { it.key !in existingByKey }
-        val keep = desired.filter { request ->
-            existingByKey[request.key]?.let { it.source == request.source && it.priority == request.priority } == true
-        }
-        val reprioritize = desired.filter { request ->
-            existingByKey[request.key]?.let { it.source != request.source || it.priority != request.priority } == true
-        }
-        val cancellations = existingByKey.keys
-            .filterNot { it in desiredByKey }
-            .sortedWith(prefetchKeyComparator)
+        val keep =
+            desired.filter { request ->
+                existingByKey[request.key]?.let {
+                    it.source == request.source && it.priority == request.priority
+                } == true
+            }
+        val reprioritize =
+            desired.filter { request ->
+                existingByKey[request.key]?.let {
+                    it.source != request.source || it.priority != request.priority
+                } == true
+            }
+        val cancellations =
+            existingByKey.keys.filterNot { it in desiredByKey }.sortedWith(prefetchKeyComparator)
         return CrewPrefetchPlan(start, keep, reprioritize, cancellations)
     }
 
-    private val prefetchRequestComparator = compareByDescending<CrewPrefetchRequest> { it.priority }
-        .thenBy { it.key.queueItemId.value }
-        .thenBy { it.key.targetMemberId.value }
-        .thenBy { it.key.supplierMemberId.value }
+    private val prefetchRequestComparator =
+        compareByDescending<CrewPrefetchRequest> { it.priority }
+            .thenBy { it.key.queueItemId.value }
+            .thenBy { it.key.targetMemberId.value }
+            .thenBy { it.key.supplierMemberId.value }
 
-    private val prefetchKeyComparator = compareBy<CrewPrefetchKey>(
-        { it.queueItemId.value },
-        { it.targetMemberId.value },
-        { it.supplierMemberId.value },
-    )
+    private val prefetchKeyComparator =
+        compareBy<CrewPrefetchKey>(
+            { it.queueItemId.value },
+            { it.targetMemberId.value },
+            { it.supplierMemberId.value },
+        )
 }
 
 private fun Collection<CrewMemberId>.sortedMemberIds(): List<CrewMemberId> =

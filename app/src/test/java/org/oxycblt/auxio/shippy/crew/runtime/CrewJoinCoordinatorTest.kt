@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewJoinCoordinatorTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewJoinCoordinatorTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import kotlinx.coroutines.Dispatchers
@@ -54,21 +61,27 @@ class CrewJoinCoordinatorTest {
     private val coordinatorId = CrewMemberId("coordinator", protocol)
 
     @Test
-    fun `authenticated snapshot starts exact joined session and attaches same transport`() = runBlocking {
-        val fixture = fixture()
-        fixture.coordinator.start()
-        fixture.handle.connected(fixture.transport)
-        fixture.coordinator.await { it == CrewJoinState.Bootstrapping }
+    fun `authenticated snapshot starts exact joined session and attaches same transport`() =
+        runBlocking {
+            val fixture = fixture()
+            fixture.coordinator.start()
+            fixture.handle.connected(fixture.transport)
+            fixture.coordinator.await { it == CrewJoinState.Bootstrapping }
 
-        val snapshot = snapshot()
-        fixture.transport.receive(CrewControlFramer.encode(CrewControlMessage.SnapshotInstalled(snapshot)).single())
+            val snapshot = snapshot()
+            fixture.transport.receive(
+                CrewControlFramer.encode(CrewControlMessage.SnapshotInstalled(snapshot)).single()
+            )
 
-        assertEquals(CrewJoinState.Active(snapshot), fixture.coordinator.await { it is CrewJoinState.Active })
-        assertEquals(listOf(snapshot), fixture.sessions.snapshots)
-        assertEquals(1, fixture.session.starts)
-        assertEquals(listOf(fixture.transport), fixture.session.attached)
-        fixture.coordinator.close()
-    }
+            assertEquals(
+                CrewJoinState.Active(snapshot),
+                fixture.coordinator.await { it is CrewJoinState.Active },
+            )
+            assertEquals(listOf(snapshot), fixture.sessions.snapshots)
+            assertEquals(1, fixture.session.starts)
+            assertEquals(listOf(fixture.transport), fixture.session.attached)
+            fixture.coordinator.close()
+        }
 
     @Test
     fun `transport identity mismatch closes owned attempt`() = runBlocking {
@@ -92,8 +105,12 @@ class CrewJoinCoordinatorTest {
         fixture.coordinator.await { it == CrewJoinState.Bootstrapping }
         fixture.transport.receive(CrewTransportFrame(CrewTransportChannel.MEDIA, byteArrayOf(1)))
 
-        val state = fixture.coordinator.await { it is CrewJoinState.Rejected } as CrewJoinState.Rejected
-        assertEquals(CrewJoinFailure.BootstrapRejected(CrewJoinBootstrapResult.Rejected.WrongChannel), state.reason)
+        val state =
+            fixture.coordinator.await { it is CrewJoinState.Rejected } as CrewJoinState.Rejected
+        assertEquals(
+            CrewJoinFailure.BootstrapRejected(CrewJoinBootstrapResult.Rejected.WrongChannel),
+            state.reason,
+        )
         assertTrue(fixture.handle.closed && fixture.peer.closed)
         assertTrue(fixture.sessions.snapshots.isEmpty())
     }
@@ -126,14 +143,19 @@ class CrewJoinCoordinatorTest {
     fun `timeout connection failure and explicit close have precise rejection`() = runBlocking {
         val timeout = fixture(timeoutMs = 1)
         timeout.coordinator.start()
-        assertEquals(CrewJoinState.Rejected(CrewJoinFailure.TimedOut), timeout.coordinator.await { it is CrewJoinState.Rejected })
+        assertEquals(
+            CrewJoinState.Rejected(CrewJoinFailure.TimedOut),
+            timeout.coordinator.await { it is CrewJoinState.Rejected },
+        )
         assertTrue(timeout.handle.closed && timeout.peer.closed)
 
         val failed = fixture()
         failed.coordinator.start()
         failed.handle.fail(CrewDirectPeerFailure.NEGOTIATION)
         assertEquals(
-            CrewJoinState.Rejected(CrewJoinFailure.ConnectionFailed(CrewDirectPeerFailure.NEGOTIATION)),
+            CrewJoinState.Rejected(
+                CrewJoinFailure.ConnectionFailed(CrewDirectPeerFailure.NEGOTIATION)
+            ),
             failed.coordinator.await { it is CrewJoinState.Rejected },
         )
 
@@ -150,7 +172,8 @@ class CrewJoinCoordinatorTest {
         fixture.coordinator.start()
         fixture.handle.connected(fixture.transport)
         fixture.coordinator.await { it == CrewJoinState.Bootstrapping }
-        val frame = CrewControlFramer.encode(CrewControlMessage.SnapshotInstalled(snapshot())).single()
+        val frame =
+            CrewControlFramer.encode(CrewControlMessage.SnapshotInstalled(snapshot())).single()
         fixture.transport.receive(frame)
         fixture.coordinator.await { it is CrewJoinState.Active }
         fixture.handle.connected(fixture.transport)
@@ -167,9 +190,14 @@ class CrewJoinCoordinatorTest {
         fixture.coordinator.start()
         fixture.handle.connected(fixture.transport)
         fixture.coordinator.await { it == CrewJoinState.Bootstrapping }
-        fixture.transport.receive(CrewControlFramer.encode(CrewControlMessage.SnapshotInstalled(snapshot())).single())
+        fixture.transport.receive(
+            CrewControlFramer.encode(CrewControlMessage.SnapshotInstalled(snapshot())).single()
+        )
 
-        assertEquals(CrewJoinState.Rejected(CrewJoinFailure.SessionFailure), fixture.coordinator.await { it is CrewJoinState.Rejected })
+        assertEquals(
+            CrewJoinState.Rejected(CrewJoinFailure.SessionFailure),
+            fixture.coordinator.await { it is CrewJoinState.Rejected },
+        )
         assertTrue(fixture.handle.closed && fixture.peer.closed && fixture.session.closed)
     }
 
@@ -184,7 +212,16 @@ class CrewJoinCoordinatorTest {
         val session = FakeSession(sessionStartFails)
         val sessions = FakeSessions(session)
         return Fixture(
-            CrewJoinCoordinator(sessionId, localId, peer, CrewDirectInitiatorHandleFactory { handle }, sessions, timeoutMs, { 1L }, Dispatchers.Unconfined),
+            CrewJoinCoordinator(
+                sessionId,
+                localId,
+                peer,
+                CrewDirectInitiatorHandleFactory { handle },
+                sessions,
+                timeoutMs,
+                { 1L },
+                Dispatchers.Unconfined,
+            ),
             peer,
             handle,
             transport,
@@ -194,10 +231,19 @@ class CrewJoinCoordinatorTest {
     }
 
     private fun snapshot(): CrewSnapshot =
-        CrewState(sessionId, protocol, CoordinatorTerm(1), EventSequence(1), coordinatorId, listOf(CrewMember(coordinatorId, "Coordinator"), CrewMember(localId, "Joiner"))).toSnapshot()
+        CrewState(
+                sessionId,
+                protocol,
+                CoordinatorTerm(1),
+                EventSequence(1),
+                coordinatorId,
+                listOf(CrewMember(coordinatorId, "Coordinator"), CrewMember(localId, "Joiner")),
+            )
+            .toSnapshot()
 
-    private suspend fun CrewJoinCoordinator.await(predicate: (CrewJoinState) -> Boolean): CrewJoinState =
-        withTimeout(2_000) { state.filter(predicate).first() }
+    private suspend fun CrewJoinCoordinator.await(
+        predicate: (CrewJoinState) -> Boolean
+    ): CrewJoinState = withTimeout(2_000) { state.filter(predicate).first() }
 
     private data class Fixture(
         val coordinator: CrewJoinCoordinator,
@@ -210,6 +256,7 @@ class CrewJoinCoordinatorTest {
 
     private class FakeSessions(private val session: FakeSession) : CrewJoinSessionFactory {
         val snapshots = mutableListOf<CrewSnapshot>()
+
         override suspend fun create(snapshot: CrewSnapshot) = session.also { snapshots += snapshot }
     }
 
@@ -217,19 +264,40 @@ class CrewJoinCoordinatorTest {
         var starts = 0
         var closed = false
         val attached = mutableListOf<CrewPeerTransport>()
-        override suspend fun start() { starts += 1; check(!startFails) }
-        override fun attachPeer(transport: CrewPeerTransport) { attached += transport }
-        override fun close() { closed = true }
+
+        override suspend fun start() {
+            starts += 1
+            check(!startFails)
+        }
+
+        override fun attachPeer(transport: CrewPeerTransport) {
+            attached += transport
+        }
+
+        override fun close() {
+            closed = true
+        }
     }
 
     private class FakeHandle : CrewDirectConnectionHandle {
         private val mutableState = MutableStateFlow<CrewDirectPeerState>(CrewDirectPeerState.New)
         override val state: StateFlow<CrewDirectPeerState> = mutableState
         var closed = false
+
         override fun start() = Unit
-        fun connected(transport: CrewPeerTransport) { mutableState.value = CrewDirectPeerState.Connected(transport) }
-        fun fail(reason: CrewDirectPeerFailure) { mutableState.value = CrewDirectPeerState.Failed(reason) }
-        override fun close() { closed = true; mutableState.value = CrewDirectPeerState.Closed }
+
+        fun connected(transport: CrewPeerTransport) {
+            mutableState.value = CrewDirectPeerState.Connected(transport)
+        }
+
+        fun fail(reason: CrewDirectPeerFailure) {
+            mutableState.value = CrewDirectPeerState.Failed(reason)
+        }
+
+        override fun close() {
+            closed = true
+            mutableState.value = CrewDirectPeerState.Closed
+        }
     }
 
     private class FakeSignalPeer(override val remoteMemberClaim: CrewMemberId) : CrewSignalPeer {
@@ -238,8 +306,13 @@ class CrewJoinCoordinatorTest {
         override val state = MutableStateFlow(CrewSignalConnectionState.CONNECTED)
         override val incoming: Flow<CrewSignalMessage> = MutableSharedFlow()
         var closed = false
+
         override suspend fun send(message: CrewSignalMessage) = CrewSignalSendResult.Sent
-        override fun close() { closed = true; state.value = CrewSignalConnectionState.CLOSED }
+
+        override fun close() {
+            closed = true
+            state.value = CrewSignalConnectionState.CLOSED
+        }
     }
 
     private class FakeTransport(override val remoteMemberId: CrewMemberId) : CrewPeerTransport {
@@ -247,9 +320,15 @@ class CrewJoinCoordinatorTest {
         override val state = MutableStateFlow(CrewTransportState.CONNECTED)
         override val incoming: Flow<CrewTransportFrame> = frames
         override val drops: Flow<CrewTransportDrop> = MutableSharedFlow()
+
         override fun trySend(frame: CrewTransportFrame) = CrewSendResult.Sent(0)
+
         override fun bufferedBytes(channel: CrewTransportChannel) = 0L
-        fun receive(frame: CrewTransportFrame) { assertTrue(frames.tryEmit(frame)) }
+
+        fun receive(frame: CrewTransportFrame) {
+            assertTrue(frames.tryEmit(frame))
+        }
+
         override fun close() = Unit
     }
 }

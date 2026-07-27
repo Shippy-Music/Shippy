@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewHostAdmissionCoordinator.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewHostAdmissionCoordinator.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.runtime
 
 import java.io.Closeable
@@ -49,9 +56,8 @@ interface CrewSessionAdmissionPort {
 }
 
 /** Production adapter; runtime construction remains outside this coordinator. */
-class CrewSessionEngineAdmissionPort(
-    private val engine: CrewSessionEngine,
-) : CrewSessionAdmissionPort {
+class CrewSessionEngineAdmissionPort(private val engine: CrewSessionEngine) :
+    CrewSessionAdmissionPort {
     override fun attachPeer(transport: CrewPeerTransport) = engine.attachPeer(transport)
 
     override suspend fun admitPeer(
@@ -74,9 +80,8 @@ fun interface CrewDirectResponderHandleFactory {
 }
 
 /** Adapter for an already-constructed direct peer connection. */
-class CrewDirectPeerConnectionHandle(
-    private val connection: CrewDirectPeerConnection,
-) : CrewDirectConnectionHandle {
+class CrewDirectPeerConnectionHandle(private val connection: CrewDirectPeerConnection) :
+    CrewDirectConnectionHandle {
     override val state: StateFlow<CrewDirectPeerState> = connection.state
 
     override fun start() = connection.start()
@@ -144,7 +149,8 @@ class CrewHostAdmissionCoordinator(
     private val lock = Any()
     private val handles = mutableMapOf<CrewMemberId, ActiveHandle>()
     private val generations = mutableMapOf<CrewMemberId, Long>()
-    private val mutableStates = MutableStateFlow<Map<CrewMemberId, CrewHostAdmissionState>>(emptyMap())
+    private val mutableStates =
+        MutableStateFlow<Map<CrewMemberId, CrewHostAdmissionState>>(emptyMap())
     private var closed = false
 
     val states: StateFlow<Map<CrewMemberId, CrewHostAdmissionState>> = mutableStates.asStateFlow()
@@ -154,17 +160,30 @@ class CrewHostAdmissionCoordinator(
         when {
             signalingPeer.sessionId.protocolVersion != sessionId.protocolVersion ||
                 claimedMemberId.protocolVersion != sessionId.protocolVersion ->
-                rejectImmediately(claimedMemberId, signalingPeer, CrewHostAdmissionFailure.ProtocolMismatch)
+                rejectImmediately(
+                    claimedMemberId,
+                    signalingPeer,
+                    CrewHostAdmissionFailure.ProtocolMismatch,
+                )
             signalingPeer.sessionId != sessionId ->
-                rejectImmediately(claimedMemberId, signalingPeer, CrewHostAdmissionFailure.SessionMismatch)
+                rejectImmediately(
+                    claimedMemberId,
+                    signalingPeer,
+                    CrewHostAdmissionFailure.SessionMismatch,
+                )
             claimedMemberId == localMemberId ->
-                rejectImmediately(claimedMemberId, signalingPeer, CrewHostAdmissionFailure.ClaimedLocalMember)
+                rejectImmediately(
+                    claimedMemberId,
+                    signalingPeer,
+                    CrewHostAdmissionFailure.ClaimedLocalMember,
+                )
             else -> {
-                val generation = synchronized(lock) {
-                    ((generations[claimedMemberId] ?: 0L) + 1L).also {
-                        generations[claimedMemberId] = it
+                val generation =
+                    synchronized(lock) {
+                        ((generations[claimedMemberId] ?: 0L) + 1L).also {
+                            generations[claimedMemberId] = it
+                        }
                     }
-                }
                 scope.launch { install(claimedMemberId, signalingPeer, generation) }
             }
         }
@@ -201,10 +220,14 @@ class CrewHostAdmissionCoordinator(
                     return
                 }
         val active = ActiveHandle(signalingPeer, handle)
-        val install = synchronized(lock) {
-            if (closed || generations[memberId] != generation) null else handles.put(memberId, active)
-        }
-        if (install == null && synchronized(lock) { closed || generations[memberId] != generation }) {
+        val install =
+            synchronized(lock) {
+                if (closed || generations[memberId] != generation) null
+                else handles.put(memberId, active)
+            }
+        if (
+            install == null && synchronized(lock) { closed || generations[memberId] != generation }
+        ) {
             closePair(active)
             return
         }
@@ -216,9 +239,7 @@ class CrewHostAdmissionCoordinator(
                 failExact(memberId, active, CrewHostAdmissionFailure.Exception)
                 return
             }
-        scope.launch {
-            handle.state.collect { state -> observe(memberId, active, state) }
-        }
+        scope.launch { handle.state.collect { state -> observe(memberId, active, state) } }
     }
 
     private suspend fun observe(
@@ -230,7 +251,8 @@ class CrewHostAdmissionCoordinator(
             is CrewDirectPeerState.Connected -> admitConnected(memberId, active, state.transport)
             is CrewDirectPeerState.Failed ->
                 failExact(memberId, active, CrewHostAdmissionFailure.ConnectionFailed(state.reason))
-            CrewDirectPeerState.Closed -> failExact(memberId, active, CrewHostAdmissionFailure.ConnectionClosed)
+            CrewDirectPeerState.Closed ->
+                failExact(memberId, active, CrewHostAdmissionFailure.ConnectionClosed)
             CrewDirectPeerState.New,
             CrewDirectPeerState.Negotiating,
             CrewDirectPeerState.Authenticating -> Unit
@@ -258,12 +280,13 @@ class CrewHostAdmissionCoordinator(
         val member = CrewMember(memberId, active.signalingPeer.remoteDisplayName)
         val result =
             runCatching {
-                session.attachPeer(transport)
-                session.admitPeer(memberId, member, nextAdmissionEventId())
-            }.getOrElse {
-                failExact(memberId, active, CrewHostAdmissionFailure.Exception)
-                return
-            }
+                    session.attachPeer(transport)
+                    session.admitPeer(memberId, member, nextAdmissionEventId())
+                }
+                .getOrElse {
+                    failExact(memberId, active, CrewHostAdmissionFailure.Exception)
+                    return
+                }
         when (result) {
             is CrewAdmissionResult.Admitted,
             is CrewAdmissionResult.AlreadyActive -> {
@@ -277,7 +300,11 @@ class CrewHostAdmissionCoordinator(
                 publishExact(memberId, active, CrewHostAdmissionState.Active(result))
             }
             is CrewAdmissionResult.Rejected ->
-                failExact(memberId, active, CrewHostAdmissionFailure.AdmissionRejected(result.reason))
+                failExact(
+                    memberId,
+                    active,
+                    CrewHostAdmissionFailure.AdmissionRejected(result.reason),
+                )
         }
     }
 
@@ -286,7 +313,10 @@ class CrewHostAdmissionCoordinator(
         active: ActiveHandle,
         reason: CrewHostAdmissionFailure,
     ) {
-        val removed = synchronized(lock) { if (handles[memberId] === active) handles.remove(memberId) else null }
+        val removed =
+            synchronized(lock) {
+                if (handles[memberId] === active) handles.remove(memberId) else null
+            }
         if (removed != null) {
             closePair(removed)
             publish(memberId, CrewHostAdmissionState.Rejected(reason))
@@ -302,9 +332,7 @@ class CrewHostAdmissionCoordinator(
     }
 
     private fun publish(memberId: CrewMemberId, state: CrewHostAdmissionState) {
-        synchronized(lock) {
-            mutableStates.value = mutableStates.value + (memberId to state)
-        }
+        synchronized(lock) { mutableStates.value = mutableStates.value + (memberId to state) }
     }
 
     private fun publishGenerationExact(
@@ -327,14 +355,15 @@ class CrewHostAdmissionCoordinator(
         }
 
     override fun close() {
-        val toClose = synchronized(lock) {
-            if (closed) return
-            closed = true
-            handles.values.toList().also {
-                handles.clear()
-                generations.clear()
+        val toClose =
+            synchronized(lock) {
+                if (closed) return
+                closed = true
+                handles.values.toList().also {
+                    handles.clear()
+                    generations.clear()
+                }
             }
-        }
         toClose.forEach(::closePair)
         scope.cancel()
     }

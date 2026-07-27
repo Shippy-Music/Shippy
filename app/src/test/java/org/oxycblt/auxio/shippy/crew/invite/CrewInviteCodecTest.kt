@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewInviteCodecTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewInviteCodecTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.invite
 
 import org.junit.Assert.assertEquals
@@ -46,8 +53,14 @@ class CrewInviteCodecTest {
     fun `malformed scheme and payload are rejected`() {
         val codec = CrewInviteCodec(setOf(ProtocolVersion(1)))
 
-        assertEquals(CrewInviteDecodeResult.Rejected.MALFORMED, codec.decode("https://crew/invite/x", 1_000))
-        assertEquals(CrewInviteDecodeResult.Rejected.MALFORMED, codec.decode("shippy://crew/invite/A", 1_000))
+        assertEquals(
+            CrewInviteDecodeResult.Rejected.MALFORMED,
+            codec.decode("https://crew/invite/x", 1_000),
+        )
+        assertEquals(
+            CrewInviteDecodeResult.Rejected.MALFORMED,
+            codec.decode("shippy://crew/invite/A", 1_000),
+        )
     }
 
     @Test
@@ -80,8 +93,7 @@ class CrewInviteCodecTest {
                 supportedProtocolVersions = setOf(ProtocolVersion(1)),
                 clockSkewToleranceMs = 1_000,
             )
-        val encoded =
-            codec.encode(invite(issuedAtEpochMs = 2_001, expiresAtEpochMs = 10_000))
+        val encoded = codec.encode(invite(issuedAtEpochMs = 2_001, expiresAtEpochMs = 10_000))
 
         assertEquals(
             CrewInviteDecodeResult.Rejected.INVALID_LIFETIME,
@@ -92,7 +104,8 @@ class CrewInviteCodecTest {
     @Test
     fun `protocol version mismatch is rejected`() {
         val versionTwo = ProtocolVersion(2)
-        val encoded = CrewInviteCodec(setOf(versionTwo)).encode(invite(protocolVersion = versionTwo))
+        val encoded =
+            CrewInviteCodec(setOf(versionTwo)).encode(invite(protocolVersion = versionTwo))
 
         assertEquals(
             CrewInviteDecodeResult.Rejected.UNSUPPORTED_PROTOCOL,

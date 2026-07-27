@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.util
 
 import android.content.ActivityNotFoundException
@@ -33,6 +32,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.app.ShareCompat
 import androidx.core.graphics.Insets
 import androidx.core.net.toUri
+import androidx.core.view.updatePadding
 import androidx.navigation.NavController
 import androidx.navigation.NavDirections
 import androidx.recyclerview.widget.GridLayoutManager
@@ -196,13 +196,14 @@ fun ViewPager2.smoothScrollByPageTo(item: Int, durationMs: Int = 300) {
  *
  * @param directions The [NavDirections] to navigate with.
  */
-fun NavController.navigateSafe(directions: NavDirections) =
+fun NavController.navigateSafe(directions: NavDirections): Boolean =
     try {
         navigate(directions)
+        true
     } catch (e: IllegalArgumentException) {
-        // Nothing to do.
         L.e("Could not navigate from this destination.")
         L.e(e.stackTraceToString())
+        false
     }
 
 /**
@@ -226,6 +227,19 @@ val WindowInsets.systemBarInsetsCompat: Insets
             // API 21+, use window inset fields.
             else -> getSystemWindowCompatInsets()
         }
+
+/**
+ * Preserve a scroll container's authored bottom padding while reserving the full app chrome inset
+ * supplied by [BottomSheetContentBehavior].
+ */
+fun View.applyBottomContentInset() {
+    val authoredBottomPadding = paddingBottom
+    setOnApplyWindowInsetsListener { view, insets ->
+        view.updatePadding(bottom = authoredBottomPadding + insets.systemBarInsetsCompat.bottom)
+        insets
+    }
+    requestApplyInsets()
+}
 
 /**
  * Get the "System Gesture" [Insets] in this [WindowInsets] instance in a version-compatible manner

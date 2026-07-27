@@ -15,18 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.playback.state.DeferredPlayback
@@ -73,6 +74,7 @@ constructor(
 ) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener {
     private var lastPositionJob: Job? = null
     private var lyricsJob: Job? = null
+    private var queueMappingJob: Job? = null
 
     private val _song = MutableStateFlow<Song?>(null)
     /** The currently playing song. */
@@ -182,15 +184,14 @@ constructor(
         index: Int,
         change: QueueChange,
     ) {
-        val displayQueue = queue.map(playbackDisplayMapper::map)
-        updateDisplayItem(displayQueue.getOrNull(index))
-        _pagerCommand.put(
+        updateDisplayItem(queue.getOrNull(index)?.let(playbackDisplayMapper::map))
+        updatePagerQueueAsync(
+            queue,
             PagerCommand(
                 update = change.instructions,
                 scroll = index.takeIf { change.type != QueueChange.Type.MAPPING },
-            )
+            ),
         )
-        _pagerQueue.value = PagerQueue(queue = displayQueue, index = index)
     }
 
     override fun onQueueReordered(queue: List<Song>, index: Int, isShuffled: Boolean) {
@@ -203,10 +204,11 @@ constructor(
         index: Int,
         isShuffled: Boolean,
     ) {
-        val displayQueue = queue.map(playbackDisplayMapper::map)
-        updateDisplayItem(displayQueue.getOrNull(index))
-        _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
-        _pagerQueue.value = PagerQueue(queue = displayQueue, index = index)
+        updateDisplayItem(queue.getOrNull(index)?.let(playbackDisplayMapper::map))
+        updatePagerQueueAsync(
+            queue,
+            PagerCommand(update = UpdateInstructions.Replace(0), scroll = index),
+        )
     }
 
     override fun onNewPlayback(
@@ -227,10 +229,26 @@ constructor(
         index: Int,
         isShuffled: Boolean,
     ) {
-        val displayQueue = queue.map(playbackDisplayMapper::map)
-        updateDisplayItem(displayQueue.getOrNull(index))
-        _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
-        _pagerQueue.value = PagerQueue(queue = displayQueue, index = index)
+        // The current item drives the visible player, so publish it immediately. Mapping every
+        // queue entry can be expensive for large local libraries and must not freeze the tap.
+        updateDisplayItem(queue.getOrNull(index)?.let(playbackDisplayMapper::map))
+        updatePagerQueueAsync(
+            queue,
+            PagerCommand(update = UpdateInstructions.Replace(0), scroll = index),
+        )
+    }
+
+    private fun updatePagerQueueAsync(queue: List<ResolvedQueueItem>, command: PagerCommand) {
+        queueMappingJob?.cancel()
+        queueMappingJob =
+            viewModelScope.launch {
+                val displayQueue =
+                    withContext(Dispatchers.Default) { queue.map(playbackDisplayMapper::map) }
+                _pagerCommand.put(
+                    command.copy(scroll = command.scroll?.let { playbackManager.index })
+                )
+                _pagerQueue.value = PagerQueue(queue = displayQueue, index = playbackManager.index)
+            }
     }
 
     override fun onProgressionChanged(progression: Progression) {
@@ -266,10 +284,7 @@ constructor(
         }
     }
 
-    private fun updateLyrics(
-        item: PlaybackDisplayItem,
-        force: Boolean,
-    ) {
+    private fun updateLyrics(item: PlaybackDisplayItem, force: Boolean) {
         val track = item.queueItem.track
         if (!force && (_lyrics.value as? PlaybackLyricsState.Ready)?.trackId == track.id) {
             return
@@ -297,8 +312,7 @@ constructor(
                                 record = result.record,
                                 lyrics = result.lyrics,
                             )
-                        LyricsLookupResult.NotFound ->
-                            PlaybackLyricsState.Unavailable(track.id)
+                        LyricsLookupResult.NotFound -> PlaybackLyricsState.Unavailable(track.id)
                         is LyricsLookupResult.Failure ->
                             PlaybackLyricsState.Error(
                                 trackId = track.id,
@@ -728,6 +742,13 @@ constructor(
         playbackManager.shuffled(!playbackManager.isShuffled)
     }
 
+    /** Set shuffle explicitly, allowing responsive UI controls to coalesce rapid taps safely. */
+    fun setShuffled(shuffled: Boolean) {
+        if (playbackManager.isShuffled == shuffled) return
+        L.d("Setting shuffled state to $shuffled")
+        playbackManager.shuffled(shuffled)
+    }
+
     /**
      * Toggle [repeatMode] (ex. from [RepeatMode.NONE] to [RepeatMode.TRACK])
      *
@@ -808,17 +829,11 @@ sealed interface PlaybackLyricsState {
 
     data class Loading(val trackId: TrackId) : PlaybackLyricsState
 
-    data class Ready(
-        val trackId: TrackId,
-        val record: LyricsRecord,
-        val lyrics: ParsedLyrics,
-    ) : PlaybackLyricsState
+    data class Ready(val trackId: TrackId, val record: LyricsRecord, val lyrics: ParsedLyrics) :
+        PlaybackLyricsState
 
     data class Unavailable(val trackId: TrackId) : PlaybackLyricsState
 
-    data class Error(
-        val trackId: TrackId,
-        val retryable: Boolean,
-        val message: String?,
-    ) : PlaybackLyricsState
+    data class Error(val trackId: TrackId, val retryable: Boolean, val message: String?) :
+        PlaybackLyricsState
 }

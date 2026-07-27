@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.queue
 
 import android.annotation.SuppressLint
@@ -103,6 +102,21 @@ class QueueAdapter(private val listener: EditClickListListener<PlaybackDisplayIt
         this.isPlaying = isPlaying
     }
 
+    /**
+     * Reorder the visible queue immediately while the user is dragging. The actual playback queue
+     * is committed once when the drag ends, avoiding a full player/MediaSession update for every
+     * crossed row.
+     */
+    fun previewMove(from: Int, to: Int): Boolean {
+        if (from !in currentList.indices || to !in currentList.indices || from == to) {
+            return false
+        }
+        val reordered = currentList.toMutableList()
+        reordered.add(to, reordered.removeAt(from))
+        update(reordered, org.oxycblt.auxio.list.adapter.UpdateInstructions.Move(from, to))
+        return true
+    }
+
     private companion object {
         val PAYLOAD_UPDATE_POSITION = Any()
     }
@@ -154,10 +168,7 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
      * @param listener A [EditClickListListener] to bind interactions to.
      */
     @SuppressLint("ClickableViewAccessibility")
-    fun bind(
-        item: PlaybackDisplayItem,
-        listener: EditClickListListener<PlaybackDisplayItem>,
-    ) {
+    fun bind(item: PlaybackDisplayItem, listener: EditClickListListener<PlaybackDisplayItem>) {
         listener.bind(item, this, body, binding.songDragHandle)
         val localSong = item.localSong
         val track = item.queueItem.track

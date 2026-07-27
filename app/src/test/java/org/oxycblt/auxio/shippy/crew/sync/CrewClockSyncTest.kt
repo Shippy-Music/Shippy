@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewClockSyncTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewClockSyncTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.sync
 
 import org.junit.Assert.assertEquals
@@ -95,19 +107,12 @@ class CrewClockSyncTest {
                 speedCorrectionFraction = 0.03,
             )
 
-        assertEquals(
-            CrewDriftDecision.InSync,
-            correctPlaybackDrift(1_000, 1_040, true, policy),
-        )
+        assertEquals(CrewDriftDecision.InSync, correctPlaybackDrift(1_000, 1_040, true, policy))
         val behind = correctPlaybackDrift(1_000, 800, true, policy)
         assertTrue(behind is CrewDriftDecision.CorrectSpeed)
         assertEquals(1.03f, (behind as CrewDriftDecision.CorrectSpeed).playbackRate, 0.0001f)
         val ahead = correctPlaybackDrift(1_000, 1_200, true, policy)
-        assertEquals(
-            0.97f,
-            (ahead as CrewDriftDecision.CorrectSpeed).playbackRate,
-            0.0001f,
-        )
+        assertEquals(0.97f, (ahead as CrewDriftDecision.CorrectSpeed).playbackRate, 0.0001f)
         assertEquals(
             CrewDriftDecision.Seek(1_000),
             correctPlaybackDrift(1_000, 1_800, true, policy),

@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * DownloadJobRepository.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * DownloadJobRepository.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.persistence.download
 
 import javax.inject.Inject
@@ -80,11 +87,8 @@ interface DownloadJobRepository {
 }
 
 @Singleton
-internal class RoomDownloadJobRepository
-@Inject
-constructor(
-    private val dao: DownloadJobDao,
-) : DownloadJobRepository {
+internal class RoomDownloadJobRepository @Inject constructor(private val dao: DownloadJobDao) :
+    DownloadJobRepository {
     private val reducer = DownloadReducer()
     private val transitionMutex = Mutex()
 
@@ -94,7 +98,8 @@ constructor(
     override fun observeAvailable(): Flow<List<PersistedDownload>> =
         dao.observeAvailable().map { jobs -> jobs.map(StoredDownloadJob::toDomain) }
 
-    override suspend fun getAll(): List<PersistedDownload> = dao.getAll().map(StoredDownloadJob::toDomain)
+    override suspend fun getAll(): List<PersistedDownload> =
+        dao.getAll().map(StoredDownloadJob::toDomain)
 
     override suspend fun get(jobId: DownloadJobId): PersistedDownload? =
         dao.get(jobId.value)?.toDomain()
@@ -238,10 +243,7 @@ private fun DownloadCandidateEntity.toDomain(trackId: TrackId): TrackCandidate =
         providerId = providerId?.let(::ProviderId),
         media =
             if (
-                mimeType != null ||
-                    container != null ||
-                    bitrateBps != null ||
-                    contentLength != null
+                mimeType != null || container != null || bitrateBps != null || contentLength != null
             ) {
                 MediaDescriptor(mimeType, container, bitrateBps, contentLength)
             } else {
@@ -285,10 +287,7 @@ private fun DownloadJob.toEntity(
         updatedAtEpochMs = updatedAtEpochMs,
     )
 
-private fun TrackCandidate.toEntity(
-    jobId: DownloadJobId,
-    position: Int,
-): DownloadCandidateEntity =
+private fun TrackCandidate.toEntity(jobId: DownloadJobId, position: Int): DownloadCandidateEntity =
     DownloadCandidateEntity(
         jobId = jobId.value,
         candidateId = id.value,
@@ -314,31 +313,29 @@ private fun DownloadJobEntity.toPendingDocument(): PendingDownloadDocument? {
     )
 }
 
-internal fun encodeArtists(artists: List<String>): String =
-    buildString {
-        artists.forEach { artist ->
-            append(artist.length)
-            append(ARTIST_LENGTH_SEPARATOR)
-            append(artist)
-        }
+internal fun encodeArtists(artists: List<String>): String = buildString {
+    artists.forEach { artist ->
+        append(artist.length)
+        append(ARTIST_LENGTH_SEPARATOR)
+        append(artist)
     }
+}
 
-internal fun decodeArtists(encoded: String): List<String> =
-    buildList {
-        var cursor = 0
-        while (cursor < encoded.length) {
-            val separator = encoded.indexOf(ARTIST_LENGTH_SEPARATOR, cursor)
-            require(separator > cursor) { "Invalid persisted artist list" }
-            val length =
-                encoded.substring(cursor, separator).toIntOrNull()
-                    ?: throw IllegalArgumentException("Invalid persisted artist length")
-            require(length >= 0 && separator + 1 + length <= encoded.length) {
-                "Invalid persisted artist length"
-            }
-            val start = separator + 1
-            add(encoded.substring(start, start + length))
-            cursor = start + length
+internal fun decodeArtists(encoded: String): List<String> = buildList {
+    var cursor = 0
+    while (cursor < encoded.length) {
+        val separator = encoded.indexOf(ARTIST_LENGTH_SEPARATOR, cursor)
+        require(separator > cursor) { "Invalid persisted artist list" }
+        val length =
+            encoded.substring(cursor, separator).toIntOrNull()
+                ?: throw IllegalArgumentException("Invalid persisted artist length")
+        require(length >= 0 && separator + 1 + length <= encoded.length) {
+            "Invalid persisted artist length"
         }
+        val start = separator + 1
+        add(encoded.substring(start, start + length))
+        cursor = start + length
     }
+}
 
 private const val ARTIST_LENGTH_SEPARATOR = ':'

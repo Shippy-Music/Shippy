@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewEvent.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewEvent.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.core
 
 import org.oxycblt.auxio.shippy.domain.QueueItem
@@ -28,9 +35,7 @@ data class DurableCrewEvent(
 ) {
     init {
         require(sequence.value > 0) { "Durable event sequence must be positive" }
-        require(clientMonotonicTimestampMs >= 0) {
-            "Client monotonic timestamp cannot be negative"
-        }
+        require(clientMonotonicTimestampMs >= 0) { "Client monotonic timestamp cannot be negative" }
     }
 }
 
@@ -43,34 +48,19 @@ sealed interface CrewAction {
 
     data class QueueReplaced(val items: List<QueueItem>) : CrewAction
 
-    data class QueueItemInserted(
-        val item: QueueItem,
-        val index: Int,
-    ) : CrewAction
+    data class QueueItemInserted(val item: QueueItem, val index: Int) : CrewAction
 
-    data class QueueItemMoved(
-        val itemId: QueueItemId,
-        val newIndex: Int,
-    ) : CrewAction
+    data class QueueItemMoved(val itemId: QueueItemId, val newIndex: Int) : CrewAction
 
     data class QueueItemRemoved(val itemId: QueueItemId) : CrewAction
 
     data class CurrentItemChanged(val itemId: QueueItemId) : CrewAction
 
-    data class Play(
-        val positionAtEpochMs: Long,
-        val sessionEpochMs: Long,
-    ) : CrewAction
+    data class Play(val positionAtEpochMs: Long, val sessionEpochMs: Long) : CrewAction
 
-    data class Pause(
-        val positionAtEpochMs: Long,
-        val sessionEpochMs: Long,
-    ) : CrewAction
+    data class Pause(val positionAtEpochMs: Long, val sessionEpochMs: Long) : CrewAction
 
-    data class Seek(
-        val positionAtEpochMs: Long,
-        val sessionEpochMs: Long,
-    ) : CrewAction
+    data class Seek(val positionAtEpochMs: Long, val sessionEpochMs: Long) : CrewAction
 
     data class ShuffleChanged(val enabled: Boolean) : CrewAction
 

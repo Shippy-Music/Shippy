@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewActiveMediaRuntimeTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewActiveMediaRuntimeTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.media
 
 import java.io.File
@@ -33,6 +40,7 @@ import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
 import org.oxycblt.auxio.shippy.domain.MediaDescriptor
+import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.domain.Track
@@ -73,12 +81,9 @@ class CrewActiveMediaRuntimeTest {
             planLocalMedia(state, joiner, pushPullEnabled = true).desired,
         )
         assertTrue(
-            planLocalMedia(
-                state,
-                joiner,
-                pushPullEnabled = true,
-                available = setOf(key),
-            ).desired.isEmpty()
+            planLocalMedia(state, joiner, pushPullEnabled = true, available = setOf(key))
+                .desired
+                .isEmpty()
         )
     }
 
@@ -131,11 +136,25 @@ class CrewActiveMediaRuntimeTest {
         val item = localItem("owned", owner)
         assertEquals(
             CrewAvailability.LOCAL_EXACT,
-            CrewLocalAvailabilityEvaluator.evaluate(item, owner, emptySet(), emptySet(), emptyList(), emptyList()),
+            CrewLocalAvailabilityEvaluator.evaluate(
+                item,
+                owner,
+                emptySet(),
+                emptySet(),
+                emptyList(),
+                emptyList(),
+            ),
         )
         assertEquals(
             CrewAvailability.UNAVAILABLE,
-            CrewLocalAvailabilityEvaluator.evaluate(item, member("other"), emptySet(), emptySet(), emptyList(), emptyList()),
+            CrewLocalAvailabilityEvaluator.evaluate(
+                item,
+                member("other"),
+                emptySet(),
+                emptySet(),
+                emptyList(),
+                emptyList(),
+            ),
         )
     }
 
@@ -149,27 +168,20 @@ class CrewActiveMediaRuntimeTest {
             QueueItemAvailabilitySummary(
                 item,
                 listOf(
-                    MemberItemAvailability(
-                        local,
-                        item.id,
-                        CrewAvailability.PEER_ONLY,
-                    ),
-                    MemberItemAvailability(
-                        coordinator,
-                        item.id,
-                        coordinatorAvailability,
-                    ),
+                    MemberItemAvailability(local, item.id, CrewAvailability.PEER_ONLY),
+                    MemberItemAvailability(coordinator, item.id, coordinatorAvailability),
                     MemberItemAvailability(owner, item.id, CrewAvailability.LOCAL_EXACT),
                 ),
             )
 
         val before =
             reachableCrewAvailability(
-                mapOf(item.id to summary(CrewAvailability.PEER_ONLY)),
-                local,
-                setOf(coordinator),
-                emptySet(),
-            ).getValue(item.id)
+                    mapOf(item.id to summary(CrewAvailability.PEER_ONLY)),
+                    local,
+                    setOf(coordinator),
+                    emptySet(),
+                )
+                .getValue(item.id)
         assertEquals(
             SupplierDecision.NoEligibleSupplier,
             CrewSupplierSelector.select(before, local, pushPullEnabled = true),
@@ -177,11 +189,12 @@ class CrewActiveMediaRuntimeTest {
 
         val after =
             reachableCrewAvailability(
-                mapOf(item.id to summary(CrewAvailability.TEMPORARY_CACHE)),
-                local,
-                setOf(coordinator),
-                emptySet(),
-            ).getValue(item.id)
+                    mapOf(item.id to summary(CrewAvailability.TEMPORARY_CACHE)),
+                    local,
+                    setOf(coordinator),
+                    emptySet(),
+                )
+                .getValue(item.id)
         assertEquals(
             coordinator,
             (CrewSupplierSelector.select(after, local, pushPullEnabled = true)
@@ -199,18 +212,27 @@ class CrewActiveMediaRuntimeTest {
     @Test
     fun `verified download supplies the original requested provider candidate`() {
         val fixture = Fixture(CandidateKind.PROVIDER, null, null)
-        val downloads = mapOf(
-            CrewActiveMediaSelector.DownloadKey(fixture.item.track.id, fixture.candidate.id) to
-                CrewActiveMediaSelector.DownloadSource("content://downloads/audio", 7, "audio/test"),
-        )
+        val downloads =
+            mapOf(
+                CrewActiveMediaSelector.DownloadKey(fixture.item.track.id, fixture.candidate.id) to
+                    CrewActiveMediaSelector.DownloadSource(
+                        "content://downloads/audio",
+                        7,
+                        "audio/test",
+                    )
+            )
         val selected = fixture.select(downloads = downloads)
-        assertEquals("content://downloads/audio", (selected as CrewActiveMediaSelector.Selection.Content).uri)
+        assertEquals(
+            "content://downloads/audio",
+            (selected as CrewActiveMediaSelector.Selection.Content).uri,
+        )
     }
 
     @Test
     fun `verified temporary media wins and active index clears exactly`() {
         val fixture = Fixture(CandidateKind.LOCAL, "content://media/local", 7)
-        val file = File.createTempFile("crew-runtime", ".media").also { it.writeBytes(ByteArray(7)) }
+        val file =
+            File.createTempFile("crew-runtime", ".media").also { it.writeBytes(ByteArray(7)) }
         fixture.index.beginSession(fixture.session)
         assertTrue(fixture.index.complete(fixture.manifest(), file))
         assertTrue(fixture.select() is CrewActiveMediaSelector.Selection.Temporary)
@@ -226,16 +248,15 @@ class CrewActiveMediaRuntimeTest {
         assertNull(fixture.select())
         assertNull(fixture.select(requester = member("outsider")))
         assertNull(fixture.select(transfer = fixture.transfer.copy(sessionId = session("other"))))
-        assertNull(fixture.select(transfer = fixture.transfer.copy(candidateId = CandidateId("other"))))
-        assertNull(Fixture(CandidateKind.LOCAL, "content://media/local", CREW_MEDIA_MAX_OBJECT_BYTES + 1).select())
         assertNull(
-            Fixture(
-                    CandidateKind.LOCAL,
-                    "content://media/local",
-                    7,
-                    ownsLocal = false,
-                )
+            fixture.select(transfer = fixture.transfer.copy(candidateId = CandidateId("other")))
+        )
+        assertNull(
+            Fixture(CandidateKind.LOCAL, "content://media/local", CREW_MEDIA_MAX_OBJECT_BYTES + 1)
                 .select()
+        )
+        assertNull(
+            Fixture(CandidateKind.LOCAL, "content://media/local", 7, ownsLocal = false).select()
         )
         assertNull(Fixture(CandidateKind.CREW_PEER, "content://peer/audio", 7).select())
     }
@@ -249,7 +270,18 @@ class CrewActiveMediaRuntimeTest {
         val session = session("crew")
         val local = member("local")
         private val remote = member("remote")
-        val candidate = TrackCandidate(CandidateId("candidate"), TrackId("track"), kind, "source", "item", CandidateAvailability.AVAILABLE, locator = locator, media = MediaDescriptor("audio/test", contentLength = length))
+        val candidate =
+            TrackCandidate(
+                CandidateId("candidate"),
+                TrackId("track"),
+                kind,
+                "source",
+                "item",
+                CandidateAvailability.AVAILABLE,
+                locator = locator,
+                providerId = ProviderId("provider").takeIf { kind == CandidateKind.PROVIDER },
+                media = MediaDescriptor("audio/test", contentLength = length),
+            )
         val item =
             QueueItem(
                 QueueItemId("queue"),
@@ -260,28 +292,62 @@ class CrewActiveMediaRuntimeTest {
                     listOf("Artist"),
                     candidates = listOf(candidate),
                 ),
-                contributorId =
-                    if (kind == CandidateKind.LOCAL && ownsLocal) local.value else null,
+                contributorId = if (kind == CandidateKind.LOCAL && ownsLocal) local.value else null,
             )
         val index = CrewTemporaryMediaIndex()
-        val transfer = CrewMediaTransferRef(session, CrewMediaRequestId("request"), item.id, candidate.id, remote, local)
-        private val state = CrewState(session, ProtocolVersion(1), CoordinatorTerm(1), EventSequence(0), local, listOf(CrewMember(local, "Local"), CrewMember(remote, "Remote")), queue = listOf(item))
+        val transfer =
+            CrewMediaTransferRef(
+                session,
+                CrewMediaRequestId("request"),
+                item.id,
+                candidate.id,
+                remote,
+                local,
+            )
+        private val state =
+            CrewState(
+                session,
+                ProtocolVersion(1),
+                CoordinatorTerm(1),
+                EventSequence(0),
+                local,
+                listOf(CrewMember(local, "Local"), CrewMember(remote, "Remote")),
+                queue = listOf(item),
+            )
 
         fun select(
-            downloads: Map<CrewActiveMediaSelector.DownloadKey, CrewActiveMediaSelector.DownloadSource> = emptyMap(),
+            downloads:
+                Map<CrewActiveMediaSelector.DownloadKey, CrewActiveMediaSelector.DownloadSource> =
+                emptyMap(),
             requester: CrewMemberId = remote,
             transfer: CrewMediaTransferRef = this.transfer,
-        ) = CrewActiveMediaSelector.select(session, local, state, transfer, requester, index, downloads)
+        ) =
+            CrewActiveMediaSelector.select(
+                session,
+                local,
+                state,
+                transfer,
+                requester,
+                index,
+                downloads,
+            )
 
         fun manifest(): CrewMediaManifest {
             val bytes = ByteArray(7)
             val digest = CrewMediaDigest.sha256(bytes)
-            return CrewMediaManifest(transfer, "audio/test", 7, digest, listOf(CrewMediaChunkDescriptor(0, 7, digest)))
+            return CrewMediaManifest(
+                transfer,
+                "audio/test",
+                7,
+                digest,
+                listOf(CrewMediaChunkDescriptor(0, 7, digest)),
+            )
         }
     }
 
     private companion object {
         fun session(value: String) = CrewSessionId(value, ProtocolVersion(1))
+
         fun member(value: String) = CrewMemberId(value, ProtocolVersion(1))
 
         fun localItem(value: String, contributor: CrewMemberId): QueueItem {

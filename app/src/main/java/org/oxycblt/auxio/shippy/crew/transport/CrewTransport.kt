@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewTransport.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewTransport.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.transport
 
 import java.io.Closeable
@@ -35,10 +42,7 @@ enum class CrewTransportChannel(
     }
 }
 
-class CrewTransportFrame(
-    val channel: CrewTransportChannel,
-    payload: ByteArray,
-) {
+class CrewTransportFrame(val channel: CrewTransportChannel, payload: ByteArray) {
     private val bytes = payload.copyOf()
 
     val size: Int
@@ -85,13 +89,12 @@ data class CrewTransportDrop(
 sealed interface CrewSendResult {
     data class Sent(val bufferedBytes: Long) : CrewSendResult
 
-    data class Backpressured(
-        val bufferedBytes: Long,
-        val limitBytes: Long,
-    ) : CrewSendResult
+    data class Backpressured(val bufferedBytes: Long, val limitBytes: Long) : CrewSendResult
 
     data object ChannelNotOpen : CrewSendResult
+
     data object NativeRejected : CrewSendResult
+
     data object Closed : CrewSendResult
 }
 

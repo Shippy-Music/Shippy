@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewOptimisticActions.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewOptimisticActions.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.session
 
 import org.oxycblt.auxio.shippy.crew.core.DurableCrewEvent
@@ -25,15 +32,11 @@ sealed interface CrewOptimisticSubmitResult {
 }
 
 sealed interface CrewOptimisticReconcileResult {
-    data class Accepted(
-        val request: CrewActionRequest,
-        val event: DurableCrewEvent,
-    ) : CrewOptimisticReconcileResult
+    data class Accepted(val request: CrewActionRequest, val event: DurableCrewEvent) :
+        CrewOptimisticReconcileResult
 
-    data class Conflict(
-        val request: CrewActionRequest,
-        val event: DurableCrewEvent,
-    ) : CrewOptimisticReconcileResult
+    data class Conflict(val request: CrewActionRequest, val event: DurableCrewEvent) :
+        CrewOptimisticReconcileResult
 
     data object NotPending : CrewOptimisticReconcileResult
 }
@@ -115,16 +118,16 @@ class CrewOptimisticActionTracker(
 
     @Synchronized
     fun expire(nowMonotonicMs: Long): List<CrewOptimisticRejection> {
-        require(nowMonotonicMs >= 0) {
-            "Crew optimistic expiry timestamp cannot be negative"
-        }
+        require(nowMonotonicMs >= 0) { "Crew optimistic expiry timestamp cannot be negative" }
         val expired =
             pending.values
                 .filter {
                     nowMonotonicMs >= it.submittedAtMonotonicMs &&
                         nowMonotonicMs - it.submittedAtMonotonicMs >= pendingTimeoutMs
                 }
-                .map { CrewOptimisticRejection(it.request, CrewOptimisticRejectionReason.TIMED_OUT) }
+                .map {
+                    CrewOptimisticRejection(it.request, CrewOptimisticRejectionReason.TIMED_OUT)
+                }
         expired.forEach { pending.remove(it.request.id) }
         return expired
     }
@@ -133,16 +136,12 @@ class CrewOptimisticActionTracker(
     fun clearForSessionChange(): List<CrewOptimisticRejection> {
         val rejected =
             pending.values.map {
-                CrewOptimisticRejection(
-                    it.request,
-                    CrewOptimisticRejectionReason.SESSION_CHANGED,
-                )
+                CrewOptimisticRejection(it.request, CrewOptimisticRejectionReason.SESSION_CHANGED)
             }
         pending.clear()
         return rejected
     }
 
     @Synchronized
-    fun pendingRequests(): List<CrewActionRequest> =
-        pending.values.map(PendingAction::request)
+    fun pendingRequests(): List<CrewActionRequest> = pending.values.map(PendingAction::request)
 }

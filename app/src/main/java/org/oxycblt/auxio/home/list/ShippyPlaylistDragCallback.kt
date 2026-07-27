@@ -1,18 +1,30 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ShippyPlaylistDragCallback.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ShippyPlaylistDragCallback.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.home.list
 
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
-import org.oxycblt.auxio.shippy.domain.LibraryCollection
+import org.oxycblt.auxio.shippy.library.LibraryCollectionListRow
 
-/** Restricts long-press reordering to Shippy playlist rows in the ConcatAdapter. */
+/** Restricts long-press reordering to the unified Shippy collection rows in the ConcatAdapter. */
 internal class ShippyPlaylistDragCallback(
-    private val adapter: ShippyPlaylistProjectionAdapter,
-    private val onDragFinished: (List<LibraryCollection.Playlist>) -> Unit,
+    private val adapter: UnifiedLibraryCollectionAdapter,
+    private val onDragFinished: (List<LibraryCollectionListRow>) -> Unit,
 ) : ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0) {
     override fun getMovementFlags(
         recyclerView: RecyclerView,
@@ -37,7 +49,10 @@ internal class ShippyPlaylistDragCallback(
 
     override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
         super.onSelectedChanged(viewHolder, actionState)
-        if (actionState == ItemTouchHelper.ACTION_STATE_DRAG && viewHolder?.bindingAdapter === adapter) {
+        if (
+            actionState == ItemTouchHelper.ACTION_STATE_DRAG &&
+                viewHolder?.bindingAdapter === adapter
+        ) {
             adapter.beginDrag()
         }
     }

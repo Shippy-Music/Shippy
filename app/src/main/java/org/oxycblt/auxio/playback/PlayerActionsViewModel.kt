@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * PlayerActionsViewModel.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * PlayerActionsViewModel.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.playback
 
 import androidx.lifecycle.ViewModel
@@ -35,8 +42,8 @@ import org.oxycblt.auxio.shippy.domain.TrackRealm
 import org.oxycblt.auxio.shippy.download.DownloadJobId
 import org.oxycblt.auxio.shippy.download.DownloadState
 import org.oxycblt.auxio.shippy.download.DownloadWorkCoordinator
-import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
+import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
@@ -44,8 +51,8 @@ import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 /**
  * Presentation-only action state for the current player item.
  *
- * The source repositories remain authoritative: this class neither invents a second download
- * record nor infers availability from metadata.
+ * The source repositories remain authoritative: this class neither invents a second download record
+ * nor infers availability from metadata.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -62,7 +69,8 @@ constructor(
     val state: StateFlow<PlayerActionsState> =
         displayItem
             .flatMapLatest { item ->
-                val track = item?.queueItem?.track ?: return@flatMapLatest flowOf(PlayerActionsState())
+                val track =
+                    item?.queueItem?.track ?: return@flatMapLatest flowOf(PlayerActionsState())
                 combine(
                     relationships.observe(track.id),
                     downloads.observeAll(),
@@ -78,9 +86,11 @@ constructor(
                                 track,
                                 item.resolvedCandidateId,
                                 jobs.latestFor(track.id),
-                                providerRegistry
-                                    .supporting(ProviderCapability.DOWNLOAD)
-                                    .mapTo(mutableSetOf()) { it.descriptor.id },
+                                providerRegistry.supporting(ProviderCapability.DOWNLOAD).mapTo(
+                                    mutableSetOf()
+                                ) {
+                                    it.descriptor.id
+                                },
                             ),
                     )
                 }
@@ -98,10 +108,7 @@ constructor(
         viewModelScope.launch { relationships.setLiked(track, true) }
     }
 
-    fun updateSavedDestinations(
-        liked: Boolean,
-        playlistIds: Set<LibraryCollectionId>,
-    ) {
+    fun updateSavedDestinations(liked: Boolean, playlistIds: Set<LibraryCollectionId>) {
         val track = state.value.track ?: return
         viewModelScope.launch {
             relationships.setLiked(track, liked)
@@ -130,7 +137,7 @@ constructor(
     }
 }
 
-internal data class PlayerActionsState(
+data class PlayerActionsState(
     val track: Track? = null,
     val liked: Boolean = false,
     val playlistIds: Set<LibraryCollectionId> = emptySet(),
@@ -138,7 +145,7 @@ internal data class PlayerActionsState(
     val download: PlayerDownloadPresentation = PlayerDownloadPresentation.Hidden,
 )
 
-internal sealed interface PlayerDownloadPresentation {
+sealed interface PlayerDownloadPresentation {
     data object Hidden : PlayerDownloadPresentation
 
     data class Ready(val candidateId: CandidateId) : PlayerDownloadPresentation
@@ -162,12 +169,10 @@ internal fun downloadPresentation(
         track.candidates.firstOrNull {
             it.id == resolvedCandidateId &&
                 it.availability != CandidateAvailability.UNAVAILABLE &&
-                (
-                    it.kind == CandidateKind.CREW_TEMPORARY ||
-                        (track.realm != TrackRealm.LOCAL &&
-                            it.kind == CandidateKind.PROVIDER &&
-                            it.providerId in downloadableProviderIds)
-                )
+                (it.kind == CandidateKind.CREW_TEMPORARY ||
+                    (track.realm != TrackRealm.LOCAL &&
+                        it.kind == CandidateKind.PROVIDER &&
+                        it.providerId in downloadableProviderIds))
         } ?: return PlayerDownloadPresentation.Hidden
     val job = download?.job ?: return PlayerDownloadPresentation.Ready(candidate.id)
     return when (job.state) {

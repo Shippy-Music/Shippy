@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewElectionVotesTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewElectionVotesTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.session
 
 import org.junit.Assert.assertEquals
@@ -72,8 +79,8 @@ class CrewElectionVotesTest {
         val collector = CrewElectionVoteCollector()
 
         assertTrue(
-            collector.record(state, eligibility, vote(alpha), beta) is
-                CrewElectionVoteResult.Rejected
+            collector.record(state, eligibility, vote(alpha), beta)
+                is CrewElectionVoteResult.Rejected
         )
         assertTrue(
             collector.record(
@@ -92,8 +99,7 @@ class CrewElectionVotesTest {
         val advanced = state.copy(lastSequence = EventSequence(10))
         collector.resetUnless(advanced)
 
-        val advancedEligibility =
-            eligibility.copy(checkpoint = advanced.toElectionCheckpoint())
+        val advancedEligibility = eligibility.copy(checkpoint = advanced.toElectionCheckpoint())
         val result =
             collector.record(
                 advanced,

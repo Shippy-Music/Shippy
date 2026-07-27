@@ -20,6 +20,7 @@
     </org.oxycblt.auxio.ui.CoordinatorAppBarLayout>
 
     <androidx.core.widget.NestedScrollView
+        android:id="@+id/provider_entity_scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
@@ -94,7 +95,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginStart="@dimen/spacing_small"
                     android:text="@string/lbl_shuffle"
-                    app:icon="@drawable/ic_shuffle_24" />
+                    app:icon="@drawable/ic_shuffle_off_24" />
 
                 <org.oxycblt.auxio.ui.RippleFixMaterialButton
                     android:id="@+id/provider_entity_play"

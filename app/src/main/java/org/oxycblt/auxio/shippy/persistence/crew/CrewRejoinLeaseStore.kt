@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewRejoinLeaseStore.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewRejoinLeaseStore.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.persistence.crew
 
 import android.content.Context
@@ -50,10 +62,7 @@ constructor(@ApplicationContext context: Context) : CrewRejoinLeaseStore {
     private val atomicFile = AtomicFile(file)
     private val mutex = Mutex()
 
-    override suspend fun load(): CrewRejoinLease? =
-        mutex.withLock {
-            loadUnlocked()
-        }
+    override suspend fun load(): CrewRejoinLease? = mutex.withLock { loadUnlocked() }
 
     override suspend fun save(lease: CrewRejoinLease) {
         mutex.withLock {
@@ -78,8 +87,10 @@ constructor(@ApplicationContext context: Context) : CrewRejoinLeaseStore {
 
     private fun loadUnlocked(): CrewRejoinLease? {
         if (!file.exists()) return null
-        val decoded = runCatching { decrypt(readBoundedEnvelope()) }.getOrNull()
-            ?.let(CrewRejoinLeaseCodec::decode)
+        val decoded =
+            runCatching { decrypt(readBoundedEnvelope()) }
+                .getOrNull()
+                ?.let(CrewRejoinLeaseCodec::decode)
         return CrewRejoinLeasePersistencePolicy.acceptedLease(decoded)
             ?: run {
                 atomicFile.delete()
@@ -95,9 +106,7 @@ constructor(@ApplicationContext context: Context) : CrewRejoinLeaseStore {
         return DataInputStream(file.inputStream()).use { input ->
             ByteArray(length.toInt()).also {
                 input.readFully(it)
-                require(input.read() == -1) {
-                    "Crew lease envelope changed while reading"
-                }
+                require(input.read() == -1) { "Crew lease envelope changed while reading" }
             }
         }
     }
@@ -110,7 +119,9 @@ constructor(@ApplicationContext context: Context) : CrewRejoinLeaseStore {
     }
 
     private fun decrypt(envelope: ByteArray): ByteArray {
-        require(envelope.size > 1 + GCM_NONCE_BYTES + GCM_TAG_BYTES) { "Crew lease envelope is short" }
+        require(envelope.size > 1 + GCM_NONCE_BYTES + GCM_TAG_BYTES) {
+            "Crew lease envelope is short"
+        }
         require(envelope[0].toInt() == FORMAT_VERSION) { "Crew lease envelope version is invalid" }
         val nonce = envelope.copyOfRange(1, 1 + GCM_NONCE_BYTES)
         val ciphertext = envelope.copyOfRange(1 + GCM_NONCE_BYTES, envelope.size)
@@ -122,7 +133,9 @@ constructor(@ApplicationContext context: Context) : CrewRejoinLeaseStore {
 
     private fun key(): SecretKey {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let {
+            return it
+        }
         return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
             .apply {
                 init(

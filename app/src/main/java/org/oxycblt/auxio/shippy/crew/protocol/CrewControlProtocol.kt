@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewControlProtocol.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewControlProtocol.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.protocol
 
 import java.io.ByteArrayInputStream
@@ -35,15 +42,15 @@ import org.oxycblt.auxio.shippy.crew.core.DurableCrewEvent
 import org.oxycblt.auxio.shippy.crew.core.DurableEventId
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
-import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
-import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityAnnouncement
-import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityEntry
-import org.oxycblt.auxio.shippy.crew.media.publicizeCrewQueueItem
-import org.oxycblt.auxio.shippy.crew.preparation.MAX_CREW_AVAILABILITY_ENTRIES
-import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.invite.CrewInviteId
 import org.oxycblt.auxio.shippy.crew.invite.CrewRelayLocator
 import org.oxycblt.auxio.shippy.crew.invite.CrewSessionLocator
+import org.oxycblt.auxio.shippy.crew.media.publicizeCrewQueueItem
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailability
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityAnnouncement
+import org.oxycblt.auxio.shippy.crew.preparation.CrewAvailabilityEntry
+import org.oxycblt.auxio.shippy.crew.preparation.MAX_CREW_AVAILABILITY_ENTRIES
+import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewSequenceRejection
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
@@ -99,20 +106,17 @@ sealed interface CrewControlMessage {
     /**
      * One vote whose voter identity must be matched to the authenticated transport peer.
      *
-     * Snapshot-carried votes are only a certificate copy. This standalone message is the path
-     * that lets every receiver independently authenticate and retain each vote.
+     * Snapshot-carried votes are only a certificate copy. This standalone message is the path that
+     * lets every receiver independently authenticate and retain each vote.
      */
     data class ElectionVoteCast(val vote: CrewElectionVote) : CrewControlMessage
 
     /** Path-free, transient availability bound to one exact canonical Crew checkpoint. */
-    data class AvailabilityAnnounced(
-        val announcement: CrewAvailabilityAnnouncement,
-    ) : CrewControlMessage
+    data class AvailabilityAnnounced(val announcement: CrewAvailabilityAnnouncement) :
+        CrewControlMessage
 
     /** Private, transient credential sent only to its already authenticated intended member. */
-    data class RejoinCredentialIssued(
-        val lease: CrewRejoinLease,
-    ) : CrewControlMessage
+    data class RejoinCredentialIssued(val lease: CrewRejoinLease) : CrewControlMessage
 
     data class RequestRejected(
         val sessionId: CrewSessionId,
@@ -248,9 +252,7 @@ object CrewControlCodec {
                             CrewControlMessage.SnapshotInstalled(
                                 snapshot = input.readSnapshot(),
                                 electionVotes =
-                                    input.readBoundedList(MAX_ELECTION_VOTES) {
-                                        readElectionVote()
-                                    },
+                                    input.readBoundedList(MAX_ELECTION_VOTES) { readElectionVote() },
                             )
                         5 -> {
                             val sessionId = input.readSessionId()
@@ -296,10 +298,7 @@ object CrewControlCodec {
 }
 
 sealed interface CrewControlFrameResult {
-    data class Pending(
-        val receivedChunks: Int,
-        val totalChunks: Int,
-    ) : CrewControlFrameResult
+    data class Pending(val receivedChunks: Int, val totalChunks: Int) : CrewControlFrameResult
 
     data class Complete(val message: CrewControlMessage) : CrewControlFrameResult
 
@@ -325,7 +324,9 @@ object CrewControlFramer {
         val digest = payload.sha256()
         val chunkPayloadBytes = CrewTransportChannel.CONTROL.maxPayloadBytes - FRAME_HEADER_BYTES
         val chunkCount = (payload.size + chunkPayloadBytes - 1) / chunkPayloadBytes
-        require(chunkCount in 1..MAX_CONTROL_CHUNKS) { "Crew control message needs too many frames" }
+        require(chunkCount in 1..MAX_CONTROL_CHUNKS) {
+            "Crew control message needs too many frames"
+        }
         return List(chunkCount) { index ->
             val start = index * chunkPayloadBytes
             val end = minOf(payload.size, start + chunkPayloadBytes)
@@ -379,10 +380,7 @@ class CrewControlReassembler(
     }
 
     @Synchronized
-    fun accept(
-        frame: CrewTransportFrame,
-        nowMonotonicMs: Long,
-    ): CrewControlFrameResult {
+    fun accept(frame: CrewTransportFrame, nowMonotonicMs: Long): CrewControlFrameResult {
         require(nowMonotonicMs >= 0) { "Monotonic time cannot be negative" }
         pruneExpired(nowMonotonicMs)
         if (frame.channel != CrewTransportChannel.CONTROL) {
@@ -458,8 +456,7 @@ class CrewControlReassembler(
         }
         return when (val decoded = CrewControlCodec.decode(payload)) {
             is CrewControlDecodeResult.Accepted -> CrewControlFrameResult.Complete(decoded.message)
-            is CrewControlDecodeResult.Rejected ->
-                CrewControlFrameResult.Rejected.MESSAGE_REJECTED
+            is CrewControlDecodeResult.Rejected -> CrewControlFrameResult.Rejected.MESSAGE_REJECTED
         }
     }
 
@@ -472,9 +469,7 @@ class CrewControlReassembler(
     private fun pruneExpired(nowMonotonicMs: Long) {
         val expired =
             assemblies
-                .filterValues {
-                    nowMonotonicMs - it.createdAtMonotonicMs >= messageTtlMs
-                }
+                .filterValues { nowMonotonicMs - it.createdAtMonotonicMs >= messageTtlMs }
                 .keys
                 .toList()
         expired.forEach(::discard)
@@ -497,14 +492,10 @@ class CrewControlReassembler(
         return try {
             DataInputStream(ByteArrayInputStream(payload)).use { input ->
                 if (input.readInt() != FRAME_MAGIC) {
-                    return DecodedChunk.Rejected(
-                        CrewControlFrameResult.Rejected.UNSUPPORTED_FORMAT
-                    )
+                    return DecodedChunk.Rejected(CrewControlFrameResult.Rejected.UNSUPPORTED_FORMAT)
                 }
                 if (input.readUnsignedByte() != FRAME_FORMAT_VERSION) {
-                    return DecodedChunk.Rejected(
-                        CrewControlFrameResult.Rejected.UNSUPPORTED_FORMAT
-                    )
+                    return DecodedChunk.Rejected(CrewControlFrameResult.Rejected.UNSUPPORTED_FORMAT)
                 }
                 val totalBytes = input.readInt()
                 val index = input.readUnsignedShort()
@@ -521,9 +512,7 @@ class CrewControlReassembler(
                 ) {
                     DecodedChunk.Rejected(CrewControlFrameResult.Rejected.MALFORMED)
                 } else {
-                    DecodedChunk.Accepted(
-                        Chunk(totalBytes, index, count, digest, chunkPayload)
-                    )
+                    DecodedChunk.Accepted(Chunk(totalBytes, index, count, digest, chunkPayload))
                 }
             }
         } catch (_: IOException) {
@@ -657,7 +646,7 @@ private fun DataInputStream.readElectionCheckpoint() =
     )
 
 private fun DataOutputStream.writeAvailabilityAnnouncement(
-    announcement: CrewAvailabilityAnnouncement,
+    announcement: CrewAvailabilityAnnouncement
 ) {
     writeSessionId(announcement.sessionId)
     writeProtocolVersion(announcement.protocolVersion)
@@ -773,14 +762,25 @@ private fun DataInputStream.readRejoinLease(): CrewRejoinLease {
     val protocolVersion = readProtocolVersion()
     val memberId = readMemberId()
     val sessionLocator = CrewSessionLocator(readSizedString(MAX_ID_BYTES))
-    val relayLocator = if (readBoolean()) CrewRelayLocator(readSizedString(MAX_LOCATOR_BYTES)) else null
+    val relayLocator =
+        if (readBoolean()) CrewRelayLocator(readSizedString(MAX_LOCATOR_BYTES)) else null
     val inviteId = CrewInviteId(readSizedString(MAX_ID_BYTES))
     val credentialId = readSizedString(MAX_ID_BYTES)
     val credentialSecret = readSizedString(MAX_ID_BYTES)
     return CrewRejoinLease(
-        sessionId, memberId, sessionLocator, relayLocator, inviteId, credentialId,
-        credentialSecret, readLong(), readLong(),
-    ).also { require(it.protocolVersion == protocolVersion) { "Crew credential protocol mismatch" } }
+            sessionId,
+            memberId,
+            sessionLocator,
+            relayLocator,
+            inviteId,
+            credentialId,
+            credentialSecret,
+            readLong(),
+            readLong(),
+        )
+        .also {
+            require(it.protocolVersion == protocolVersion) { "Crew credential protocol mismatch" }
+        }
 }
 
 private fun DataInputStream.readAction(): CrewAction =
@@ -963,10 +963,7 @@ private fun DataOutputStream.writeProtocolVersion(version: ProtocolVersion) {
 
 private fun DataInputStream.readProtocolVersion() = ProtocolVersion(readInt())
 
-private fun DataOutputStream.writeSizedString(
-    value: String,
-    maxBytes: Int = MAX_STRING_BYTES,
-) {
+private fun DataOutputStream.writeSizedString(value: String, maxBytes: Int = MAX_STRING_BYTES) {
     val bytes = value.toByteArray(Charsets.UTF_8)
     require(bytes.size <= maxBytes) { "Crew control string exceeds $maxBytes bytes" }
     writeInt(bytes.size)
@@ -977,18 +974,14 @@ private fun DataInputStream.readSizedString(maxBytes: Int = MAX_STRING_BYTES): S
     val size = readInt()
     require(size in 0..maxBytes) { "Crew control string size is invalid" }
     val bytes = ByteArray(size).also(::readFully)
-    return Charsets.UTF_8
-        .newDecoder()
+    return Charsets.UTF_8.newDecoder()
         .onMalformedInput(CodingErrorAction.REPORT)
         .onUnmappableCharacter(CodingErrorAction.REPORT)
         .decode(ByteBuffer.wrap(bytes))
         .toString()
 }
 
-private fun DataOutputStream.writeNullableString(
-    value: String?,
-    maxBytes: Int = MAX_STRING_BYTES,
-) {
+private fun DataOutputStream.writeNullableString(value: String?, maxBytes: Int = MAX_STRING_BYTES) {
     writeBoolean(value != null)
     if (value != null) writeSizedString(value, maxBytes)
 }
@@ -1001,7 +994,8 @@ private fun DataOutputStream.writeNullableLong(value: Long?) {
     if (value != null) writeLong(value)
 }
 
-private fun DataInputStream.readNullableLong(): Long? = if (readStrictBoolean()) readLong() else null
+private fun DataInputStream.readNullableLong(): Long? =
+    if (readStrictBoolean()) readLong() else null
 
 private fun DataOutputStream.writeNullableInt(value: Int?) {
     writeBoolean(value != null)
@@ -1035,10 +1029,7 @@ private fun DataInputStream.readStrictBoolean(): Boolean =
         else -> throw IOException("Invalid boolean")
     }
 
-private fun DataOutputStream.writeBoundedCount(
-    count: Int,
-    maximum: Int,
-) {
+private fun DataOutputStream.writeBoundedCount(count: Int, maximum: Int) {
     require(count in 0..maximum) { "Crew control collection exceeds $maximum items" }
     writeInt(count)
 }

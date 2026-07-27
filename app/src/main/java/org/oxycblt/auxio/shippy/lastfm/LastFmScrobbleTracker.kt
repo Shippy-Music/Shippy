@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * LastFmScrobbleTracker.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.lastfm
 
 import java.time.Clock
@@ -16,7 +33,9 @@ import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleDao
 
 @Singleton
-class LastFmScrobbleTracker @Inject constructor(
+class LastFmScrobbleTracker
+@Inject
+constructor(
     private val dao: LastFmScrobbleDao,
     private val credentials: LastFmCredentialRepository,
     private val client: LastFmClient,
@@ -38,9 +57,7 @@ class LastFmScrobbleTracker @Inject constructor(
         attached = true
         scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         manager.addListener(this)
-        scope?.launch {
-            deliveryMutex.withLock { flush() }
-        }
+        scope?.launch { deliveryMutex.withLock { flush() } }
     }
 
     fun release(manager: PlaybackStateManager) {
@@ -56,9 +73,28 @@ class LastFmScrobbleTracker @Inject constructor(
         scrobbled = false
     }
 
-    override fun onCanonicalNewPlayback(parent: org.oxycblt.musikr.MusicParent?, queue: List<org.oxycblt.auxio.shippy.domain.ResolvedQueueItem>, index: Int, isShuffled: Boolean) { this.queue = queue; begin(queue.getOrNull(index)?.item) }
-    override fun onIndexMoved(index: Int) { begin(queue.getOrNull(index)?.item) }
-    override fun onCanonicalQueueChanged(queue: List<org.oxycblt.auxio.shippy.domain.ResolvedQueueItem>, index: Int, change: org.oxycblt.auxio.playback.state.QueueChange) { this.queue = queue; begin(queue.getOrNull(index)?.item) }
+    override fun onCanonicalNewPlayback(
+        parent: org.oxycblt.musikr.MusicParent?,
+        queue: List<org.oxycblt.auxio.shippy.domain.ResolvedQueueItem>,
+        index: Int,
+        isShuffled: Boolean,
+    ) {
+        this.queue = queue
+        begin(queue.getOrNull(index)?.item)
+    }
+
+    override fun onIndexMoved(index: Int) {
+        begin(queue.getOrNull(index)?.item)
+    }
+
+    override fun onCanonicalQueueChanged(
+        queue: List<org.oxycblt.auxio.shippy.domain.ResolvedQueueItem>,
+        index: Int,
+        change: org.oxycblt.auxio.playback.state.QueueChange,
+    ) {
+        this.queue = queue
+        begin(queue.getOrNull(index)?.item)
+    }
 
     override fun onProgressionChanged(progression: Progression) {
         item ?: return
@@ -98,9 +134,11 @@ class LastFmScrobbleTracker @Inject constructor(
             flush()
         }
     }
+
     private suspend fun flush() {
         val auth = credentials.load() ?: return
-        val batch = dao.oldest(MAX_BATCH); if (batch.isEmpty()) return
+        val batch = dao.oldest(MAX_BATCH)
+        if (batch.isEmpty()) return
         when (client.scrobble(batch, auth)) {
             LastFmDelivery.DELIVERED -> {
                 dao.delete(batch.map { it.id })
@@ -111,5 +149,8 @@ class LastFmScrobbleTracker @Inject constructor(
             LastFmDelivery.RETRY -> Unit
         }
     }
-    private companion object { const val MAX_BATCH = 50 }
+
+    private companion object {
+        const val MAX_BATCH = 50
+    }
 }

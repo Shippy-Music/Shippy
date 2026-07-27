@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * LastFmHomeViewModel.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * LastFmHomeViewModel.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.home
 
 import androidx.lifecycle.ViewModel
@@ -40,52 +52,53 @@ constructor(
 
     fun refresh() {
         refreshJob?.cancel()
-        refreshJob = viewModelScope.launch {
-            val auth =
-                try {
-                    credentials.load()
-                } catch (error: Exception) {
-                    if (error is CancellationException) throw error
-                    mutableState.value = LastFmHomeState.Error
-                    return@launch
-                }
-            if (auth == null) {
-                runCatching { cache.clear() }
-                .onFailure { if (it is CancellationException) throw it }
-                mutableState.value = LastFmHomeState.Hidden
-                return@launch
-            }
-
-            var cached =
-                try {
-                    cache.load()
-                } catch (error: Exception) {
-                    if (error is CancellationException) throw error
-                    null
-                }
-            if (cached != null && cached.username != auth.username) {
-                runCatching { cache.clear() }
-                    .onFailure { if (it is CancellationException) throw it }
-                cached = null
-            }
-            mutableState.value =
-                cached?.let { LastFmHomeState.Content(it, stale = true) }
-                    ?: LastFmHomeState.Loading
-
-            when (val result = client.load(auth)) {
-                is LastFmOverviewResult.Success -> {
+        refreshJob =
+            viewModelScope.launch {
+                val auth =
                     try {
-                        cache.save(result.overview)
+                        credentials.load()
                     } catch (error: Exception) {
                         if (error is CancellationException) throw error
+                        mutableState.value = LastFmHomeState.Error
+                        return@launch
                     }
-                    mutableState.value = LastFmHomeState.Content(result.overview, stale = false)
+                if (auth == null) {
+                    runCatching { cache.clear() }
+                        .onFailure { if (it is CancellationException) throw it }
+                    mutableState.value = LastFmHomeState.Hidden
+                    return@launch
                 }
-                is LastFmOverviewResult.Failure -> {
-                    if (cached == null) mutableState.value = LastFmHomeState.Error
+
+                var cached =
+                    try {
+                        cache.load()
+                    } catch (error: Exception) {
+                        if (error is CancellationException) throw error
+                        null
+                    }
+                if (cached != null && cached.username != auth.username) {
+                    runCatching { cache.clear() }
+                        .onFailure { if (it is CancellationException) throw it }
+                    cached = null
+                }
+                mutableState.value =
+                    cached?.let { LastFmHomeState.Content(it, stale = true) }
+                        ?: LastFmHomeState.Loading
+
+                when (val result = client.load(auth)) {
+                    is LastFmOverviewResult.Success -> {
+                        try {
+                            cache.save(result.overview)
+                        } catch (error: Exception) {
+                            if (error is CancellationException) throw error
+                        }
+                        mutableState.value = LastFmHomeState.Content(result.overview, stale = false)
+                    }
+                    is LastFmOverviewResult.Failure -> {
+                        if (cached == null) mutableState.value = LastFmHomeState.Error
+                    }
                 }
             }
-        }
     }
 }
 
@@ -94,10 +107,7 @@ sealed interface LastFmHomeState {
 
     data object Loading : LastFmHomeState
 
-    data class Content(
-        val overview: LastFmOverview,
-        val stale: Boolean,
-    ) : LastFmHomeState
+    data class Content(val overview: LastFmOverview, val stale: Boolean) : LastFmHomeState
 
     data object Error : LastFmHomeState
 }

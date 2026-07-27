@@ -1,25 +1,35 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ShippyCollectionTrackAdapter.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ShippyCollectionTrackAdapter.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.library.ui
 
 import android.view.LayoutInflater
 import android.view.ViewGroup
-import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemSongBinding
-import org.oxycblt.auxio.shippy.library.CollectionRowDownloadPresentation
 import org.oxycblt.auxio.shippy.library.ShippyCollectionTrackRow
 
 /** Reuses Auxio's normal song-row component for canonical, non-local collection items. */
 internal class ShippyCollectionTrackAdapter(
     private val onClick: (ShippyCollectionTrackRow) -> Unit,
-    private val onDownloadAction: (ShippyCollectionTrackRow) -> Unit,
+    private val onMenu: (ShippyCollectionTrackRow) -> Unit,
 ) : ListAdapter<ShippyCollectionTrackRow, ShippyCollectionTrackAdapter.ViewHolder>(DIFF) {
     private var dragRows: MutableList<ShippyCollectionTrackRow>? = null
     private var dragStartRows: List<ShippyCollectionTrackRow>? = null
@@ -28,7 +38,7 @@ internal class ShippyCollectionTrackAdapter(
         ViewHolder(ItemSongBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) =
-        holder.bind(getItem(position), onClick, onDownloadAction)
+        holder.bind(getItem(position), onClick, onMenu)
 
     fun beginDrag() {
         if (dragRows == null) {
@@ -53,11 +63,12 @@ internal class ShippyCollectionTrackAdapter(
         return rows?.takeIf { changed }
     }
 
-    internal class ViewHolder(private val binding: ItemSongBinding) : RecyclerView.ViewHolder(binding.root) {
+    internal class ViewHolder(private val binding: ItemSongBinding) :
+        RecyclerView.ViewHolder(binding.root) {
         fun bind(
             row: ShippyCollectionTrackRow,
             onClick: (ShippyCollectionTrackRow) -> Unit,
-            onDownloadAction: (ShippyCollectionTrackRow) -> Unit,
+            onMenu: (ShippyCollectionTrackRow) -> Unit,
         ) {
             binding.songName.text = row.track.title
             binding.songInfo.text = row.track.artists.joinToString()
@@ -66,33 +77,10 @@ internal class ShippyCollectionTrackAdapter(
                 row.track.album?.let { "${row.track.title}, $it" } ?: row.track.title,
             )
             binding.songMenu.apply {
-                val presentation = row.download
-                isVisible = presentation !is CollectionRowDownloadPresentation.Hidden
-                isEnabled = presentation !is CollectionRowDownloadPresentation.Working
-                when (presentation) {
-                    CollectionRowDownloadPresentation.Hidden -> Unit
-                    is CollectionRowDownloadPresentation.Ready -> {
-                        setIconResource(R.drawable.ic_down_24)
-                        contentDescription = context.getString(R.string.desc_download)
-                    }
-                    is CollectionRowDownloadPresentation.Working -> {
-                        setIconResource(R.drawable.ic_down_24)
-                        contentDescription = context.getString(R.string.desc_downloading)
-                    }
-                    is CollectionRowDownloadPresentation.Paused -> {
-                        setIconResource(R.drawable.ic_play_24)
-                        contentDescription = context.getString(R.string.desc_resume_download)
-                    }
-                    is CollectionRowDownloadPresentation.Retry -> {
-                        setIconResource(R.drawable.ic_feature_request_24)
-                        contentDescription = context.getString(R.string.desc_retry_download)
-                    }
-                    is CollectionRowDownloadPresentation.Available -> {
-                        setIconResource(R.drawable.ic_check_24)
-                        contentDescription = context.getString(R.string.desc_remove_download)
-                    }
-                }
-                setOnClickListener { onDownloadAction(row) }
+                isEnabled = true
+                setIconResource(R.drawable.ic_more_24)
+                contentDescription = context.getString(R.string.lbl_more)
+                setOnClickListener { onMenu(row) }
             }
             binding.root.setOnClickListener { onClick(row) }
             binding.root.contentDescription = "${row.track.title}, ${binding.songInfo.text}"
@@ -100,10 +88,17 @@ internal class ShippyCollectionTrackAdapter(
     }
 
     private companion object {
-        val DIFF = object : DiffUtil.ItemCallback<ShippyCollectionTrackRow>() {
-            override fun areItemsTheSame(old: ShippyCollectionTrackRow, new: ShippyCollectionTrackRow) =
-                old.track.id == new.track.id
-            override fun areContentsTheSame(old: ShippyCollectionTrackRow, new: ShippyCollectionTrackRow) = old == new
-        }
+        val DIFF =
+            object : DiffUtil.ItemCallback<ShippyCollectionTrackRow>() {
+                override fun areItemsTheSame(
+                    old: ShippyCollectionTrackRow,
+                    new: ShippyCollectionTrackRow,
+                ) = old.track.id == new.track.id
+
+                override fun areContentsTheSame(
+                    old: ShippyCollectionTrackRow,
+                    new: ShippyCollectionTrackRow,
+                ) = old == new
+            }
     }
 }

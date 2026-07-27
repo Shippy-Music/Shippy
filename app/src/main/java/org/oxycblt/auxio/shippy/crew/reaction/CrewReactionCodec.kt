@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewReactionCodec.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewReactionCodec.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.reaction
 
 import java.nio.ByteBuffer
@@ -29,18 +41,21 @@ object CrewReactionCodec {
         }
         val size = 1 + Int.SIZE_BYTES + 4 + session.size + member.size + id.size + emoji.size
         require(size <= MAX_PAYLOAD_BYTES) { "Crew reaction exceeds transport bound" }
-        return ByteBuffer.allocate(size).apply {
-            put(VERSION)
-            putInt(event.sessionId.protocolVersion.value)
-            putField(session)
-            putField(member)
-            putField(id)
-            putField(emoji)
-        }.array()
+        return ByteBuffer.allocate(size)
+            .apply {
+                put(VERSION)
+                putInt(event.sessionId.protocolVersion.value)
+                putField(session)
+                putField(member)
+                putField(id)
+                putField(emoji)
+            }
+            .array()
     }
 
     fun decode(payload: ByteArray): CrewReactionDecodeResult {
-        if (payload.isEmpty() || payload.size > MAX_PAYLOAD_BYTES) return CrewReactionDecodeResult.Rejected
+        if (payload.isEmpty() || payload.size > MAX_PAYLOAD_BYTES)
+            return CrewReactionDecodeResult.Rejected
         return try {
             val input = ByteBuffer.wrap(payload)
             if (input.get() != VERSION) return CrewReactionDecodeResult.Rejected
@@ -66,7 +81,9 @@ object CrewReactionCodec {
 
     private fun bounded(value: String, maximum: Int): ByteArray =
         value.toByteArray(StandardCharsets.UTF_8).also {
-            require(it.isNotEmpty() && it.size <= maximum) { "Crew reaction field is out of bounds" }
+            require(it.isNotEmpty() && it.size <= maximum) {
+                "Crew reaction field is out of bounds"
+            }
         }
 
     private fun ByteBuffer.putField(bytes: ByteArray) {
@@ -79,8 +96,7 @@ object CrewReactionCodec {
         val size = get().toInt() and 0xff
         if (size == 0 || size > maximum || remaining() < size) return null
         val bytes = ByteArray(size).also(::get)
-        return StandardCharsets.UTF_8
-            .newDecoder()
+        return StandardCharsets.UTF_8.newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
             .decode(ByteBuffer.wrap(bytes))
@@ -90,5 +106,6 @@ object CrewReactionCodec {
 
 sealed interface CrewReactionDecodeResult {
     data class Decoded(val event: CrewReactionEvent) : CrewReactionDecodeResult
+
     data object Rejected : CrewReactionDecodeResult
 }

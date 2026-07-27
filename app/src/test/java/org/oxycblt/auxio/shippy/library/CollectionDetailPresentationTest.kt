@@ -1,20 +1,31 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CollectionDetailPresentationTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CollectionDetailPresentationTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.library
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.oxycblt.auxio.shippy.domain.LibraryCollection
-import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
-import org.oxycblt.auxio.shippy.domain.SystemCollectionKind
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
+import org.oxycblt.auxio.shippy.domain.LibraryCollection
+import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
+import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.domain.TrackCandidate
 import org.oxycblt.auxio.shippy.domain.TrackId
@@ -23,28 +34,25 @@ import org.oxycblt.auxio.shippy.download.DownloadArtifact
 import org.oxycblt.auxio.shippy.download.DownloadJob
 import org.oxycblt.auxio.shippy.download.DownloadJobId
 import org.oxycblt.auxio.shippy.download.DownloadState
-import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 
 class CollectionDetailPresentationTest {
     @Test
-    fun `only Local uses the existing Auxio local-library surface`() {
-        assertTrue(LibraryCollection.System(SystemCollectionKind.LOCAL).id.usesAuxioLocalSurface())
-        assertFalse(LibraryCollection.System(SystemCollectionKind.LIKED).id.usesAuxioLocalSurface())
-        assertFalse(LibraryCollectionId("playlist:road-trip").usesAuxioLocalSurface())
-    }
-
-    @Test
     fun `unresolved relationship IDs never become fake song rows`() {
         assertEquals(
             CollectionDetailMessage.METADATA_PENDING,
-            ShippyCollectionDetailState.System("Liked", emptyList(), unresolvedTrackCount = 3).messageKind(),
+            ShippyCollectionDetailState.System("Liked", emptyList(), unresolvedTrackCount = 3)
+                .messageKind(),
         )
         assertEquals(
             CollectionDetailMessage.EMPTY,
-            ShippyCollectionDetailState.System("Downloads", emptyList(), unresolvedTrackCount = 0).messageKind(),
+            ShippyCollectionDetailState.System("Downloads", emptyList(), unresolvedTrackCount = 0)
+                .messageKind(),
         )
-        assertEquals(CollectionDetailMessage.DELETED, ShippyCollectionDetailState.Missing.messageKind())
+        assertEquals(
+            CollectionDetailMessage.DELETED,
+            ShippyCollectionDetailState.Missing.messageKind(),
+        )
     }
 
     @Test
@@ -110,7 +118,10 @@ class CollectionDetailPresentationTest {
 
         assertEquals(listOf(local), resolved.rows.map { it.track })
         assertEquals(CandidateKind.LOCAL, resolved.rows.single().track.candidates.single().kind)
-        assertEquals("umas123e4567-e89b-12d3-a456-426614174000", resolved.rows.single().track.candidates.single().sourceItemId)
+        assertEquals(
+            "umas123e4567-e89b-12d3-a456-426614174000",
+            resolved.rows.single().track.candidates.single().sourceItemId,
+        )
         assertEquals(1, resolved.unresolvedCount)
     }
 
@@ -133,10 +144,26 @@ class CollectionDetailPresentationTest {
                 id = "provider:ordered",
                 candidates =
                     listOf(
-                        candidate("unavailable", CandidateAvailability.UNAVAILABLE, ProviderId("downloadable")),
-                        candidate("not-downloadable", CandidateAvailability.RESOLVABLE, ProviderId("other")),
-                        candidate("first", CandidateAvailability.AVAILABLE, ProviderId("downloadable")),
-                        candidate("second", CandidateAvailability.RESOLVABLE, ProviderId("downloadable")),
+                        candidate(
+                            "unavailable",
+                            CandidateAvailability.UNAVAILABLE,
+                            ProviderId("downloadable"),
+                        ),
+                        candidate(
+                            "not-downloadable",
+                            CandidateAvailability.RESOLVABLE,
+                            ProviderId("other"),
+                        ),
+                        candidate(
+                            "first",
+                            CandidateAvailability.AVAILABLE,
+                            ProviderId("downloadable"),
+                        ),
+                        candidate(
+                            "second",
+                            CandidateAvailability.RESOLVABLE,
+                            ProviderId("downloadable"),
+                        ),
                     ),
             )
 
@@ -162,7 +189,7 @@ class CollectionDetailPresentationTest {
                             CandidateAvailability.UNAVAILABLE,
                             ProviderId("downloadable"),
                             TrackId("provider:unavailable"),
-                        ),
+                        )
                     ),
             )
 
@@ -248,7 +275,7 @@ class CollectionDetailPresentationTest {
                             CandidateAvailability.RESOLVABLE,
                             ProviderId("provider"),
                             trackId,
-                        ),
+                        )
                     ),
         )
     }
@@ -282,7 +309,14 @@ class CollectionDetailPresentationTest {
                 null
             }
         return PersistedDownload(
-            job = DownloadJob(DownloadJobId(jobId), track.id, candidateId, state, artifact = artifact),
+            job =
+                DownloadJob(
+                    DownloadJobId(jobId),
+                    track.id,
+                    candidateId,
+                    state,
+                    artifact = artifact,
+                ),
             track = track,
             pendingDocument = null,
             createdAtEpochMs = 1,

@@ -1,25 +1,32 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ShippyDatabase.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ShippyDatabase.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.persistence.library
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
+import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
+import org.oxycblt.auxio.shippy.lyrics.LyricsCacheEntity
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointDao
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointEntity
 import org.oxycblt.auxio.shippy.persistence.download.DownloadCandidateEntity
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobDao
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobEntity
-import org.oxycblt.auxio.shippy.lyrics.LyricsCacheDao
-import org.oxycblt.auxio.shippy.lyrics.LyricsCacheEntity
 import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleDao
 import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleEntity
 import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointEntity
@@ -42,7 +49,7 @@ import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointItemEntit
             PlaybackCheckpointItemEntity::class,
             SavedProviderEntityRecord::class,
         ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
@@ -53,9 +60,14 @@ internal abstract class ShippyDatabase : RoomDatabase() {
     abstract fun lyricsCacheDao(): LyricsCacheDao
 
     abstract fun crewCheckpointDao(): CrewCheckpointDao
+
     abstract fun canonicalTrackMetadataDao(): CanonicalTrackMetadataDao
+
     abstract fun lastFmScrobbleDao(): LastFmScrobbleDao
-    abstract fun playbackCheckpointDao(): org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointDao
+
+    abstract fun playbackCheckpointDao():
+        org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointDao
+
     abstract fun savedProviderEntityDao(): SavedProviderEntityDao
 
     companion object {
@@ -264,41 +276,65 @@ internal abstract class ShippyDatabase : RoomDatabase() {
 
         val MIGRATION_5_6 =
             Migration(5, 6) { database ->
-                database.execSQL("""CREATE TABLE IF NOT EXISTS `canonical_track` (`trackId` TEXT NOT NULL, `realm` TEXT NOT NULL, `title` TEXT NOT NULL, `artists` TEXT NOT NULL, `album` TEXT, `durationMs` INTEGER, `versionLabel` TEXT, `explicit` INTEGER, `live` INTEGER NOT NULL, `remix` INTEGER NOT NULL, `artwork` TEXT, PRIMARY KEY(`trackId`))""")
-                database.execSQL("""CREATE TABLE IF NOT EXISTS `canonical_track_candidate` (`trackId` TEXT NOT NULL, `candidateId` TEXT NOT NULL, `position` INTEGER NOT NULL, `kind` TEXT NOT NULL, `sourceId` TEXT NOT NULL, `sourceItemId` TEXT NOT NULL, `availability` TEXT NOT NULL, `locator` TEXT, `providerId` TEXT, `mimeType` TEXT, `container` TEXT, `bitrateBps` INTEGER, `contentLength` INTEGER, PRIMARY KEY(`trackId`, `candidateId`), FOREIGN KEY(`trackId`) REFERENCES `canonical_track`(`trackId`) ON UPDATE NO ACTION ON DELETE CASCADE)""")
-                database.execSQL("CREATE INDEX IF NOT EXISTS `index_canonical_track_candidate_trackId` ON `canonical_track_candidate` (`trackId`)")
-            }
-        val MIGRATION_6_7 = Migration(6, 7) { database ->
-            database.execSQL("CREATE TABLE IF NOT EXISTS `lastfm_scrobble_outbox` (`id` TEXT NOT NULL, `artist` TEXT NOT NULL, `track` TEXT NOT NULL, `album` TEXT, `durationSeconds` INTEGER, `startedAtEpochSeconds` INTEGER NOT NULL, `queuedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`id`))")
-            database.execSQL("CREATE INDEX IF NOT EXISTS `index_lastfm_scrobble_outbox_queuedAtEpochMs` ON `lastfm_scrobble_outbox` (`queuedAtEpochMs`)")
-        }
-        val MIGRATION_7_8 = Migration(7, 8) { database ->
-            database.execSQL("CREATE TABLE IF NOT EXISTS `playback_checkpoint` (`slot` TEXT NOT NULL, `positionMs` INTEGER NOT NULL, `repeatMode` TEXT NOT NULL, `heapIndex` INTEGER NOT NULL, `shuffledMapping` TEXT NOT NULL, PRIMARY KEY(`slot`))")
-            database.execSQL("CREATE TABLE IF NOT EXISTS `playback_checkpoint_item` (`slot` TEXT NOT NULL, `heapPosition` INTEGER NOT NULL, `queueItemId` TEXT NOT NULL, `trackId` TEXT NOT NULL, `contextId` TEXT, `contributorId` TEXT, PRIMARY KEY(`slot`, `heapPosition`), FOREIGN KEY(`slot`) REFERENCES `playback_checkpoint`(`slot`) ON UPDATE NO ACTION ON DELETE CASCADE)")
-            database.execSQL("CREATE INDEX IF NOT EXISTS `index_playback_checkpoint_item_trackId` ON `playback_checkpoint_item` (`trackId`)")
-        }
-        val MIGRATION_8_9 = Migration(8, 9) { database ->
-            database.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS `saved_provider_entity` (
-                    `providerId` TEXT NOT NULL,
-                    `entityType` TEXT NOT NULL,
-                    `sourceItemId` TEXT NOT NULL,
-                    `title` TEXT NOT NULL,
-                    `subtitle` TEXT,
-                    `artwork` TEXT,
-                    `originalUrl` TEXT,
-                    `pinned` INTEGER NOT NULL,
-                    `savedAtEpochMs` INTEGER NOT NULL,
-                    PRIMARY KEY(`providerId`, `entityType`, `sourceItemId`)
+                database.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `canonical_track` (`trackId` TEXT NOT NULL, `realm` TEXT NOT NULL, `title` TEXT NOT NULL, `artists` TEXT NOT NULL, `album` TEXT, `durationMs` INTEGER, `versionLabel` TEXT, `explicit` INTEGER, `live` INTEGER NOT NULL, `remix` INTEGER NOT NULL, `artwork` TEXT, PRIMARY KEY(`trackId`))"""
                 )
-                """
-                    .trimIndent()
-            )
-            database.execSQL(
-                "CREATE INDEX IF NOT EXISTS `index_saved_provider_entity_pinned_savedAtEpochMs` " +
-                    "ON `saved_provider_entity` (`pinned`, `savedAtEpochMs`)"
-            )
-        }
+                database.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `canonical_track_candidate` (`trackId` TEXT NOT NULL, `candidateId` TEXT NOT NULL, `position` INTEGER NOT NULL, `kind` TEXT NOT NULL, `sourceId` TEXT NOT NULL, `sourceItemId` TEXT NOT NULL, `availability` TEXT NOT NULL, `locator` TEXT, `providerId` TEXT, `mimeType` TEXT, `container` TEXT, `bitrateBps` INTEGER, `contentLength` INTEGER, PRIMARY KEY(`trackId`, `candidateId`), FOREIGN KEY(`trackId`) REFERENCES `canonical_track`(`trackId`) ON UPDATE NO ACTION ON DELETE CASCADE)"""
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_canonical_track_candidate_trackId` ON `canonical_track_candidate` (`trackId`)"
+                )
+            }
+        val MIGRATION_6_7 =
+            Migration(6, 7) { database ->
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `lastfm_scrobble_outbox` (`id` TEXT NOT NULL, `artist` TEXT NOT NULL, `track` TEXT NOT NULL, `album` TEXT, `durationSeconds` INTEGER, `startedAtEpochSeconds` INTEGER NOT NULL, `queuedAtEpochMs` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_lastfm_scrobble_outbox_queuedAtEpochMs` ON `lastfm_scrobble_outbox` (`queuedAtEpochMs`)"
+                )
+            }
+        val MIGRATION_7_8 =
+            Migration(7, 8) { database ->
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `playback_checkpoint` (`slot` TEXT NOT NULL, `positionMs` INTEGER NOT NULL, `repeatMode` TEXT NOT NULL, `heapIndex` INTEGER NOT NULL, `shuffledMapping` TEXT NOT NULL, PRIMARY KEY(`slot`))"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `playback_checkpoint_item` (`slot` TEXT NOT NULL, `heapPosition` INTEGER NOT NULL, `queueItemId` TEXT NOT NULL, `trackId` TEXT NOT NULL, `contextId` TEXT, `contributorId` TEXT, PRIMARY KEY(`slot`, `heapPosition`), FOREIGN KEY(`slot`) REFERENCES `playback_checkpoint`(`slot`) ON UPDATE NO ACTION ON DELETE CASCADE)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_playback_checkpoint_item_trackId` ON `playback_checkpoint_item` (`trackId`)"
+                )
+            }
+        val MIGRATION_8_9 =
+            Migration(8, 9) { database ->
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `saved_provider_entity` (
+                        `providerId` TEXT NOT NULL,
+                        `entityType` TEXT NOT NULL,
+                        `sourceItemId` TEXT NOT NULL,
+                        `title` TEXT NOT NULL,
+                        `subtitle` TEXT,
+                        `artwork` TEXT,
+                        `originalUrl` TEXT,
+                        `pinned` INTEGER NOT NULL,
+                        `savedAtEpochMs` INTEGER NOT NULL,
+                        PRIMARY KEY(`providerId`, `entityType`, `sourceItemId`)
+                    )
+                    """
+                        .trimIndent()
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_saved_provider_entity_pinned_savedAtEpochMs` " +
+                        "ON `saved_provider_entity` (`pinned`, `savedAtEpochMs`)"
+                )
+            }
+
+        val MIGRATION_9_10 =
+            Migration(9, 10) { database ->
+                database.execSQL("ALTER TABLE `user_playlist` ADD COLUMN `artworkUri` TEXT")
+            }
     }
 }

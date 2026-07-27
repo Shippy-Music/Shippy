@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewInviteCodec.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewInviteCodec.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.invite
 
 import java.io.ByteArrayInputStream
@@ -132,16 +139,22 @@ class CrewInviteCodec(
     }
 
     fun decode(link: String, nowEpochMs: Long): CrewInviteDecodeResult {
-        if (nowEpochMs < 0 || link.length > MAX_DEEP_LINK_LENGTH || !link.startsWith(DEEP_LINK_PREFIX)) {
+        if (
+            nowEpochMs < 0 ||
+                link.length > MAX_DEEP_LINK_LENGTH ||
+                !link.startsWith(DEEP_LINK_PREFIX)
+        ) {
             return CrewInviteDecodeResult.Rejected.MALFORMED
         }
         val encodedPayload = link.removePrefix(DEEP_LINK_PREFIX)
-        val checkedPayload = UrlSafeBase64.decode(encodedPayload) ?: return CrewInviteDecodeResult.Rejected.MALFORMED
+        val checkedPayload =
+            UrlSafeBase64.decode(encodedPayload) ?: return CrewInviteDecodeResult.Rejected.MALFORMED
         if (checkedPayload.size !in (CHECKSUM_BYTES + 1)..(MAX_PAYLOAD_BYTES + CHECKSUM_BYTES)) {
             return CrewInviteDecodeResult.Rejected.MALFORMED
         }
         val payload = checkedPayload.copyOfRange(0, checkedPayload.size - CHECKSUM_BYTES)
-        val checksum = checkedPayload.copyOfRange(checkedPayload.size - CHECKSUM_BYTES, checkedPayload.size)
+        val checksum =
+            checkedPayload.copyOfRange(checkedPayload.size - CHECKSUM_BYTES, checkedPayload.size)
         if (!MessageDigest.isEqual(checksum(payload), checksum)) {
             return CrewInviteDecodeResult.Rejected.CORRUPTED
         }
@@ -196,7 +209,8 @@ class CrewInviteCodec(
             val protocolVersion = ProtocolVersion(input.readInt())
             val issuedAtEpochMs = input.readLong()
             val expiresAtEpochMs = input.readLong()
-            val sessionLocator = CrewSessionLocator(input.readSizedString(MAX_SESSION_LOCATOR_LENGTH))
+            val sessionLocator =
+                CrewSessionLocator(input.readSizedString(MAX_SESSION_LOCATOR_LENGTH))
             val inviteId = CrewInviteId(input.readSizedString(MAX_INVITE_ID_LENGTH))
             val secret = CrewInviteSecret(input.readSizedString(MAX_SECRET_LENGTH))
             val relayLocator =

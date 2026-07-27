@@ -1,8 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewSessionOrchestratorTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewSessionOrchestratorTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.rejoin
 
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +29,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
 import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
+import org.oxycblt.auxio.shippy.crew.core.toCrewState
 import org.oxycblt.auxio.shippy.crew.invite.CrewInviteId
 import org.oxycblt.auxio.shippy.crew.invite.CrewSessionLocator
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
@@ -27,46 +40,52 @@ import org.oxycblt.auxio.shippy.persistence.crew.PersistedCrewCheckpoint
 
 class CrewSessionOrchestratorTest {
     @Test
-    fun `restore starts engine and retains exact credential after retryable failure`() = runBlocking {
-        val fixture = Fixture(CrewRejoinConnectResult.RetryableFailure)
+    fun `restore starts engine and retains exact credential after retryable failure`() {
+        runBlocking {
+            val fixture = Fixture(CrewRejoinConnectResult.RetryableFailure)
 
-        val result = fixture.orchestrator.restoreAfterProcessStart()
+            val result = fixture.orchestrator.restoreAfterProcessStart()
 
-        assertEquals(CrewRestoreResult.RestoredAwaitingNetwork, result)
-        assertEquals(1, fixture.factoryCalls)
-        assertEquals(1, fixture.connectorCalls)
-        assertEquals(fixture.lease, fixture.leases.active)
-        assertEquals(fixture.snapshot, fixture.checkpoints.active)
-        fixture.close()
+            assertEquals(CrewRestoreResult.RestoredAwaitingNetwork, result)
+            assertEquals(1, fixture.factoryCalls)
+            assertEquals(1, fixture.connectorCalls)
+            assertEquals(fixture.lease, fixture.leases.active)
+            assertEquals(fixture.snapshot, fixture.checkpoints.active)
+            fixture.close()
+        }
     }
 
     @Test
-    fun `authenticated revocation clears checkpoint and lease`() = runBlocking {
-        val fixture = Fixture(CrewRejoinConnectResult.Revoked)
+    fun `authenticated revocation clears checkpoint and lease`() {
+        runBlocking {
+            val fixture = Fixture(CrewRejoinConnectResult.Revoked)
 
-        val result = fixture.orchestrator.restoreAfterProcessStart()
+            val result = fixture.orchestrator.restoreAfterProcessStart()
 
-        assertEquals(
-            CrewRestoreResult.Discarded(CrewRejoinRestoreDecision.DISCARDED_REVOKED),
-            result,
-        )
-        assertEquals(listOf(fixture.lease.sessionId), fixture.checkpoints.cleared)
-        assertEquals(listOf(fixture.lease.sessionId), fixture.leases.cleared)
-        assertEquals(null, fixture.checkpoints.active)
-        assertEquals(null, fixture.leases.active)
+            assertEquals(
+                CrewRestoreResult.Discarded(CrewRejoinRestoreDecision.DISCARDED_REVOKED),
+                result,
+            )
+            assertEquals(listOf(fixture.lease.sessionId), fixture.checkpoints.cleared)
+            assertEquals(listOf(fixture.lease.sessionId), fixture.leases.cleared)
+            assertEquals(null, fixture.checkpoints.active)
+            assertEquals(null, fixture.leases.active)
+        }
     }
 
     @Test
-    fun `accepted leave clears only its exact active session`() = runBlocking {
-        val fixture = Fixture(CrewRejoinConnectResult.RetryableFailure)
-        fixture.orchestrator.restoreAfterProcessStart()
+    fun `accepted leave clears only its exact active session`() {
+        runBlocking {
+            val fixture = Fixture(CrewRejoinConnectResult.RetryableFailure)
+            fixture.orchestrator.restoreAfterProcessStart()
 
-        fixture.orchestrator.revokeAfterAcceptedLeave(fixture.lease.sessionId)
+            fixture.orchestrator.revokeAfterAcceptedLeave(fixture.lease.sessionId)
 
-        assertEquals(listOf(fixture.lease.sessionId), fixture.checkpoints.cleared)
-        assertEquals(listOf(fixture.lease.sessionId), fixture.leases.cleared)
-        assertEquals(null, fixture.checkpoints.active)
-        assertEquals(null, fixture.leases.active)
+            assertEquals(listOf(fixture.lease.sessionId), fixture.checkpoints.cleared)
+            assertEquals(listOf(fixture.lease.sessionId), fixture.leases.cleared)
+            assertEquals(null, fixture.checkpoints.active)
+            assertEquals(null, fixture.leases.active)
+        }
     }
 
     private class Fixture(result: CrewRejoinConnectResult) {
@@ -111,12 +130,13 @@ class CrewSessionOrchestratorTest {
                 CrewSessionEngineFactory { _, checkpoint ->
                     factoryCalls++
                     CrewSessionEngine(
-                        checkpoint.toCrewState(),
-                        memberId,
-                        checkpoints,
-                        nowEpochMs = { 1_500L },
-                        dispatcher = Dispatchers.Unconfined,
-                    ).also { engine = it }
+                            checkpoint.toCrewState(),
+                            memberId,
+                            checkpoints,
+                            nowEpochMs = { 1_500L },
+                            dispatcher = Dispatchers.Unconfined,
+                        )
+                        .also { engine = it }
                 },
                 CrewRejoinConnector { _, _ ->
                     connectorCalls++

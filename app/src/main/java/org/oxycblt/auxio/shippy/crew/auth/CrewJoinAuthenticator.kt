@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewJoinAuthenticator.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewJoinAuthenticator.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.auth
 
 import java.io.ByteArrayInputStream
@@ -77,9 +84,7 @@ class CrewSdpFingerprint private constructor(bytes: ByteArray) {
     private val value = bytes.copyOf()
 
     init {
-        require(value.size == SDP_FINGERPRINT_BYTES) {
-            "Crew SDP fingerprint must be SHA-256"
-        }
+        require(value.size == SDP_FINGERPRINT_BYTES) { "Crew SDP fingerprint must be SHA-256" }
     }
 
     internal fun copyBytes() = value.copyOf()
@@ -94,18 +99,14 @@ class CrewSdpFingerprint private constructor(bytes: ByteArray) {
     companion object {
         fun fromSdp(sdp: String): CrewSdpFingerprint {
             val fingerprints =
-                SDP_SHA_256_FINGERPRINT
-                    .findAll(sdp)
+                SDP_SHA_256_FINGERPRINT.findAll(sdp)
                     .map { match ->
-                        match.groupValues[1]
-                            .split(':')
-                            .map { it.toInt(16).toByte() }
-                            .toByteArray()
+                        match.groupValues[1].split(':').map { it.toInt(16).toByte() }.toByteArray()
                     }
                     .toList()
             require(
                 fingerprints.isNotEmpty() &&
-                    fingerprints.drop(1).all { it.contentEquals(fingerprints.first()) },
+                    fingerprints.drop(1).all { it.contentEquals(fingerprints.first()) }
             ) {
                 "Crew SDP must contain one distinct SHA-256 DTLS fingerprint"
             }
@@ -199,22 +200,25 @@ object CrewJoinMessageCodec {
                                     sessionLocator = CrewSessionLocator(input.readSizedString()),
                                     inviteId = CrewInviteId(input.readSizedString()),
                                     initiatorMemberId = input.readMemberId(),
-                                    initiatorNonce = CrewJoinNonce(input.readNBytesExact(JOIN_NONCE_BYTES)),
+                                    initiatorNonce =
+                                        CrewJoinNonce(input.readNBytesExact(JOIN_NONCE_BYTES)),
                                 )
                             2 ->
                                 CrewJoinMessage.ResponderChallenge(
                                     sessionId = input.readSessionId(),
                                     responderMemberId = input.readMemberId(),
-                                    responderNonce = CrewJoinNonce(input.readNBytesExact(JOIN_NONCE_BYTES)),
-                                    responderProof = CrewJoinProof(input.readNBytesExact(JOIN_PROOF_BYTES)),
+                                    responderNonce =
+                                        CrewJoinNonce(input.readNBytesExact(JOIN_NONCE_BYTES)),
+                                    responderProof =
+                                        CrewJoinProof(input.readNBytesExact(JOIN_PROOF_BYTES)),
                                 )
                             3 ->
                                 CrewJoinMessage.InitiatorProof(
-                                    CrewJoinProof(input.readNBytesExact(JOIN_PROOF_BYTES)),
+                                    CrewJoinProof(input.readNBytesExact(JOIN_PROOF_BYTES))
                                 )
                             4 ->
                                 CrewJoinMessage.ResponderFinished(
-                                    CrewJoinProof(input.readNBytesExact(JOIN_PROOF_BYTES)),
+                                    CrewJoinProof(input.readNBytesExact(JOIN_PROOF_BYTES))
                                 )
                             else -> return CrewJoinDecodeResult.Rejected.MALFORMED
                         }
@@ -245,8 +249,7 @@ sealed interface CrewResponderHelloResult {
 }
 
 sealed interface CrewInitiatorChallengeResult {
-    data class Accepted(val response: CrewJoinMessage.InitiatorProof) :
-        CrewInitiatorChallengeResult
+    data class Accepted(val response: CrewJoinMessage.InitiatorProof) : CrewInitiatorChallengeResult
 
     data class Rejected(val reason: CrewJoinRejectionReason) : CrewInitiatorChallengeResult
 }
@@ -352,9 +355,7 @@ class CrewJoinInitiator(
             )
         if (!transcript.verifyProof("responder", invite, challenge.responderProof)) {
             state = State.REJECTED
-            return CrewInitiatorChallengeResult.Rejected(
-                CrewJoinRejectionReason.PROOF_INVALID,
-            )
+            return CrewInitiatorChallengeResult.Rejected(CrewJoinRejectionReason.PROOF_INVALID)
         }
         val response = CrewJoinMessage.InitiatorProof(transcript.proof("initiator", invite))
         pendingTranscript = transcript
@@ -460,7 +461,7 @@ class CrewJoinResponder(
                 localMemberId,
                 responderNonce,
                 transcript.proof("responder", invite),
-            ),
+            )
         )
     }
 
@@ -525,10 +526,7 @@ private class CrewJoinTranscript(
     }
 
     fun verifyProof(role: String, invite: CrewInvite, candidateProof: CrewJoinProof) =
-        MessageDigest.isEqual(
-            proof(role, invite).copyBytes(),
-            candidateProof.copyBytes(),
-        )
+        MessageDigest.isEqual(proof(role, invite).copyBytes(), candidateProof.copyBytes())
 
     fun bindingHash(): ByteArray {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -583,7 +581,7 @@ private fun requireActiveInvite(invite: CrewInvite, nowEpochMs: Long) {
     require(
         nowEpochMs >= 0 &&
             invite.issuedAtEpochMs - nowEpochMs <= JOIN_CLOCK_SKEW_TOLERANCE_MS &&
-            nowEpochMs < invite.expiresAtEpochMs,
+            nowEpochMs < invite.expiresAtEpochMs
     ) {
         "Crew invitation is not active"
     }

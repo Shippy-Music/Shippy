@@ -1,6 +1,7 @@
 [submodule "media"]
 	path = media
-	url = https://github.com/OxygenCobalt/media.git
+	url = https://github.com/Shippy-Music/media.git
+	branch = shippy/windows-build
 
 [submodule "musikr/src/main/cpp/taglib"]
 	path = musikr/src/main/cpp/taglib

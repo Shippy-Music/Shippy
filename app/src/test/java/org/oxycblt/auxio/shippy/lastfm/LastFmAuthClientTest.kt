@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * LastFmAuthClientTest.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.lastfm
 
 import java.io.IOException
@@ -25,7 +42,11 @@ class LastFmAuthClientTest {
         assertTrue(body.contains("method=auth.getToken"))
         assertTrue(body.contains("api_key=api+key"))
         assertTrue(body.contains("format=xml"))
-        assertTrue(body.contains("api_sig=${LastFmSigning.signature(mapOf("method" to "auth.getToken", "api_key" to "api key"), "secret")}"))
+        assertTrue(
+            body.contains(
+                "api_sig=${LastFmSigning.signature(mapOf("method" to "auth.getToken", "api_key" to "api key"), "secret")}"
+            )
+        )
         assertFalse(body.contains("secret"))
     }
 
@@ -33,30 +54,66 @@ class LastFmAuthClientTest {
     fun `authorization URL is fixed https and encodes only supplied values`() {
         val result = LastFmAuthClient(UnusedTransport).authorizationUrl("key +", "token&x")
         assertEquals(
-            LastFmAuthResult.Success("https://www.last.fm/api/auth/?api_key=key+%2B&token=token%26x"),
+            LastFmAuthResult.Success(
+                "https://www.last.fm/api/auth/?api_key=key+%2B&token=token%26x"
+            ),
             result,
         )
-        assertEquals(LastFmAuthResult.Failure.InvalidInput, LastFmAuthClient(UnusedTransport).authorizationUrl("key", "bad\nvalue"))
+        assertEquals(
+            LastFmAuthResult.Failure.InvalidInput,
+            LastFmAuthClient(UnusedTransport).authorizationUrl("key", "bad\nvalue"),
+        )
     }
 
     @Test
     fun `authorized token exchange parses session credentials`() = runBlocking {
-        val transport = RecordingTransport(ok("<lfm status=\"ok\"><session><name>alice</name><key>session-key</key></session></lfm>"))
+        val transport =
+            RecordingTransport(
+                ok(
+                    "<lfm status=\"ok\"><session><name>alice</name><key>session-key</key></session></lfm>"
+                )
+            )
         val result = LastFmAuthClient(transport).exchangeAuthorizedToken("key", "secret", "token")
 
-        assertEquals(LastFmAuthResult.Success(LastFmCredentials("key", "secret", "session-key", "alice")), result)
+        assertEquals(
+            LastFmAuthResult.Success(LastFmCredentials("key", "secret", "session-key", "alice")),
+            result,
+        )
         val body = transport.request!!.body!!.decodeToString()
         assertTrue(body.contains("method=auth.getSession"))
         assertTrue(body.contains("token=token"))
-        assertTrue(body.contains("api_sig=${LastFmSigning.signature(mapOf("method" to "auth.getSession", "api_key" to "key", "token" to "token"), "secret")}"))
+        assertTrue(
+            body.contains(
+                "api_sig=${LastFmSigning.signature(mapOf("method" to "auth.getSession", "api_key" to "key", "token" to "token"), "secret")}"
+            )
+        )
     }
 
     @Test
     fun `api and transport failures remain explicit`() = runBlocking {
-        val api = LastFmAuthClient(RecordingTransport(ok("<lfm status=\"failed\"><error code=\"14\">Unauthorized token</error></lfm>"))).requestToken("key", "secret")
-        assertEquals(LastFmAuthResult.Failure.Api(14, "Unauthorized token", LastFmAuthFailureCode.INVALID_AUTH_TOKEN), api)
+        val api =
+            LastFmAuthClient(
+                    RecordingTransport(
+                        ok(
+                            "<lfm status=\"failed\"><error code=\"14\">Unauthorized token</error></lfm>"
+                        )
+                    )
+                )
+                .requestToken("key", "secret")
+        assertEquals(
+            LastFmAuthResult.Failure.Api(
+                14,
+                "Unauthorized token",
+                LastFmAuthFailureCode.INVALID_AUTH_TOKEN,
+            ),
+            api,
+        )
 
-        val http = LastFmAuthClient(RecordingTransport(ProviderHttpResponse(503, emptyMap(), ByteArray(0)))).requestToken("key", "secret")
+        val http =
+            LastFmAuthClient(
+                    RecordingTransport(ProviderHttpResponse(503, emptyMap(), ByteArray(0)))
+                )
+                .requestToken("key", "secret")
         assertEquals(LastFmAuthResult.Failure.Http(503), http)
 
         val apiOnHttpFailure =
@@ -97,16 +154,21 @@ class LastFmAuthClientTest {
 
     @Test
     fun `malformed and oversized XML are rejected without a token`() = runBlocking {
-        val malformed = LastFmAuthClient(RecordingTransport(ok("<lfm status=\"ok\"><token>abc</lfm>"))).requestToken("key", "secret")
+        val malformed =
+            LastFmAuthClient(RecordingTransport(ok("<lfm status=\"ok\"><token>abc</lfm>")))
+                .requestToken("key", "secret")
         assertEquals(LastFmAuthResult.Failure.MalformedResponse, malformed)
 
         val oversized = "<lfm status=\"ok\"><token>${"x".repeat(70 * 1024)}</token></lfm>"
-        val tooLarge = LastFmAuthClient(RecordingTransport(ok(oversized))).requestToken("key", "secret")
+        val tooLarge =
+            LastFmAuthClient(RecordingTransport(ok(oversized))).requestToken("key", "secret")
         assertEquals(LastFmAuthResult.Failure.MalformedResponse, tooLarge)
     }
 
-    private class RecordingTransport(private val response: ProviderHttpResponse) : ProviderHttpTransport {
+    private class RecordingTransport(private val response: ProviderHttpResponse) :
+        ProviderHttpTransport {
         var request: ProviderHttpRequest? = null
+
         override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse {
             this.request = request
             return response
@@ -114,11 +176,13 @@ class LastFmAuthClientTest {
     }
 
     private object FailingTransport : ProviderHttpTransport {
-        override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse = throw IOException("offline")
+        override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse =
+            throw IOException("offline")
     }
 
     private object UnusedTransport : ProviderHttpTransport {
-        override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse = error("No request expected")
+        override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse =
+            error("No request expected")
     }
 
     private fun ok(body: String) = ProviderHttpResponse(200, emptyMap(), body.toByteArray())

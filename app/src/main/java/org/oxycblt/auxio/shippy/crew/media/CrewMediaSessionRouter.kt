@@ -1,17 +1,24 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewMediaSessionRouter.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewMediaSessionRouter.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.media
 
-import java.util.concurrent.ConcurrentHashMap
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
@@ -33,21 +40,15 @@ interface CrewMediaSessionCallbacks {
         file: File,
     ): Boolean
 
-    fun onTransferRetryLater(
-        transfer: CrewMediaTransferRef,
-        peerMemberId: CrewMemberId,
-    ) = Unit
+    fun onTransferRetryLater(transfer: CrewMediaTransferRef, peerMemberId: CrewMemberId) = Unit
 
-    fun onTransferRejected(
-        transfer: CrewMediaTransferRef,
-        peerMemberId: CrewMemberId,
-    ) = Unit
+    fun onTransferRejected(transfer: CrewMediaTransferRef, peerMemberId: CrewMemberId) = Unit
 }
 
 /**
  * Authenticated media endpoint installed behind [CrewAuthenticatedMediaLifecycle]. The session
- * engine remains the sole transport collector and supplies the peer identity with every frame.
- * This class owns only bounded, per-peer media state; it does not discover peers or inspect media.
+ * engine remains the sole transport collector and supplies the peer identity with every frame. This
+ * class owns only bounded, per-peer media state; it does not discover peers or inspect media.
  */
 class CrewMediaSessionRouter(
     private val activeSessionId: CrewSessionId,
@@ -62,13 +63,18 @@ class CrewMediaSessionRouter(
     override fun onPeerAttached(peer: CrewAuthenticatedMediaPeer) {
         if (peer.memberId != peer.transport.remoteMemberId || peer.memberId == localMemberId) return
         val media = CrewMediaTransport(activeSessionId, pushPullPolicy, peer.transport)
-        val replacement = PeerState(peer, media, CrewMediaTransferController(
-            activeSessionId,
-            localMemberId,
-            peer.transport,
-            media,
-            pushPullPolicy,
-        ))
+        val replacement =
+            PeerState(
+                peer,
+                media,
+                CrewMediaTransferController(
+                    activeSessionId,
+                    localMemberId,
+                    peer.transport,
+                    media,
+                    pushPullPolicy,
+                ),
+            )
         peers.put(peer.memberId, replacement)?.let { previous ->
             previous.receivingTransfers.forEach(receiver::cancel)
             previous.receivingTransfers.clear()
@@ -77,22 +83,32 @@ class CrewMediaSessionRouter(
         }
     }
 
-    override fun onMediaFrame(peer: CrewAuthenticatedMediaPeer, frame: org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame): CrewMediaFrameResult {
-        val state = peers[peer.memberId]
-            ?.takeIf { it.peer.transport === peer.transport && it.peer.memberId == peer.memberId }
-            ?: return CrewMediaFrameResult.Rejected("media peer is not attached")
+    override fun onMediaFrame(
+        peer: CrewAuthenticatedMediaPeer,
+        frame: org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame,
+    ): CrewMediaFrameResult {
+        val state =
+            peers[peer.memberId]?.takeIf {
+                it.peer.transport === peer.transport && it.peer.memberId == peer.memberId
+            } ?: return CrewMediaFrameResult.Rejected("media peer is not attached")
         if (!pushPullPolicy.accepts(activeSessionId)) {
             // Disabling Push & Pull is local policy, not peer protocol corruption. Keep the
             // authenticated control connection alive while refusing all media work.
             return CrewMediaFrameResult.Accepted
         }
-        val decoded = state.media.receive(frame)
-            ?: return CrewMediaFrameResult.Rejected("malformed, inactive, or wrong-session media frame")
+        val decoded =
+            state.media.receive(frame)
+                ?: return CrewMediaFrameResult.Rejected(
+                    "malformed, inactive, or wrong-session media frame"
+                )
         if (!isInboundForLocal(decoded, peer.memberId)) {
             state.media.send(CrewMediaWireFrame.Rejected(decoded.transfer))
             return CrewMediaFrameResult.Rejected("media transfer does not match authenticated peer")
         }
-        if (state.controller.receive(decoded) == CrewMediaTransferState.REJECTED) {
+        if (
+            state.controller.receive(decoded) == CrewMediaTransferState.REJECTED &&
+                decoded !is CrewMediaWireFrame.Rejected
+        ) {
             state.media.send(CrewMediaWireFrame.Rejected(decoded.transfer))
             return CrewMediaFrameResult.Rejected("media transfer was rejected")
         }
@@ -133,9 +149,7 @@ class CrewMediaSessionRouter(
                 }
                 releaseSupplierPermitIfOwned(decoded.transfer)
                 state.controller.forget(decoded.transfer)
-                runCatching {
-                    callbacks.onTransferRejected(decoded.transfer, state.peer.memberId)
-                }
+                runCatching { callbacks.onTransferRejected(decoded.transfer, state.peer.memberId) }
                 CrewMediaFrameResult.Accepted
             }
         }
@@ -160,7 +174,9 @@ class CrewMediaSessionRouter(
         fanoutPolicy.releaseAll()
     }
 
-    /** Push & Pull was disabled locally; abandon temporary work without changing Crew control state. */
+    /**
+     * Push & Pull was disabled locally; abandon temporary work without changing Crew control state.
+     */
     fun onPushPullDisabled() {
         peers.values.forEach { state ->
             state.receivingTransfers.forEach(receiver::cancel)
@@ -176,39 +192,58 @@ class CrewMediaSessionRouter(
     }
 
     /** Requests one exact candidate from an already authenticated, attached supplier. */
-    fun requestTemporaryMedia(supplierMemberId: CrewMemberId, transfer: CrewMediaTransferRef): CrewSendResult? {
-        val state = peers[supplierMemberId]
-            ?.takeIf { it.peer.memberId == supplierMemberId && it.peer.transport.remoteMemberId == supplierMemberId }
-            ?: return null
+    fun requestTemporaryMedia(
+        supplierMemberId: CrewMemberId,
+        transfer: CrewMediaTransferRef,
+    ): CrewSendResult? {
+        val state =
+            peers[supplierMemberId]?.takeIf {
+                it.peer.memberId == supplierMemberId &&
+                    it.peer.transport.remoteMemberId == supplierMemberId
+            } ?: return null
         if (
-            !pushPullPolicy.accepts(activeSessionId) || transfer.sessionId != activeSessionId ||
-                transfer.targetMemberId != localMemberId || transfer.supplierMemberId != supplierMemberId
-        ) return null
+            !pushPullPolicy.accepts(activeSessionId) ||
+                transfer.sessionId != activeSessionId ||
+                transfer.targetMemberId != localMemberId ||
+                transfer.supplierMemberId != supplierMemberId
+        )
+            return null
         return state.controller.request(transfer)
     }
 
     /** Cancels one exact outbound request through its authenticated supplier peer. */
-    fun cancelTemporaryMediaRequest(supplierMemberId: CrewMemberId, transfer: CrewMediaTransferRef): CrewSendResult? {
-        val state = peers[supplierMemberId]
-            ?.takeIf { it.peer.memberId == supplierMemberId && it.peer.transport.remoteMemberId == supplierMemberId }
-            ?: return null
+    fun cancelTemporaryMediaRequest(
+        supplierMemberId: CrewMemberId,
+        transfer: CrewMediaTransferRef,
+    ): CrewSendResult? {
+        val state =
+            peers[supplierMemberId]?.takeIf {
+                it.peer.memberId == supplierMemberId &&
+                    it.peer.transport.remoteMemberId == supplierMemberId
+            } ?: return null
         if (
-            !pushPullPolicy.accepts(activeSessionId) || transfer.sessionId != activeSessionId ||
-                transfer.targetMemberId != localMemberId || transfer.supplierMemberId != supplierMemberId
-        ) return null
+            !pushPullPolicy.accepts(activeSessionId) ||
+                transfer.sessionId != activeSessionId ||
+                transfer.targetMemberId != localMemberId ||
+                transfer.supplierMemberId != supplierMemberId
+        )
+            return null
         return state.controller.cancel(transfer)
     }
 
-    private fun handleRequest(state: PeerState, frame: CrewMediaWireFrame.Request): CrewMediaFrameResult {
+    private fun handleRequest(
+        state: PeerState,
+        frame: CrewMediaWireFrame.Request,
+    ): CrewMediaFrameResult {
         // A datagram-level retry for an already offered transfer neither re-authorizes a source nor
         // consumes another upload permit. The controller has retained the existing offer state.
         if (fanoutPolicy.hasPermit(frame.transfer)) {
             state.controller.resume(frame.transfer)
             return CrewMediaFrameResult.Accepted
         }
-        val source = runCatching {
-            callbacks.authorizeSupplierSource(frame.transfer, state.peer.memberId)
-        }.getOrNull()
+        val source =
+            runCatching { callbacks.authorizeSupplierSource(frame.transfer, state.peer.memberId) }
+                .getOrNull()
         if (source == null) {
             state.media.send(CrewMediaWireFrame.Rejected(frame.transfer))
             state.controller.forget(frame.transfer)
@@ -238,7 +273,10 @@ class CrewMediaSessionRouter(
         return CrewMediaFrameResult.Accepted
     }
 
-    private fun handleManifest(state: PeerState, frame: CrewMediaWireFrame.Manifest): CrewMediaFrameResult =
+    private fun handleManifest(
+        state: PeerState,
+        frame: CrewMediaWireFrame.Manifest,
+    ): CrewMediaFrameResult =
         when (val result = receiver.accept(frame.value)) {
             is CrewMediaReceiveResult.Accepted -> {
                 state.receivingTransfers.add(frame.transfer)
@@ -250,10 +288,14 @@ class CrewMediaSessionRouter(
                 CrewMediaFrameResult.Accepted
             }
             is CrewMediaReceiveResult.Rejected -> reject(state, frame.transfer, result.reason)
-            is CrewMediaReceiveResult.Complete -> reject(state, frame.transfer, "manifest cannot complete media")
+            is CrewMediaReceiveResult.Complete ->
+                reject(state, frame.transfer, "manifest cannot complete media")
         }
 
-    private fun handleChunk(state: PeerState, frame: CrewMediaWireFrame.Chunk): CrewMediaFrameResult =
+    private fun handleChunk(
+        state: PeerState,
+        frame: CrewMediaWireFrame.Chunk,
+    ): CrewMediaFrameResult =
         when (val result = receiver.accept(frame.value)) {
             is CrewMediaReceiveResult.Accepted -> {
                 // This acknowledgement also advances the supplier's bounded one-chunk window.
@@ -289,7 +331,11 @@ class CrewMediaSessionRouter(
             is CrewMediaReceiveResult.Rejected -> reject(state, frame.transfer, result.reason)
         }
 
-    private fun reject(state: PeerState, transfer: CrewMediaTransferRef, reason: String): CrewMediaFrameResult {
+    private fun reject(
+        state: PeerState,
+        transfer: CrewMediaTransferRef,
+        reason: String,
+    ): CrewMediaFrameResult {
         receiver.cancel(transfer)
         state.receivingTransfers.remove(transfer)
         state.media.send(CrewMediaWireFrame.Rejected(transfer))
@@ -304,9 +350,12 @@ class CrewMediaSessionRouter(
 
     private fun isInboundForLocal(frame: CrewMediaWireFrame, peerId: CrewMemberId): Boolean {
         val transfer = frame.transfer
-        if (transfer.sessionId != activeSessionId || !pushPullPolicy.accepts(activeSessionId)) return false
-        val localIsSupplier = transfer.supplierMemberId == localMemberId && transfer.targetMemberId == peerId
-        val localIsTarget = transfer.targetMemberId == localMemberId && transfer.supplierMemberId == peerId
+        if (transfer.sessionId != activeSessionId || !pushPullPolicy.accepts(activeSessionId))
+            return false
+        val localIsSupplier =
+            transfer.supplierMemberId == localMemberId && transfer.targetMemberId == peerId
+        val localIsTarget =
+            transfer.targetMemberId == localMemberId && transfer.supplierMemberId == peerId
         return when (frame) {
             is CrewMediaWireFrame.Request,
             is CrewMediaWireFrame.ManifestAccepted,

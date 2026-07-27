@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.list.recycler
 
 import android.annotation.SuppressLint
@@ -88,6 +87,7 @@ class SongViewHolder private constructor(private val binding: ItemSongBinding) :
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Song>() {
+                @SuppressLint("DiffUtilEquals")
                 override fun areContentsTheSame(oldItem: Song, newItem: Song) =
                     oldItem.name == newItem.name && oldItem.artists.areNamesTheSame(newItem.artists)
             }
@@ -138,6 +138,7 @@ class AlbumViewHolder private constructor(private val binding: ItemParentBinding
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Album>() {
+                @SuppressLint("DiffUtilEquals")
                 override fun areContentsTheSame(oldItem: Album, newItem: Album) =
                     oldItem.name == newItem.name &&
                         oldItem.artists.areNamesTheSame(newItem.artists) &&
@@ -204,6 +205,7 @@ class ArtistViewHolder private constructor(private val binding: ItemParentBindin
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Artist>() {
+                @SuppressLint("DiffUtilEquals")
                 override fun areContentsTheSame(oldItem: Artist, newItem: Artist) =
                     oldItem.name == newItem.name &&
                         oldItem.explicitAlbums.size == newItem.explicitAlbums.size &&
@@ -261,6 +263,7 @@ class GenreViewHolder private constructor(private val binding: ItemParentBinding
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Genre>() {
+                @SuppressLint("DiffUtilEquals")
                 override fun areContentsTheSame(oldItem: Genre, newItem: Genre) =
                     oldItem.name == newItem.name &&
                         oldItem.artists.size == newItem.artists.size &&
@@ -319,6 +322,7 @@ class PlaylistViewHolder private constructor(private val binding: ItemParentBind
         /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK =
             object : SimpleDiffCallback<Playlist>() {
+                @SuppressLint("DiffUtilEquals")
                 override fun areContentsTheSame(oldItem: Playlist, newItem: Playlist) =
                     oldItem.name == newItem.name && oldItem.songs.size == newItem.songs.size
             }

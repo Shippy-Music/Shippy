@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewJoinAuthenticatorTest.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewJoinAuthenticatorTest.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.auth
 
 import org.junit.Assert.assertEquals
@@ -51,15 +58,11 @@ class CrewJoinAuthenticatorTest {
 
         val hello = roundTrip(initiator.start()) as CrewJoinMessage.InitiatorHello
         val challengeResult = responder.accept(hello) as CrewResponderHelloResult.Accepted
-        val challenge =
-            roundTrip(challengeResult.challenge) as CrewJoinMessage.ResponderChallenge
-        val challengeAccepted =
-            initiator.accept(challenge) as CrewInitiatorChallengeResult.Accepted
+        val challenge = roundTrip(challengeResult.challenge) as CrewJoinMessage.ResponderChallenge
+        val challengeAccepted = initiator.accept(challenge) as CrewInitiatorChallengeResult.Accepted
         val response = roundTrip(challengeAccepted.response) as CrewJoinMessage.InitiatorProof
-        val responderResult =
-            responder.complete(response) as CrewResponderProofResult.Authenticated
-        val finished =
-            roundTrip(responderResult.response) as CrewJoinMessage.ResponderFinished
+        val responderResult = responder.complete(response) as CrewResponderProofResult.Authenticated
+        val finished = roundTrip(responderResult.response) as CrewJoinMessage.ResponderFinished
         val initiatorResult =
             initiator.complete(finished) as CrewInitiatorFinishedResult.Authenticated
 
@@ -189,8 +192,7 @@ class CrewJoinAuthenticatorTest {
 
     @Test
     fun `codec rejects trailing and unknown format bytes`() {
-        val message =
-            CrewJoinMessage.InitiatorProof(CrewJoinProof(ByteArray(32)))
+        val message = CrewJoinMessage.InitiatorProof(CrewJoinProof(ByteArray(32)))
         val encoded = CrewJoinMessageCodec.encode(message)
 
         assertEquals(
@@ -209,10 +211,7 @@ class CrewJoinAuthenticatorTest {
         val sameTwice = one + one.substringAfter("v=0\r\n")
         val conflicting = one + sdp(2).substringAfter("v=0\r\n")
 
-        assertEquals(
-            CrewSdpFingerprint.fromSdp(one),
-            CrewSdpFingerprint.fromSdp(sameTwice),
-        )
+        assertEquals(CrewSdpFingerprint.fromSdp(one), CrewSdpFingerprint.fromSdp(sameTwice))
         assertInvalid { CrewSdpFingerprint.fromSdp(conflicting) }
         assertTrue(CrewSdpFingerprint.fromSdp(one).toString().contains("redacted"))
     }
@@ -222,8 +221,9 @@ class CrewJoinAuthenticatorTest {
         return (result as CrewJoinDecodeResult.Accepted).message
     }
 
-    private fun nonceSource(seed: Int) =
-        CrewJoinNonceSource { CrewJoinNonce(ByteArray(32) { (seed + it).toByte() }) }
+    private fun nonceSource(seed: Int) = CrewJoinNonceSource {
+        CrewJoinNonce(ByteArray(32) { (seed + it).toByte() })
+    }
 
     private fun fingerprint(seed: Int) = CrewSdpFingerprint.fromSdp(sdp(seed))
 
@@ -234,9 +234,7 @@ class CrewJoinAuthenticatorTest {
         return "v=0\r\na=fingerprint:sha-256 $value\r\n"
     }
 
-    private fun invite(
-        secret: String = "secret_abcdefghijklmnopqrstuvwxyz",
-    ) =
+    private fun invite(secret: String = "secret_abcdefghijklmnopqrstuvwxyz") =
         CrewInvite(
             protocolVersion = version,
             sessionLocator = CrewSessionLocator("session_locator_123"),

@@ -1,14 +1,27 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewRelayIceServerProvider.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewRelayIceServerProvider.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.relay
 
 import java.io.ByteArrayOutputStream
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -23,31 +36,30 @@ import org.oxycblt.auxio.shippy.crew.invite.CrewInvite
 import org.oxycblt.auxio.shippy.crew.invite.CrewRelayLocator
 import org.oxycblt.auxio.shippy.crew.runtime.DEFAULT_CREW_REMOTE_ICE_SERVERS
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewIceServer
-import kotlin.coroutines.resume
 
 /** Retrieves short-lived relay TURN credentials without ever sending an invite secret. */
 class CrewRelayIceServerProvider
 @Inject
-constructor(
-    @CrewRelayHttpClient private val client: OkHttpClient,
-) {
+constructor(@CrewRelayHttpClient private val client: OkHttpClient) {
     private val nowEpochMs: () -> Long = System::currentTimeMillis
 
     suspend fun resolve(invite: CrewInvite): List<CrewIceServer> {
         val locator = invite.relayLocator ?: return DEFAULT_CREW_REMOTE_ICE_SERVERS
         val request =
             runCatching {
-                val payload =
-                    JSONObject()
-                        .put("protocolVersion", invite.protocolVersion.value)
-                        .put("sessionLocator", invite.sessionLocator.value)
-                        .put("inviteId", invite.inviteId.value)
-                Request.Builder()
-                    .url(CrewRelayIceUrl.derive(locator))
-                    .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
-                    .build()
-            }
-                .getOrElse { return DEFAULT_CREW_REMOTE_ICE_SERVERS }
+                    val payload =
+                        JSONObject()
+                            .put("protocolVersion", invite.protocolVersion.value)
+                            .put("sessionLocator", invite.sessionLocator.value)
+                            .put("inviteId", invite.inviteId.value)
+                    Request.Builder()
+                        .url(CrewRelayIceUrl.derive(locator))
+                        .post(payload.toString().toRequestBody(JSON_MEDIA_TYPE))
+                        .build()
+                }
+                .getOrElse {
+                    return DEFAULT_CREW_REMOTE_ICE_SERVERS
+                }
 
         return suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
@@ -56,7 +68,8 @@ constructor(
             call.enqueue(
                 object : Callback {
                     override fun onFailure(call: Call, error: java.io.IOException) {
-                        if (continuation.isActive) continuation.resume(DEFAULT_CREW_REMOTE_ICE_SERVERS)
+                        if (continuation.isActive)
+                            continuation.resume(DEFAULT_CREW_REMOTE_ICE_SERVERS)
                     }
 
                     override fun onResponse(call: Call, response: Response) {
@@ -74,11 +87,11 @@ constructor(
                         if (continuation.isActive) {
                             continuation.resume(
                                 iceServers?.let { DEFAULT_CREW_REMOTE_ICE_SERVERS + it }
-                                    ?: DEFAULT_CREW_REMOTE_ICE_SERVERS,
+                                    ?: DEFAULT_CREW_REMOTE_ICE_SERVERS
                             )
                         }
                     }
-                },
+                }
             )
         }
     }
@@ -120,7 +133,7 @@ object CrewRelayIceResponseParser {
         if (statusCode !in 200..299 || body == null || nowEpochMs < 0L) return null
         return runCatching {
                 val response = JSONObject(body)
-                if (response.keySet() != setOf("iceServers", "expiresAtEpochMs")) return null
+                if (!response.hasExactlyKeys("iceServers", "expiresAtEpochMs")) return null
                 val expiresAtEpochMs = response.strictEpochMs("expiresAtEpochMs") ?: return null
                 if (
                     expiresAtEpochMs <= nowEpochMs ||
@@ -133,7 +146,7 @@ object CrewRelayIceResponseParser {
                 buildList {
                     repeat(servers.length()) { index ->
                         val server = servers.opt(index) as? JSONObject ?: return null
-                        if (server.keySet() != setOf("urls", "username", "credential")) return null
+                        if (!server.hasExactlyKeys("urls", "username", "credential")) return null
                         val urls = server.opt("urls") as? JSONArray ?: return null
                         if (urls.length() !in 1..MAX_URLS_PER_SERVER) return null
                         val parsedUrls = buildList {
@@ -176,4 +189,11 @@ object CrewRelayIceResponseParser {
     private const val MAX_USERNAME_LENGTH = 256
     private const val MAX_CREDENTIAL_LENGTH = 512
     private const val MAX_CREDENTIAL_LIFETIME_MS = 60 * 60 * 1000L
+}
+
+private fun JSONObject.hasExactlyKeys(vararg expected: String): Boolean {
+    val actual = linkedSetOf<String>()
+    val iterator = keys()
+    while (iterator.hasNext()) actual += iterator.next()
+    return actual == expected.toSet()
 }

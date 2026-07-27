@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.home.list
 
 import android.os.Bundle
@@ -42,10 +41,11 @@ import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
-import org.oxycblt.auxio.shippy.domain.LibraryCollection
+import org.oxycblt.auxio.shippy.library.LibraryCollectionListRow
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsState
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
-import org.oxycblt.auxio.shippy.library.systemRows
+import org.oxycblt.auxio.shippy.library.collectionRows
+import org.oxycblt.auxio.shippy.library.shouldShowOnboarding
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
@@ -69,30 +69,27 @@ class PlaylistListFragment :
     override val playbackModel: PlaybackViewModel by activityViewModels()
     private val collectionsModel: LibraryCollectionsViewModel by viewModels()
     private val collectionsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_collections)
-    private val systemCollectionAdapter =
-        LibrarySystemCollectionAdapter { row ->
-            homeModel.openShippyCollection(LibraryCollection.System(row.kind).id)
-        }
-    private val onboardingAdapter =
-        LibraryOnboardingAdapter { homeModel.startChooseMusicLocations() }
+    private val collectionAdapter = UnifiedLibraryCollectionAdapter { row ->
+        homeModel.openShippyCollection(row.id)
+    }
+    private val onboardingAdapter = LibraryOnboardingAdapter {
+        homeModel.startChooseMusicLocations()
+    }
     private val savedProvidersHeaderAdapter =
         LibrarySectionHeaderAdapter(R.string.lbl_saved_from_providers)
-    private val savedProviderAdapter =
-        SavedProviderEntityAdapter { saved -> homeModel.openProviderEntity(saved.entity) }
-    private val shippyPlaylistsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_shippy_playlists)
-    private val shippyPlaylistAdapter =
-        ShippyPlaylistProjectionAdapter { playlist -> homeModel.openShippyCollection(playlist.id) }
-    private val devicePlaylistsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_on_this_device)
+    private val savedProviderAdapter = SavedProviderEntityAdapter { saved ->
+        homeModel.openProviderEntity(saved.entity)
+    }
+    private val devicePlaylistsHeaderAdapter =
+        LibrarySectionHeaderAdapter(R.string.lbl_on_this_device)
     private val playlistAdapter = PlaylistAdapter(this)
     private val libraryAdapter =
         ConcatAdapter(
             collectionsHeaderAdapter,
-            systemCollectionAdapter,
+            collectionAdapter,
             onboardingAdapter,
             savedProvidersHeaderAdapter,
             savedProviderAdapter,
-            shippyPlaylistsHeaderAdapter,
-            shippyPlaylistAdapter,
             devicePlaylistsHeaderAdapter,
             playlistAdapter,
         )
@@ -116,11 +113,9 @@ class PlaylistListFragment :
         }
         playlistDragHelper =
             ItemTouchHelper(
-                    ShippyPlaylistDragCallback(shippyPlaylistAdapter) { reorderedPlaylists ->
-                        if (!collectionsModel.reorderUserPlaylists(reorderedPlaylists)) {
-                            shippyPlaylistAdapter.rejectPending(
-                                collectionsModel.state.value.userPlaylists
-                            )
+                    ShippyPlaylistDragCallback(collectionAdapter) { reorderedRows ->
+                        if (!collectionsModel.reorderCollections(reorderedRows)) {
+                            collectionAdapter.rejectPending(currentCollectionRows())
                         }
                     }
                 )
@@ -204,8 +199,6 @@ class PlaylistListFragment :
         collectionsHeaderAdapter.setShown(true)
         savedProvidersHeaderAdapter.setShown(state.savedProviderEntities.isNotEmpty())
         savedProviderAdapter.submitList(state.savedProviderEntities)
-        shippyPlaylistsHeaderAdapter.setShown(state.userPlaylists.isNotEmpty())
-        shippyPlaylistAdapter.update(state.userPlaylists)
         renderSystemCollections()
     }
 
@@ -216,9 +209,7 @@ class PlaylistListFragment :
     }
 
     private fun renderSystemCollections() {
-        systemCollectionAdapter.submitList(
-            collectionState.systemRows(localSongCount, isLocalIndexing)
-        )
+        collectionAdapter.update(currentCollectionRows())
         onboardingAdapter.setShown(
             collectionState.shouldShowOnboarding(
                 localSongCount = localSongCount,
@@ -230,6 +221,9 @@ class PlaylistListFragment :
         binding.homeRecycler.isInvisible = false
         binding.homeNoMusic.isInvisible = true
     }
+
+    private fun currentCollectionRows(): List<LibraryCollectionListRow> =
+        collectionState.collectionRows(localSongCount, isLocalIndexing)
 
     private fun updateSelection(selection: List<Music>) {
         playlistAdapter.setSelected(selection.filterIsInstanceTo(mutableSetOf()))

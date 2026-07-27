@@ -1,3 +1,20 @@
+/*
+ * Copyright (c) 2026 Auxio Project
+ * LastFmAuthClient.kt is part of Auxio.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 package org.oxycblt.auxio.shippy.lastfm
 
 import java.io.ByteArrayInputStream
@@ -6,8 +23,8 @@ import java.net.URI
 import java.net.URLEncoder
 import javax.inject.Inject
 import javax.xml.XMLConstants
-import javax.xml.parsers.ParserConfigurationException
 import javax.xml.parsers.DocumentBuilderFactory
+import javax.xml.parsers.ParserConfigurationException
 import org.oxycblt.auxio.shippy.provider.http.ProviderHttpMethod
 import org.oxycblt.auxio.shippy.provider.http.ProviderHttpRequest
 import org.oxycblt.auxio.shippy.provider.http.ProviderHttpResponse
@@ -16,8 +33,8 @@ import org.w3c.dom.Element
 import org.xml.sax.SAXException
 
 /**
- * Last.fm's browser authorization protocol. Callers supply application credentials at runtime;
- * this class deliberately neither stores nor logs them.
+ * Last.fm's browser authorization protocol. Callers supply application credentials at runtime; this
+ * class deliberately neither stores nor logs them.
  */
 class LastFmAuthClient @Inject constructor(private val transport: ProviderHttpTransport) {
     suspend fun requestToken(apiKey: String, apiSecret: String): LastFmAuthResult<String> =
@@ -78,15 +95,19 @@ class LastFmAuthClient @Inject constructor(private val transport: ProviderHttpTr
         }
 
         val unsigned = mapOf("method" to method, "api_key" to apiKey) + extra
-        val params = unsigned +
-            ("api_sig" to LastFmSigning.signature(unsigned, apiSecret)) +
-            ("format" to "xml")
+        val params =
+            unsigned +
+                ("api_sig" to LastFmSigning.signature(unsigned, apiSecret)) +
+                ("format" to "xml")
         val request =
             ProviderHttpRequest(
                 url = API_URL,
                 method = ProviderHttpMethod.POST,
                 headers = mapOf("Content-Type" to "application/x-www-form-urlencoded"),
-                body = params.entries.joinToString("&") { "${encode(it.key)}=${encode(it.value)}" }.toByteArray(Charsets.UTF_8),
+                body =
+                    params.entries
+                        .joinToString("&") { "${encode(it.key)}=${encode(it.value)}" }
+                        .toByteArray(Charsets.UTF_8),
             )
 
         val response =
@@ -108,8 +129,13 @@ class LastFmAuthClient @Inject constructor(private val transport: ProviderHttpTr
         }
         return when (envelope) {
             is LastFmAuthXml.Envelope.ApiError ->
-                LastFmAuthResult.Failure.Api(envelope.code, envelope.message, LastFmAuthFailureCode.from(envelope.code))
-            is LastFmAuthXml.Envelope.Ok -> parse(envelope.document) ?: LastFmAuthResult.Failure.MalformedResponse
+                LastFmAuthResult.Failure.Api(
+                    envelope.code,
+                    envelope.message,
+                    LastFmAuthFailureCode.from(envelope.code),
+                )
+            is LastFmAuthXml.Envelope.Ok ->
+                parse(envelope.document) ?: LastFmAuthResult.Failure.MalformedResponse
             LastFmAuthXml.Envelope.Malformed -> LastFmAuthResult.Failure.MalformedResponse
         }
     }
@@ -119,6 +145,7 @@ class LastFmAuthClient @Inject constructor(private val transport: ProviderHttpTr
         const val AUTHORIZATION_URL = "https://www.last.fm/api/auth/"
         const val METHOD_GET_TOKEN = "auth.getToken"
         const val METHOD_GET_SESSION = "auth.getSession"
+
         fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
     }
 }
@@ -128,9 +155,14 @@ sealed interface LastFmAuthResult<out T> {
 
     sealed interface Failure : LastFmAuthResult<Nothing> {
         data object InvalidInput : Failure
+
         data object Network : Failure
+
         data class Http(val statusCode: Int) : Failure
-        data class Api(val code: Int, val message: String?, val kind: LastFmAuthFailureCode) : Failure
+
+        data class Api(val code: Int, val message: String?, val kind: LastFmAuthFailureCode) :
+            Failure
+
         data object MalformedResponse : Failure
     }
 }
@@ -177,14 +209,17 @@ internal object LastFmAuthXml {
 
     sealed interface Envelope {
         data class Ok(val document: org.w3c.dom.Document) : Envelope
+
         data class ApiError(val code: Int, val message: String?) : Envelope
+
         data object Malformed : Envelope
     }
 
     fun parse(response: ProviderHttpResponse): Envelope {
         val body = response.body
         if (body.isEmpty() || body.size > MAX_XML_BYTES) return Envelope.Malformed
-        if (body.any { it == 0.toByte() } || body.decodeToString().contains("<!")) return Envelope.Malformed
+        if (body.any { it == 0.toByte() } || body.decodeToString().contains("<!"))
+            return Envelope.Malformed
 
         val document =
             try {
@@ -214,14 +249,16 @@ internal object LastFmAuthXml {
     fun token(document: org.w3c.dom.Document): LastFmAuthResult<String>? {
         val root = document.documentElement ?: return null
         val token = root.directChild("token")?.textContent?.trim().orEmpty()
-        return if (LastFmAuthInput.isValid(token)) LastFmAuthResult.Success(token) else LastFmAuthResult.Failure.MalformedResponse
+        return if (LastFmAuthInput.isValid(token)) LastFmAuthResult.Success(token)
+        else LastFmAuthResult.Failure.MalformedResponse
     }
 
     fun session(document: org.w3c.dom.Document): Pair<String, String>? {
         val session = document.documentElement?.directChild("session") ?: return null
         val key = session.directChild("key")?.textContent?.trim().orEmpty()
         val name = session.directChild("name")?.textContent?.trim().orEmpty()
-        return if (LastFmAuthInput.isValid(key) && LastFmAuthInput.isValid(name)) key to name else null
+        return if (LastFmAuthInput.isValid(key) && LastFmAuthInput.isValid(name)) key to name
+        else null
     }
 
     private fun secureFactory(): DocumentBuilderFactory =

@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewReactionReducer.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewReactionReducer.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.reaction
 
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
@@ -61,10 +68,8 @@ data class CrewReactionPolicy(
 sealed interface CrewReactionResult {
     data class Accepted(val state: CrewReactionState) : CrewReactionResult
 
-    data class Rejected(
-        val state: CrewReactionState,
-        val reason: CrewReactionRejection,
-    ) : CrewReactionResult
+    data class Rejected(val state: CrewReactionState, val reason: CrewReactionRejection) :
+        CrewReactionResult
 }
 
 enum class CrewReactionRejection {
@@ -112,18 +117,12 @@ class CrewReactionReducer(private val policy: CrewReactionPolicy) {
             return CrewReactionResult.Rejected(current, CrewReactionRejection.DUPLICATE)
         }
         val lastAcceptedAt = current.lastAcceptedAtByMember[event.memberId]
-        if (
-            lastAcceptedAt != null &&
-                nowMonotonicMs - lastAcceptedAt < policy.minimumIntervalMs
-        ) {
+        if (lastAcceptedAt != null && nowMonotonicMs - lastAcceptedAt < policy.minimumIntervalMs) {
             return CrewReactionResult.Rejected(current, CrewReactionRejection.RATE_LIMITED)
         }
 
         val accepted =
-            ActiveCrewReaction(
-                event,
-                Math.addExact(nowMonotonicMs, policy.visibleDurationMs),
-            )
+            ActiveCrewReaction(event, Math.addExact(nowMonotonicMs, policy.visibleDurationMs))
         return CrewReactionResult.Accepted(
             current.copy(
                 active = (current.active + accepted).takeLast(policy.maximumActive),
@@ -142,8 +141,7 @@ class CrewReactionReducer(private val policy: CrewReactionPolicy) {
         return CrewReactionState(
             active =
                 state.active.filter {
-                    it.expiresAtMonotonicMs > nowMonotonicMs &&
-                        it.event.memberId in activeMemberIds
+                    it.expiresAtMonotonicMs > nowMonotonicMs && it.event.memberId in activeMemberIds
                 },
             lastAcceptedAtByMember =
                 state.lastAcceptedAtByMember.filterKeys(activeMemberIds::contains),

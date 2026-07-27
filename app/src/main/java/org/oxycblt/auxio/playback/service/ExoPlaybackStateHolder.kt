@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.service
 
 import android.content.Context
@@ -53,8 +52,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.music.MusicRepository
-import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.CrossfadeEligibility
+import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.playback.TransitionMode
 import org.oxycblt.auxio.playback.equalPowerCrossfade
 import org.oxycblt.auxio.playback.persist.PersistenceRepository
@@ -603,7 +602,8 @@ class ExoPlaybackStateHolder(
                 transitionGuard.crewActive ||
                 !player.isPlaying ||
                 player.repeatMode == Player.REPEAT_MODE_ONE
-        ) return
+        )
+            return
         val nextIndex = nextMediaItemIndex() ?: return
         val duration = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: return
         val fadeDuration = playbackSettings.crossfadeDurationMs
@@ -611,7 +611,10 @@ class ExoPlaybackStateHolder(
         val next = player.getMediaItemAt(nextIndex).resolvedQueueItem ?: return
         if (!next.playback.isStillValid()) return
 
-        if (preparedStandbyIndex != nextIndex || standbyPlayer.mediaItemCount != player.mediaItemCount) {
+        if (
+            preparedStandbyIndex != nextIndex ||
+                standbyPlayer.mediaItemCount != player.mediaItemCount
+        ) {
             prepareStandby(nextIndex)
             return
         }
@@ -641,7 +644,8 @@ class ExoPlaybackStateHolder(
         standbyReplayGainProcessor.prepareNeutral()
         standbyPlayer.shuffleModeEnabled = player.shuffleModeEnabled
         standbyPlayer.setMediaItems(raw.heap.map { it.buildMediaItem() })
-        if (raw.isShuffled) standbyPlayer.setShuffleOrder(BetterShuffleOrder(raw.shuffledMapping.toIntArray()))
+        if (raw.isShuffled)
+            standbyPlayer.setShuffleOrder(BetterShuffleOrder(raw.shuffledMapping.toIntArray()))
         standbyPlayer.seekTo(nextIndex, 0)
         standbyPlayer.prepare()
         preparedStandbyIndex = nextIndex
@@ -662,7 +666,8 @@ class ExoPlaybackStateHolder(
     }
 
     private fun startCrossfade(nextIndex: Int, sourceDurationMs: Long, fadeDurationMs: Long) {
-        if (crossfadeJob?.isActive == true || standbyPlayer.playbackState != Player.STATE_READY) return
+        if (crossfadeJob?.isActive == true || standbyPlayer.playbackState != Player.STATE_READY)
+            return
         val source = player
         val sourceIndex = source.currentMediaItemIndex
         // Prevent native auto-advance from racing the promoted player; always restored below.
@@ -686,8 +691,8 @@ class ExoPlaybackStateHolder(
                             return@launch
                         }
                         val progress =
-                            ((source.currentPosition - startedAtPosition).coerceAtLeast(0)).toFloat() /
-                                fadeDurationMs
+                            ((source.currentPosition - startedAtPosition).coerceAtLeast(0))
+                                .toFloat() / fadeDurationMs
                         val envelope = equalPowerCrossfade(progress)
                         source.volume = envelope.outgoing
                         standbyPlayer.volume = envelope.incoming
@@ -709,8 +714,11 @@ class ExoPlaybackStateHolder(
 
     /** Swaps renderer ownership while [PlaybackStateManager] remains the sole logical authority. */
     private fun promoteStandby(expectedIndex: Int) {
-        if (crossfadePromoting || preparedStandbyIndex != expectedIndex ||
-            standbyPlayer.playbackState != Player.STATE_READY) {
+        if (
+            crossfadePromoting ||
+                preparedStandbyIndex != expectedIndex ||
+                standbyPlayer.playbackState != Player.STATE_READY
+        ) {
             cancelCrossfade()
             return
         }
@@ -777,7 +785,8 @@ class ExoPlaybackStateHolder(
             .takeIf { it != C.INDEX_UNSET }
 
     private fun org.oxycblt.auxio.shippy.domain.ResolvedPlayback.isStillValid() =
-        uri.isNotBlank() && (expiresAtEpochMs == null || expiresAtEpochMs > System.currentTimeMillis())
+        uri.isNotBlank() &&
+            (expiresAtEpochMs == null || expiresAtEpochMs > System.currentTimeMillis())
 
     private fun reopenAudioEffectSession() {
         if (openAudioEffectSession) {
@@ -1000,7 +1009,9 @@ class ExoPlaybackStateHolder(
                         MediaCodecSelector.DEFAULT,
                         handler,
                         audioListener,
-                        DefaultAudioSink.Builder(context).setAudioProcessors(arrayOf(processor)).build(),
+                        DefaultAudioSink.Builder(context)
+                            .setAudioProcessors(arrayOf(processor))
+                            .build(),
                     ),
                 )
             }

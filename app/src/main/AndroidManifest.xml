@@ -14,9 +14,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-
     <!-- Bluetooth auto-connect functionality (Disabled until permission workflow can be made) -->
 <!--    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />-->
 <!--    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" android:minSdkVersion="31" />-->
@@ -53,6 +50,9 @@
         <meta-data
                 android:name="androidx.car.app.TintableAttributionIcon"
                 android:resource="@drawable/ic_auxio_24" />
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="barcode_ui" />
 
         <activity
             android:name=".MainActivity"
@@ -115,6 +115,7 @@
             tools:ignore="ExportedService">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService"/>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
             </intent-filter>
         </service>
 

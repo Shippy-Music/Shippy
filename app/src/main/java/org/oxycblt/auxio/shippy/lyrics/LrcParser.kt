@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * LrcParser.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * LrcParser.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.lyrics
 
 sealed interface ParsedLyrics {
@@ -16,15 +23,10 @@ sealed interface ParsedLyrics {
 
 data class PlainLyrics(override val plainText: String) : ParsedLyrics
 
-data class SyncedLyricLine(
-    val startMs: Long,
-    val text: String,
-)
+data class SyncedLyricLine(val startMs: Long, val text: String)
 
-data class SyncedLyrics(
-    val lines: List<SyncedLyricLine>,
-    override val plainText: String,
-) : ParsedLyrics
+data class SyncedLyrics(val lines: List<SyncedLyricLine>, override val plainText: String) :
+    ParsedLyrics
 
 object LrcParser {
     private val timestamp = Regex("\\[(\\d{1,3}):(\\d{2})(?:[.:](\\d{1,3}))?]")
@@ -34,9 +36,9 @@ object LrcParser {
     fun parse(input: String): ParsedLyrics {
         val sourceLines = input.replace("\r\n", "\n").replace('\r', '\n').lines()
         val offsetMs =
-            sourceLines.firstNotNullOfOrNull { offset.matchEntire(it.trim())?.groupValues?.get(1) }
-                ?.toLongOrNull()
-                ?: 0L
+            sourceLines
+                .firstNotNullOfOrNull { offset.matchEntire(it.trim())?.groupValues?.get(1) }
+                ?.toLongOrNull() ?: 0L
         val timedLines = mutableListOf<IndexedValue<SyncedLyricLine>>()
         val plainLines = mutableListOf<String>()
         val syncedPlainLines = mutableListOf<String>()
@@ -76,7 +78,11 @@ object LrcParser {
         }
 
         val sortedLines =
-            timedLines.sortedWith(compareBy<IndexedValue<SyncedLyricLine>> { it.value.startMs }.thenBy { it.index })
+            timedLines
+                .sortedWith(
+                    compareBy<IndexedValue<SyncedLyricLine>> { it.value.startMs }
+                        .thenBy { it.index }
+                )
                 .map(IndexedValue<SyncedLyricLine>::value)
         return SyncedLyrics(sortedLines, syncedPlainLines.joinToString("\n"))
     }

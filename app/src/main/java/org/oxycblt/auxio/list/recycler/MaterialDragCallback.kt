@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.list.recycler
 
 import android.graphics.Canvas
@@ -166,7 +165,7 @@ abstract class MaterialDragCallback : ItemTouchHelper.Callback() {
         bg.setCornerSize(progressiveCornerSize)
     }
 
-    final override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+    override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
         // When an elevated item is cleared, we reset the elevation using another animation.
         val holder = viewHolder as ViewHolder
 

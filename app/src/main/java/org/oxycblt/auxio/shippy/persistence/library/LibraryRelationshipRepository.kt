@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * LibraryRelationshipRepository.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * LibraryRelationshipRepository.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.persistence.library
 
 import javax.inject.Inject
@@ -16,8 +23,8 @@ import kotlinx.coroutines.flow.map
 import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.LibraryRelationship
-import org.oxycblt.auxio.shippy.domain.TrackId
 import org.oxycblt.auxio.shippy.domain.Track
+import org.oxycblt.auxio.shippy.domain.TrackId
 
 interface LibraryRelationshipRepository {
     fun observe(trackId: TrackId): Flow<LibraryRelationship>
@@ -30,13 +37,14 @@ interface LibraryRelationshipRepository {
 
     fun observeUserPlaylists(): Flow<List<LibraryCollection.Playlist>>
 
-    fun observeUserPlaylist(
-        playlistId: LibraryCollectionId
-    ): Flow<LibraryCollection.Playlist?>
+    fun observeUserPlaylist(playlistId: LibraryCollectionId): Flow<LibraryCollection.Playlist?>
+
+    fun observePlaylistArtwork(): Flow<Map<LibraryCollectionId, String>>
 
     fun observePlaylistTrackIds(playlistId: LibraryCollectionId): Flow<List<TrackId>>
 
     suspend fun setLiked(trackId: TrackId, liked: Boolean)
+
     suspend fun setLiked(track: Track, liked: Boolean)
 
     suspend fun setDownloaded(trackId: TrackId, downloaded: Boolean)
@@ -47,23 +55,19 @@ interface LibraryRelationshipRepository {
 
     suspend fun setPlaylistPinned(playlistId: LibraryCollectionId, pinned: Boolean)
 
+    suspend fun setPlaylistArtwork(playlistId: LibraryCollectionId, artworkUri: String?)
+
     suspend fun replacePlaylistOrder(playlistIds: List<LibraryCollectionId>)
+
+    suspend fun replacePlaylistLayout(playlists: List<LibraryCollection.Playlist>)
 
     suspend fun deletePlaylist(playlistId: LibraryCollectionId)
 
-    suspend fun replacePlaylistTracks(
-        playlistId: LibraryCollectionId,
-        trackIds: List<TrackId>,
-    )
+    suspend fun replacePlaylistTracks(playlistId: LibraryCollectionId, trackIds: List<TrackId>)
 
-    suspend fun replacePlaylistMemberships(
-        trackId: TrackId,
-        playlistIds: Set<LibraryCollectionId>,
-    )
-    suspend fun replacePlaylistMemberships(
-        track: Track,
-        playlistIds: Set<LibraryCollectionId>,
-    )
+    suspend fun replacePlaylistMemberships(trackId: TrackId, playlistIds: Set<LibraryCollectionId>)
+
+    suspend fun replacePlaylistMemberships(track: Track, playlistIds: Set<LibraryCollectionId>)
 }
 
 internal class RoomLibraryRelationshipRepository
@@ -78,7 +82,9 @@ constructor(
         }
 
     override fun observeAll(): Flow<List<LibraryRelationship>> =
-        dao.observeAll().map { relationships -> relationships.map(StoredLibraryRelationship::toDomain) }
+        dao.observeAll().map { relationships ->
+            relationships.map(StoredLibraryRelationship::toDomain)
+        }
 
     override fun observeLikedTrackIds(): Flow<List<TrackId>> =
         dao.observeLikedTrackIds().map(::toTrackIds)
@@ -96,9 +102,17 @@ constructor(
         return dao.observeUserPlaylist(playlistId.value).map { it?.toDomain() }
     }
 
-    override fun observePlaylistTrackIds(
-        playlistId: LibraryCollectionId
-    ): Flow<List<TrackId>> {
+    override fun observePlaylistArtwork(): Flow<Map<LibraryCollectionId, String>> =
+        dao.observePlaylistArtwork().map { rows ->
+            buildMap {
+                rows.forEach { row ->
+                    val artwork = row.artwork ?: return@forEach
+                    putIfAbsent(LibraryCollectionId(row.playlistId), artwork)
+                }
+            }
+        }
+
+    override fun observePlaylistTrackIds(playlistId: LibraryCollectionId): Flow<List<TrackId>> {
         requireUserPlaylistId(playlistId)
         return dao.observePlaylistTrackIds(playlistId.value).map(::toTrackIds)
     }
@@ -132,12 +146,25 @@ constructor(
         dao.setPlaylistPinned(playlistId.value, pinned)
     }
 
+    override suspend fun setPlaylistArtwork(playlistId: LibraryCollectionId, artworkUri: String?) {
+        requireUserPlaylistId(playlistId)
+        dao.setPlaylistArtwork(playlistId.value, artworkUri?.takeIf(String::isNotBlank))
+    }
+
     override suspend fun replacePlaylistOrder(playlistIds: List<LibraryCollectionId>) {
         playlistIds.forEach(::requireUserPlaylistId)
         require(playlistIds.distinct().size == playlistIds.size) {
             "Playlist order cannot contain duplicate IDs"
         }
         dao.replacePlaylistOrder(playlistIds.map(LibraryCollectionId::value))
+    }
+
+    override suspend fun replacePlaylistLayout(playlists: List<LibraryCollection.Playlist>) {
+        playlists.forEach { requireUserPlaylistId(it.id) }
+        require(playlists.map { it.id }.distinct().size == playlists.size) {
+            "Playlist layout cannot contain duplicate IDs"
+        }
+        dao.replacePlaylistLayout(playlists.map { it.id.value to it.isPinned })
     }
 
     override suspend fun deletePlaylist(playlistId: LibraryCollectionId) {
@@ -181,7 +208,8 @@ internal fun StoredLibraryRelationship.toDomain(): LibraryRelationship =
         trackId = TrackId(relationship.trackId),
         liked = relationship.liked,
         downloaded = relationship.downloaded,
-        playlistIds = playlistMemberships.mapTo(linkedSetOf()) { LibraryCollectionId(it.playlistId) },
+        playlistIds =
+            playlistMemberships.mapTo(linkedSetOf()) { LibraryCollectionId(it.playlistId) },
     )
 
 internal fun UserPlaylistEntity.toDomain(): LibraryCollection.Playlist =
@@ -189,6 +217,7 @@ internal fun UserPlaylistEntity.toDomain(): LibraryCollection.Playlist =
         id = LibraryCollectionId(playlistId),
         displayName = name,
         isPinned = pinned,
+        artworkUri = artworkUri,
     )
 
 internal fun toTrackIds(values: List<String>): List<TrackId> = values.map(::TrackId)

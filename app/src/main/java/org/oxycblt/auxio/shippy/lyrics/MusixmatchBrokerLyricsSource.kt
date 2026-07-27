@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * MusixmatchBrokerLyricsSource.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * MusixmatchBrokerLyricsSource.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.lyrics
 
 import java.io.IOException
@@ -63,7 +70,8 @@ constructor(
                                 "Content-Type" to "application/json; charset=utf-8",
                                 "User-Agent" to CLIENT_USER_AGENT,
                             ),
-                        body = request.toBrokerPayload().toString().toByteArray(StandardCharsets.UTF_8),
+                        body =
+                            request.toBrokerPayload().toString().toByteArray(StandardCharsets.UTF_8),
                     )
                 )
             } catch (error: IOException) {
@@ -117,10 +125,9 @@ constructor(
         }
         return try {
             val record = JSONObject(bodyAsUtf8()).toBrokerRecord()
-            selectBestLyrics(request, listOf(record))
-                ?.parse()
-                ?.let { lyrics -> LyricsLookupResult.Found(record, lyrics) }
-                ?: LyricsLookupResult.NotFound
+            selectBestLyrics(request, listOf(record))?.parse()?.let { lyrics ->
+                LyricsLookupResult.Found(record, lyrics)
+            } ?: LyricsLookupResult.NotFound
         } catch (error: JSONException) {
             LyricsLookupResult.Failure(
                 kind = LyricsFailureKind.MALFORMED_RESPONSE,
@@ -172,7 +179,7 @@ constructor(
 
     private fun setCooldown(endpoint: String, expiresAtEpochMs: Long) {
         synchronized(cooldowns) {
-            if (endpoint !in cooldowns && cooldowns.size >= MAX_COOLDOWN_ENDPOINTS) {
+            if (!cooldowns.containsKey(endpoint) && cooldowns.size >= MAX_COOLDOWN_ENDPOINTS) {
                 cooldowns.entries.minByOrNull { it.value }?.key?.let(cooldowns::remove)
             }
             cooldowns[endpoint] = expiresAtEpochMs

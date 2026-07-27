@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.home.tabs
 
 import org.oxycblt.auxio.music.MusicType
@@ -60,11 +59,11 @@ sealed class Tab(open val type: MusicType) {
         /** The maximum index that a well-formed tab sequence should be. */
         const val MAX_SEQUENCE_IDX = 4
 
-        /**
-         * The default tab sequence, in integer form. This represents a set of four visible tabs
-         * ordered as "Song", "Album", "Artist", "Genre", and "Playlists
-         */
-        const val SEQUENCE_DEFAULT = 0b1000_1001_1010_1011_1100
+        /** Shippy's default order: Songs, Playlists, Albums, Artists, and Genres. */
+        const val SEQUENCE_DEFAULT = 0b1000_1100_1001_1010_1011
+
+        /** Previous Auxio order, retained only to migrate untouched installations. */
+        const val SEQUENCE_AUXIO_DEFAULT = 0b1000_1001_1010_1011_1100
 
         /** Maps between the integer code in the tab sequence and it's [MusicType]. */
         private val MODE_TABLE =

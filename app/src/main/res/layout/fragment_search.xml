@@ -24,17 +24,27 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/search_edit_text"
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:background="@android:color/transparent"
-                    android:hint="@string/lng_search_library"
-                    android:imeOptions="actionSearch|flagNoExtractUi"
-                    android:inputType="textFilter"
-                    android:textAppearance="?attr/textAppearanceBodyLarge"
-                    android:paddingStart="@dimen/spacing_tiny"
-                    android:paddingEnd="0dp" />
+                    app:boxBackgroundMode="none"
+                    app:endIconContentDescription="@string/lbl_clear"
+                    app:endIconDrawable="@drawable/ic_close_24"
+                    app:endIconMode="clear_text">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/search_edit_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@android:color/transparent"
+                        android:hint="@string/lng_search_library"
+                        android:imeOptions="actionSearch|flagNoExtractUi"
+                        android:inputType="textFilter"
+                        android:paddingStart="@dimen/spacing_tiny"
+                        android:paddingEnd="0dp"
+                        android:textAppearance="?attr/textAppearanceBodyLarge" />
+
+                </com.google.android.material.textfield.TextInputLayout>
 
             </org.oxycblt.auxio.ui.AuxioToolbar>
 
@@ -63,6 +73,16 @@
                 android:focusable="true"
                 android:paddingHorizontal="@dimen/spacing_medium"
                 app:singleLine="true">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/search_provider_selector"
+                    style="@style/Widget.Auxio.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checkable="false"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:text="@string/lbl_music_source" />
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/search_filter_songs"

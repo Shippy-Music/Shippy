@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * CrewProfileSettings.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * CrewProfileSettings.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.crew.settings
 
 import android.content.Context
@@ -41,21 +48,19 @@ interface CrewProfileSettings : Settings<CrewProfileSettings.Listener> {
     }
 }
 
-class CrewProfileSettingsImpl
-@Inject
-constructor(
-    @ApplicationContext context: Context,
-) : Settings.Impl<CrewProfileSettings.Listener>(context), CrewProfileSettings {
+class CrewProfileSettingsImpl @Inject constructor(@ApplicationContext context: Context) :
+    Settings.Impl<CrewProfileSettings.Listener>(context), CrewProfileSettings {
     override fun memberId(protocolVersion: ProtocolVersion): CrewMemberId =
         crewMemberId(installationMemberValue(), protocolVersion)
 
     override var displayName: String
-        get() = normalizeCrewDisplayName(
-            sharedPreferences.getString(
-                getString(R.string.set_key_crew_display_name),
-                DEFAULT_CREW_DISPLAY_NAME,
-            ) ?: DEFAULT_CREW_DISPLAY_NAME,
-        )
+        get() =
+            normalizeCrewDisplayName(
+                sharedPreferences.getString(
+                    getString(R.string.set_key_crew_display_name),
+                    DEFAULT_CREW_DISPLAY_NAME,
+                ) ?: DEFAULT_CREW_DISPLAY_NAME
+            )
         set(value) {
             sharedPreferences
                 .edit()
@@ -72,15 +77,16 @@ constructor(
         }
     }
 
-    private fun installationMemberValue(): String = synchronized(this) {
-        sharedPreferences.getString(getString(R.string.set_key_crew_member_id), null)
-            ?: UUID.randomUUID().toString().also { memberValue ->
-                sharedPreferences
-                    .edit()
-                    .putString(getString(R.string.set_key_crew_member_id), memberValue)
-                    .apply()
-            }
-    }
+    private fun installationMemberValue(): String =
+        synchronized(this) {
+            sharedPreferences.getString(getString(R.string.set_key_crew_member_id), null)
+                ?: UUID.randomUUID().toString().also { memberValue ->
+                    sharedPreferences
+                        .edit()
+                        .putString(getString(R.string.set_key_crew_member_id), memberValue)
+                        .apply()
+                }
+        }
 }
 
 internal fun normalizeCrewDisplayName(value: String): String {

@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
 package org.oxycblt.auxio.playback.queue
 
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -28,18 +27,39 @@ import org.oxycblt.auxio.list.recycler.MaterialDragCallback
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
-class QueueDragCallback(private val queueModel: QueueViewModel) : MaterialDragCallback() {
+class QueueDragCallback(
+    private val queueModel: QueueViewModel,
+    private val queueAdapter: QueueAdapter,
+) : MaterialDragCallback() {
+    private var dragStart = RecyclerView.NO_POSITION
+    private var dragEnd = RecyclerView.NO_POSITION
+
     override fun onMove(
         recyclerView: RecyclerView,
         viewHolder: RecyclerView.ViewHolder,
         target: RecyclerView.ViewHolder,
-    ) =
-        queueModel.moveQueueDataItems(
-            viewHolder.bindingAdapterPosition,
-            target.bindingAdapterPosition,
-        )
+    ): Boolean {
+        val from = viewHolder.bindingAdapterPosition
+        val to = target.bindingAdapterPosition
+        if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
+        if (dragStart == RecyclerView.NO_POSITION) dragStart = from
+        if (!queueAdapter.previewMove(from, to)) return false
+        dragEnd = to
+        return true
+    }
 
     override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
         queueModel.removeQueueDataItem(viewHolder.bindingAdapterPosition)
+    }
+
+    override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
+        super.clearView(recyclerView, viewHolder)
+        val from = dragStart
+        val to = dragEnd
+        dragStart = RecyclerView.NO_POSITION
+        dragEnd = RecyclerView.NO_POSITION
+        if (from != RecyclerView.NO_POSITION && to != RecyclerView.NO_POSITION && from != to) {
+            queueModel.moveQueueDataItems(from, to)
+        }
     }
 }

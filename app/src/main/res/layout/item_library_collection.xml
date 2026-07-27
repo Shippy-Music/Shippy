@@ -11,16 +11,16 @@
     android:paddingEnd="@dimen/spacing_medium"
     android:paddingBottom="@dimen/spacing_mid_medium">
 
-    <ImageView
+    <org.oxycblt.auxio.image.CoverView
         android:id="@+id/collection_icon"
+        style="@style/Widget.Auxio.Image.MidFull"
         android:layout_width="@dimen/size_touchable_medium"
         android:layout_height="@dimen/size_touchable_medium"
         android:contentDescription="@null"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:tint="?attr/colorOnSurfaceVariant"
-        tools:src="@drawable/ic_playlist_24" />
+        tools:ignore="ContentDescription" />
 
     <TextView
         android:id="@+id/collection_title"

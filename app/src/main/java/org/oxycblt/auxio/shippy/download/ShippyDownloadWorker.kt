@@ -1,13 +1,20 @@
 /*
- * Copyright (c) 2026 Shippy contributors
- * ShippyDownloadWorker.kt is part of Shippy.
+ * Copyright (c) 2026 Auxio Project
+ * ShippyDownloadWorker.kt is part of Auxio.
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-
 package org.oxycblt.auxio.shippy.download
 
 import android.app.NotificationChannel
@@ -137,11 +144,7 @@ constructor(
                 }
             }
         if (stored.job.state == DownloadState.RESOLVING) {
-            jobs.apply(
-                jobId,
-                DownloadEvent.Enqueued(resolved.playback.contentLength),
-                now(),
-            )
+            jobs.apply(jobId, DownloadEvent.Enqueued(resolved.playback.contentLength), now())
             stored = jobs.get(jobId) ?: return Result.failure()
         }
 
@@ -170,7 +173,9 @@ constructor(
                     }
                 }
 
-        if (jobs.apply(jobId, DownloadEvent.TransferStarted, now()) !is DownloadTransition.Applied) {
+        if (
+            jobs.apply(jobId, DownloadEvent.TransferStarted, now()) !is DownloadTransition.Applied
+        ) {
             cleanupPending(jobs.get(jobId) ?: stored)
             return Result.failure()
         }
@@ -193,10 +198,7 @@ constructor(
             transfer(output, resolved) { progress ->
                 jobs.apply(
                     jobId,
-                    DownloadEvent.Progress(
-                        progress.bytesTransferred,
-                        progress.expectedBytes,
-                    ),
+                    DownloadEvent.Progress(progress.bytesTransferred, progress.expectedBytes),
                     now(),
                 )
                 setProgress(
@@ -240,9 +242,7 @@ constructor(
                     retryable = false,
                 )
         val providerIds =
-            providerRegistry
-                .supporting(ProviderCapability.DOWNLOAD)
-                .map { it.descriptor.id }
+            providerRegistry.supporting(ProviderCapability.DOWNLOAD).map { it.descriptor.id }
         val policy =
             ResolutionPolicy(
                 providerPriority = providerSettings.selection(providerIds).priority,
@@ -254,7 +254,10 @@ constructor(
                 contextId = "download",
             ),
             policy,
-            StreamConstraints(forDownload = true),
+            StreamConstraints(
+                preferredBitrateBps = providerSettings.downloadBitrateBps(),
+                forDownload = true,
+            ),
         )
     }
 
@@ -293,8 +296,8 @@ constructor(
             var current = jobs.get(stored.job.id) ?: return@run Result.failure()
             if (current.job.state == DownloadState.VERIFYING) {
                 if (
-                    jobs.apply(current.job.id, DownloadEvent.Verified, now()) !is
-                        DownloadTransition.Applied
+                    jobs.apply(current.job.id, DownloadEvent.Verified, now())
+                        !is DownloadTransition.Applied
                 ) {
                     return@run abortFinalization(jobs.get(stored.job.id) ?: current)
                 }
@@ -302,8 +305,8 @@ constructor(
             }
             if (current.job.state == DownloadState.FINALIZING) {
                 if (
-                    jobs.apply(current.job.id, DownloadEvent.Finalized(artifact), now()) !is
-                        DownloadTransition.Applied
+                    jobs.apply(current.job.id, DownloadEvent.Finalized(artifact), now())
+                        !is DownloadTransition.Applied
                 ) {
                     return@run abortFinalization(jobs.get(stored.job.id) ?: current)
                 }
@@ -347,30 +350,24 @@ constructor(
         jobs.setPendingDocument(stored.job.id, null, now())
     }
 
-    private suspend fun fail(
-        jobId: DownloadJobId,
-        failure: DownloadFailure,
-        retryable: Boolean,
-    ) {
+    private suspend fun fail(jobId: DownloadJobId, failure: DownloadFailure, retryable: Boolean) {
         val transition = jobs.apply(jobId, DownloadEvent.Fail(failure, retryable), now())
         if (!retryable && transition is DownloadTransition.Applied) {
             crewTemporaryStaging.cleanup(jobId)
         }
     }
 
-    private fun createForegroundInfo(
-        title: String,
-        bytes: Long,
-        expected: Long?,
-    ): ForegroundInfo {
+    private fun createForegroundInfo(title: String, bytes: Long, expected: Long?): ForegroundInfo {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            applicationContext.getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(
-                    DOWNLOAD_CHANNEL_ID,
-                    applicationContext.getString(R.string.download_channel_name),
-                    NotificationManager.IMPORTANCE_LOW,
+            applicationContext
+                .getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(
+                    NotificationChannel(
+                        DOWNLOAD_CHANNEL_ID,
+                        applicationContext.getString(R.string.download_channel_name),
+                        NotificationManager.IMPORTANCE_LOW,
+                    )
                 )
-            )
         }
         val progressMax = if (expected != null && expected > 0L) 1000 else 0
         val progress =
