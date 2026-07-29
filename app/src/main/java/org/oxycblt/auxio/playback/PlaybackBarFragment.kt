@@ -89,7 +89,11 @@ class PlaybackBarFragment : ViewBindingFragment<FragmentPlaybackBarBinding>() {
 
     private fun updateItem(item: PlaybackDisplayItem?) {
         if (item == null) {
-            // Nothing to do.
+            val binding = requireBinding()
+            binding.playbackSong.text = ""
+            binding.playbackInfo.text = ""
+            binding.playbackProgressBar.max = 0
+            binding.playbackProgressBar.progress = 0
             return
         }
 

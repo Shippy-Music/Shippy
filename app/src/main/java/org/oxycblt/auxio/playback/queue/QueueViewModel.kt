@@ -23,6 +23,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -86,7 +88,7 @@ constructor(
     ) {
         // Queue changed trivially due to item mo -> Diff queue, stay at current index.
         L.d("Updating queue display")
-        updateQueueAsync(queue, change.instructions)
+        updateQueueAsync(queue, index, change.instructions)
         if (change.type != QueueChange.Type.MAPPING) {
             // Index changed, make sure it remains updated without actually scrolling to it.
             L.d("Index changed with queue, synchronizing new position")
@@ -103,7 +105,7 @@ constructor(
         L.d("Queue changed completely, replacing queue and position")
         _scrollTo.put(index)
         _index.value = index
-        updateQueueAsync(queue, UpdateInstructions.Replace(0))
+        updateQueueAsync(queue, index, UpdateInstructions.Replace(0))
     }
 
     override fun onCanonicalNewPlayback(
@@ -116,18 +118,23 @@ constructor(
         L.d("New playback, replacing queue and position")
         _scrollTo.put(index)
         _index.value = index
-        updateQueueAsync(queue, UpdateInstructions.Replace(0))
+        updateQueueAsync(queue, index, UpdateInstructions.Replace(0))
     }
 
-    private fun updateQueueAsync(queue: List<ResolvedQueueItem>, instructions: UpdateInstructions) {
+    private fun updateQueueAsync(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        instructions: UpdateInstructions,
+    ) {
         queueMappingJob?.cancel()
         queueMappingJob =
             viewModelScope.launch {
                 val displayQueue =
                     withContext(Dispatchers.Default) { queue.map(playbackDisplayMapper::map) }
+                currentCoroutineContext().ensureActive()
                 _queueInstructions.put(instructions)
                 _queue.value = displayQueue
-                _index.value = playbackManager.index
+                _index.value = index
             }
     }
 

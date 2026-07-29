@@ -23,7 +23,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -37,6 +39,7 @@ import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.state.ShuffleMode
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.shippy.domain.TrackId
 import org.oxycblt.auxio.shippy.lyrics.LyricsLookupResult
@@ -160,15 +163,28 @@ constructor(
         L.d("Index moved, updating current song")
         _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()
         _song.value = playbackManager.currentSong
-        updateDisplayItem(
-            playbackManager.resolvedQueue.getOrNull(index)?.let(playbackDisplayMapper::map)
-        )
+        val resolvedItem = playbackManager.resolvedQueue.getOrNull(index)
+        updateDisplayItem(resolvedItem?.let(playbackDisplayMapper::map))
 
-        _pagerQueue.value =
-            _pagerQueue.value.copy(
-                index = index,
-                command = PagerCommand(update = null, scroll = index),
+        val pagerIndex =
+            resolvedItem?.let { current ->
+                _pagerQueue.value.queue.indexOfFirst { it.queueItem.id == current.item.id }
+            } ?: -1
+        if (pagerIndex >= 0) {
+            _pagerQueue.value =
+                _pagerQueue.value.copy(
+                    index = pagerIndex,
+                    command = PagerCommand(update = null, scroll = pagerIndex),
+                )
+        } else {
+            // The pager can still be mapping an older queue. Replace it from the same canonical
+            // snapshot instead of pairing a new playback index with stale artwork.
+            updatePagerQueueAsync(
+                playbackManager.resolvedQueue,
+                index,
+                PagerCommand(update = UpdateInstructions.Replace(0), scroll = index),
             )
+        }
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
@@ -186,6 +202,7 @@ constructor(
         updateDisplayItem(queue.getOrNull(index)?.let(playbackDisplayMapper::map))
         updatePagerQueueAsync(
             queue,
+            index,
             PagerCommand(
                 update = change.instructions,
                 scroll = index.takeIf { change.type != QueueChange.Type.MAPPING },
@@ -206,6 +223,7 @@ constructor(
         updateDisplayItem(queue.getOrNull(index)?.let(playbackDisplayMapper::map))
         updatePagerQueueAsync(
             queue,
+            index,
             PagerCommand(update = UpdateInstructions.Replace(0), scroll = index),
         )
     }
@@ -233,17 +251,23 @@ constructor(
         updateDisplayItem(queue.getOrNull(index)?.let(playbackDisplayMapper::map))
         updatePagerQueueAsync(
             queue,
+            index,
             PagerCommand(update = UpdateInstructions.Replace(0), scroll = index),
         )
     }
 
-    private fun updatePagerQueueAsync(queue: List<ResolvedQueueItem>, command: PagerCommand) {
+    private fun updatePagerQueueAsync(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        command: PagerCommand,
+    ) {
         queueMappingJob?.cancel()
         queueMappingJob =
             viewModelScope.launch {
                 val displayQueue =
                     withContext(Dispatchers.Default) { queue.map(playbackDisplayMapper::map) }
-                val currentIndex = playbackManager.index
+                currentCoroutineContext().ensureActive()
+                val currentIndex = index.coerceIn(0, displayQueue.lastIndex.coerceAtLeast(0))
                 _pagerQueue.value =
                     PagerQueue(
                         queue = displayQueue,
@@ -341,6 +365,12 @@ constructor(
         playWithImpl(song, with, ShuffleMode.IMPLICIT)
     }
 
+    /** Select a canonical queue item by stable identity, independent of UI mapping latency. */
+    fun goto(itemId: QueueItemId) {
+        val index = playbackManager.queueItems.indexOfFirst { it.id == itemId }
+        if (index >= 0) playbackManager.goto(index)
+    }
+
     fun playExplicit(song: Song, with: PlaySong) {
         playWithImpl(song, with, ShuffleMode.OFF)
     }
@@ -421,7 +451,7 @@ constructor(
         L.d(
             "Cannot use given artist parameter for $song [$artist from ${song.artists}], showing choice dialog"
         )
-        startPlaybackDecision(PlaybackDecision.PlayFromGenre(song))
+        startPlaybackDecision(PlaybackDecision.PlayFromArtist(song))
     }
 
     private fun playFromGenreImpl(song: Song, genre: Genre?, shuffle: ShuffleMode) {
@@ -433,7 +463,7 @@ constructor(
         L.d(
             "Cannot use given genre parameter for $song [$genre from ${song.genres}], showing choice dialog"
         )
-        startPlaybackDecision(PlaybackDecision.PlayFromArtist(song))
+        startPlaybackDecision(PlaybackDecision.PlayFromGenre(song))
     }
 
     private fun playFromPlaylistImpl(song: Song, playlist: Playlist, shuffle: ShuffleMode) {

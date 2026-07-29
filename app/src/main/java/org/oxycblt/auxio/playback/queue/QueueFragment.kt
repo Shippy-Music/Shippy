@@ -157,7 +157,14 @@ class QueueFragment :
     private fun updateQueue(queue: List<PlaybackDisplayItem>, index: Int, isPlaying: Boolean) {
         val binding = requireBinding()
 
-        queueAdapter.update(queue, queueModel.queueInstructions.consume())
+        val requested = queueModel.queueInstructions.consume()
+        val instructions =
+            reconcileQueueUpdate(
+                current = queueAdapter.currentList.map { it.queueItem.id },
+                next = queue.map { it.queueItem.id },
+                requested = requested,
+            )
+        queueAdapter.update(queue, instructions)
         queueAdapter.setPosition(index, isPlaying)
         if (scrollToCurrentPending) {
             scrollToCurrentIfReady()

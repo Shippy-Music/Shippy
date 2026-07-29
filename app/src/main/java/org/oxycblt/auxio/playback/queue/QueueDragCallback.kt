@@ -19,6 +19,7 @@ package org.oxycblt.auxio.playback.queue
 
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
+import org.oxycblt.auxio.list.adapter.UpdateInstructions
 import org.oxycblt.auxio.list.recycler.MaterialDragCallback
 import org.oxycblt.auxio.shippy.domain.QueueItemId
 
@@ -33,7 +34,6 @@ class QueueDragCallback(
     private val queueAdapter: QueueAdapter,
 ) : MaterialDragCallback() {
     private var dragStart = RecyclerView.NO_POSITION
-    private var dragEnd = RecyclerView.NO_POSITION
     private var draggedItemId: QueueItemId? = null
 
     override fun onMove(
@@ -49,7 +49,6 @@ class QueueDragCallback(
             draggedItemId = queueAdapter.currentList.getOrNull(from)?.queueItem?.id
         }
         if (!queueAdapter.previewMove(from, to)) return false
-        dragEnd = to
         return true
     }
 
@@ -64,23 +63,23 @@ class QueueDragCallback(
     override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
         super.clearView(recyclerView, viewHolder)
         val from = dragStart
-        val to = dragEnd
         val itemId = draggedItemId
         dragStart = RecyclerView.NO_POSITION
-        dragEnd = RecyclerView.NO_POSITION
         draggedItemId = null
-        if (
-            itemId != null &&
-                from != RecyclerView.NO_POSITION &&
-                to != RecyclerView.NO_POSITION &&
-                from != to
-        ) {
-            val finalItems = queueAdapter.currentList
-            queueModel.moveQueueDataItem(
-                itemId = itemId,
-                beforeId = finalItems.getOrNull(to + 1)?.queueItem?.id,
-                afterId = finalItems.getOrNull(to - 1)?.queueItem?.id,
-            )
+        if (itemId != null && from != RecyclerView.NO_POSITION) {
+            val finalOrder = queueAdapter.currentList.map { it.queueItem.id }
+            val finalIndex = finalOrder.indexOf(itemId)
+            if (finalIndex < 0 || finalIndex == from) return
+            val anchors = queueMoveAnchors(finalOrder, itemId) ?: return
+            val committed =
+                queueModel.moveQueueDataItem(
+                    itemId = itemId,
+                    beforeId = anchors.beforeId,
+                    afterId = anchors.afterId,
+                )
+            if (!committed) {
+                queueAdapter.update(queueModel.queue.value, UpdateInstructions.Diff)
+            }
         }
     }
 }

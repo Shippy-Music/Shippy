@@ -46,7 +46,6 @@ import org.oxycblt.auxio.databinding.FragmentPlaybackPanelBinding
 import org.oxycblt.auxio.detail.DetailViewModel
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
-import org.oxycblt.auxio.playback.queue.QueueViewModel
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.ui.StyledSeekBar
 import org.oxycblt.auxio.playback.ui.stepper.Direction
@@ -92,7 +91,6 @@ class PlaybackPanelFragment :
     private val coverPagerAdapter = CoverPagerAdapter(this)
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
-    private val queueModel: QueueViewModel by viewModels()
     private val playerActionsModel: PlayerActionsViewModel by viewModels()
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
     private var currentPagerPosition = 0
@@ -143,9 +141,11 @@ class PlaybackPanelFragment :
             adapter = coverPagerAdapter
             userAwarePagerCallback =
                 UserAwarePagerCallback(this) {
-                        // Posting the queue goto command prevents the seekbar pos from desyncing
-                        // from the song's duration, which creates a visual flicker in the seekbar.
-                        post { queueModel.gotoAdapterIndex(it) }
+                        // Resolve the page from this pager's own stable item identity. The queue
+                        // sheet has an independently mapped list that can briefly lag behind.
+                        val itemId =
+                            playbackModel.pagerQueue.value.queue.getOrNull(it)?.queueItem?.id
+                        if (itemId != null) post { playbackModel.goto(itemId) }
                     }
                     .also { it.attach() }
             setPageTransformer(CarouselTransformer())
@@ -434,6 +434,9 @@ class PlaybackPanelFragment :
             binding.playbackSong.text = localSong.name.resolve(context)
             binding.playbackArtist.text = localSong.artists.resolveNames(context)
             binding.playbackAlbum?.text = localSong.album.name.resolve(context)
+            binding.playbackToolbar.subtitle =
+                playbackModel.parent.value?.name?.resolve(context)
+                    ?: context.getString(R.string.lbl_all_songs)
         } else {
             binding.playbackInfoCover?.bindArtwork(track.artwork, track.album ?: track.title)
             binding.playbackSong.text = track.title
