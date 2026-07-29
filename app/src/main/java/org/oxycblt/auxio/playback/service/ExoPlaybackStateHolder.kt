@@ -414,23 +414,11 @@ class ExoPlaybackStateHolder(
     override fun move(from: Int, to: Int, ack: StateAck.Move) {
         cancelCrossfade()
         val indices = player.unscrambleQueueIndices()
-        if (indices.isEmpty()) {
-            return
-        }
-
-        val trueFrom = indices[from]
-        val trueTo = indices[to]
-        // ExoPlayer does not actually update it's ShuffleOrder when moving items. Retain a
-        // semblance of "normalcy" by doing a weird no-op swap that actually moves the item.
-        when {
-            trueFrom > trueTo -> {
-                player.moveMediaItem(trueFrom, trueTo)
-                player.moveMediaItem(trueTo + 1, trueFrom)
-            }
-            trueTo > trueFrom -> {
-                player.moveMediaItem(trueFrom, trueTo)
-                player.moveMediaItem(trueTo - 1, trueFrom)
-            }
+        when (val plan = planQueueMove(indices, from, to, player.shuffleModeEnabled)) {
+            is QueueMovePlan.MediaItem -> player.moveMediaItem(plan.from, plan.to)
+            is QueueMovePlan.ShuffleOrder ->
+                player.setShuffleOrder(BetterShuffleOrder(plan.indices.toIntArray()))
+            null -> return
         }
         playbackManager.ack(this, ack)
         deferSave()

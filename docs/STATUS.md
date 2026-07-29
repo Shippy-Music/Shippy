@@ -1,33 +1,42 @@
 # Shippy Live Status
 
 **Updated:** 2026-07-29
-**Current stage:** R11.1 queue/player state hotfix and owner-device handoff
-**Overall state:** R11.1 fixes normal-queue drag commits being visually applied
-twice, resolves drag destinations by stable item identity, and prevents the
-full player from pairing current playback with a stale asynchronously mapped
-pager index. Formatting, 439 app JVM tests (438 passed; one opt-in live smoke
-skipped), 19 relay tests, native TagLib compilation, lint, APK assembly,
-signature/package inspection, and Drive publication are the release gates.
+**Current stage:** R11.2 exact queue-order hotfix and owner-device handoff
+**Overall state:** R11.2 removes a second playback-layer mutation that rotated
+neighbouring tracks after every normal-queue drag. Normal and shuffled queues
+now use separate exact move plans, covered in both directions. Formatting, 444
+app JVM tests (443 passed; one opt-in live smoke skipped), 19 relay tests,
+native compilation, lint, APK assembly, signature/package inspection, and
+Drive publication pass.
 Physical-device performance, provider longevity, and multi-phone Crew
 acceptance remain owner-tested.
 
 **Progress snapshot:** source implementation ~99% · functional product ~96% ·
 UX intent ~98% · automated verification 100% · APK verification 100% ·
-physical-device R11.1 verification 0%
+physical-device R11.2 verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
 
-**R11.1 artifact:** `Shippy-Alpha-R11.1-20260729.apk`, version
-`0.1.0-alpha.1-r11.1` (76), 61,048,721 bytes, SHA-256
-`43055522F93A670820105586A79A826BD5E4C2E418BBA223F51A04E5E0CCAD11`,
-APK Signature Scheme v2 verified.
+**R11.2 artifact:** `Shippy-Alpha-R11.2-20260729.apk`, version
+`0.1.0-alpha.1-r11.2` (77), 61,048,721 bytes, SHA-256
+`B7FB3DFDC830C938D1C2BD1279C376BA2DB851B0D9C69B45E661C013CCB0EFCA`,
+APK Signature Scheme v2 verified. It is the only APK at
+`gdrive:Shippy Builds`; 13 older builds are under `Shippy Builds/Archive`.
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Completed
 
+- R11.2 exact queue-order hotfix:
+  - Removed the inherited second media move that rotated adjacent tracks after
+    the requested queue move had already completed.
+  - Normal queues now perform exactly one physical media-item move.
+  - Shuffled queues update their logical shuffle order directly, preserving
+    every unrelated track's relative position.
+  - Five focused move-plan tests cover upward, downward, shuffled, unchanged,
+    and invalid moves.
 - R11.1 queue/player state hotfix:
   - Normal queue drag previews are reconciled against the canonical queue
     acknowledgment, so the same move is not replayed and visually reverted.
