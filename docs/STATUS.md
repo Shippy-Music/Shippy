@@ -1,25 +1,25 @@
 # Shippy Live Status
 
-**Updated:** 2026-07-27
-**Current stage:** Alpha Release 1 shipping pass
-**Overall state:** The internal r10 build is being promoted to Shippy Alpha
-Release 1 with public documentation, reproducible submodule patches, GitHub CI,
-alpha identity/versioning, and a prerelease APK. Kotlin compilation, 433 JVM
-tests (432 passed; one opt-in live smoke skipped), formatting, lint, assembly,
-v2 signature verification, and owner-device core testing pass. Wider physical
-device, provider-longevity, accessibility, and multi-phone Crew acceptance
-remain pending.
+**Updated:** 2026-07-29
+**Current stage:** R11 audit hardening and owner-device handoff
+**Overall state:** R11 addresses the external audit's release-blocking queue,
+Crew, provider, download-publication, concurrency, and exported-component
+findings without introducing an unmeasured player rewrite. Formatting, 435 app
+JVM tests (434 passed; one opt-in live smoke skipped), 19 relay tests, native
+TagLib compilation, lint, APK assembly, signature/package inspection, and Drive
+publication are the release gates. Physical-device performance, provider
+longevity, and multi-phone Crew acceptance remain owner-tested.
 
-**Progress snapshot:** source implementation ~98% · functional product ~94% ·
+**Progress snapshot:** source implementation ~99% · functional product ~96% ·
 UX intent ~98% · automated verification 100% · APK verification 100% ·
-physical-device verification 0%
+physical-device R11 verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
 
-**Alpha Release 1 artifact:** `Shippy-Alpha-Release-1.apk`, version
-`0.1.0-alpha.1` (74), 61,015,449 bytes, SHA-256
-`82C83CA5C08F2485BBEE04F257F77C7B9274D80FD3A184DD1E285D3E6B62850E`,
+**R11 artifact:** `Shippy-Alpha-R11-20260729.apk`, version
+`0.1.0-alpha.1-r11` (75), 61,048,713 bytes, SHA-256
+`60F1521355DBA389BA17A3CB6A6BF2698FE6974C7A8726DB6AC330E1A2A10CD9`,
 APK Signature Scheme v2 verified.
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.

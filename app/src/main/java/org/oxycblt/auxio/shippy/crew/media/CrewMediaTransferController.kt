@@ -46,6 +46,7 @@ class CrewMediaTransferController(
     private val states = mutableMapOf<CrewMediaTransferRef, CrewMediaTransferState>()
     private val outgoing = mutableMapOf<CrewMediaTransferRef, List<CrewMediaWireFrame>>()
 
+    @Synchronized
     fun request(transfer: CrewMediaTransferRef): CrewSendResult? {
         if (
             !valid(transfer) ||
@@ -59,6 +60,7 @@ class CrewMediaTransferController(
     }
 
     /** Supplier-only: source must already have passed authorization. */
+    @Synchronized
     fun offer(transfer: CrewMediaTransferRef, source: CrewAuthorizedMediaSource): CrewSendResult? {
         if (
             !valid(transfer) ||
@@ -76,6 +78,7 @@ class CrewMediaTransferController(
         return resume(transfer)
     }
 
+    @Synchronized
     fun cancel(transfer: CrewMediaTransferRef): CrewSendResult? {
         states[transfer] = CrewMediaTransferState.CANCELLED
         outgoing.remove(transfer)
@@ -83,17 +86,20 @@ class CrewMediaTransferController(
     }
 
     /** Releases terminal or abandoned transfer bookkeeping; callers own retry scheduling. */
+    @Synchronized
     fun forget(transfer: CrewMediaTransferRef) {
         states.remove(transfer)
         outgoing.remove(transfer)
     }
 
     /** Local policy/session teardown abandons all protocol work without sending another frame. */
+    @Synchronized
     fun clear() {
         states.clear()
         outgoing.clear()
     }
 
+    @Synchronized
     fun resume(transfer: CrewMediaTransferRef): CrewSendResult? {
         if (states[transfer] == CrewMediaTransferState.CANCELLED) return null
         val next = outgoing[transfer]?.firstOrNull() ?: return null
@@ -112,6 +118,7 @@ class CrewMediaTransferController(
         return result
     }
 
+    @Synchronized
     fun receive(frame: CrewMediaWireFrame): CrewMediaTransferState {
         val t = frame.transfer
         if (!valid(t) || !policy.accepts(activeSessionId) || !remoteMatches(t, frame))

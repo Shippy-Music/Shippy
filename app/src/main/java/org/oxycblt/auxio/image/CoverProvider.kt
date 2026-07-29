@@ -23,7 +23,9 @@ import android.content.ContentValues
 import android.content.UriMatcher
 import android.database.Cursor
 import android.net.Uri
+import android.os.Binder
 import android.os.ParcelFileDescriptor
+import androidx.media.MediaSessionManager
 import kotlinx.coroutines.runBlocking
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.image.covers.SettingCovers
@@ -33,7 +35,7 @@ class CoverProvider : ContentProvider() {
     override fun onCreate(): Boolean = true
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
-        if (mode != "r" || uriMatcher.match(uri) != 1) {
+        if (mode != "r" || uriMatcher.match(uri) != 1 || !isTrustedCaller()) {
             return null
         }
         val id = uri.lastPathSegment ?: return null
@@ -68,6 +70,19 @@ class CoverProvider : ContentProvider() {
         selection: String?,
         selectionArgs: Array<out String>?,
     ): Int = 0
+
+    private fun isTrustedCaller(): Boolean {
+        val context = requireNotNull(context)
+        val uid = Binder.getCallingUid()
+        if (uid == context.applicationInfo.uid || uid == android.os.Process.SYSTEM_UID) return true
+        val pid = Binder.getCallingPid()
+        val manager = MediaSessionManager.getSessionManager(context)
+        return context.packageManager.getPackagesForUid(uid).orEmpty().any { packageName ->
+            manager.isTrustedForMediaControl(
+                MediaSessionManager.RemoteUserInfo(packageName, pid, uid)
+            )
+        }
+    }
 
     companion object {
         private const val AUTHORITY = "${BuildConfig.APPLICATION_ID}.image.CoverProvider"

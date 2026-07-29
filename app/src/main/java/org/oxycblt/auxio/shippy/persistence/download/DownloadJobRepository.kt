@@ -56,6 +56,8 @@ interface DownloadJobRepository {
 
     fun observeAvailable(): Flow<List<PersistedDownload>>
 
+    fun observeForTrack(trackId: TrackId): Flow<List<PersistedDownload>>
+
     suspend fun getAll(): List<PersistedDownload>
 
     suspend fun get(jobId: DownloadJobId): PersistedDownload?
@@ -97,6 +99,9 @@ internal class RoomDownloadJobRepository @Inject constructor(private val dao: Do
 
     override fun observeAvailable(): Flow<List<PersistedDownload>> =
         dao.observeAvailable().map { jobs -> jobs.map(StoredDownloadJob::toDomain) }
+
+    override fun observeForTrack(trackId: TrackId): Flow<List<PersistedDownload>> =
+        dao.observeForTrack(trackId.value).map { jobs -> jobs.map(StoredDownloadJob::toDomain) }
 
     override suspend fun getAll(): List<PersistedDownload> =
         dao.getAll().map(StoredDownloadJob::toDomain)

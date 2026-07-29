@@ -19,6 +19,11 @@ package org.oxycblt.auxio.shippy.playback
 
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.playback.state.PlaybackCommandFactoryImpl
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
@@ -169,23 +174,47 @@ constructor(
                         .priority,
                 pushPullEnabled = pushPullEnabled,
             )
-        val items = mutableListOf<ResolvedQueueItem>()
-        for (item in plan.items) {
+        val constraints =
+            StreamConstraints(preferredBitrateBps = providerSettings.streamingBitrateBps())
+        val selected =
             when (
                 val preparation =
-                    resolutionCoordinator.prepare(
-                        item,
-                        policy,
-                        StreamConstraints(
-                            preferredBitrateBps = providerSettings.streamingBitrateBps()
-                        ),
-                    )
+                    resolutionCoordinator.prepare(plan.items[selectedIndex], policy, constraints)
             ) {
-                is PlaybackPreparation.Ready -> items += preparation.value
+                is PlaybackPreparation.Ready -> preparation.value
                 is PlaybackPreparation.Failed -> return PreparedPlaybackQueue.Failed(preparation)
             }
+        val remaining = coroutineScope {
+            val permits = Semaphore(MAX_PARALLEL_QUEUE_RESOLUTIONS)
+            plan.items
+                .mapIndexedNotNull { index, item ->
+                    if (index == selectedIndex) null
+                    else
+                        async {
+                            permits.withPermit {
+                                when (
+                                    val preparation =
+                                        resolutionCoordinator.prepare(item, policy, constraints)
+                                ) {
+                                    is PlaybackPreparation.Ready -> index to preparation.value
+                                    is PlaybackPreparation.Failed -> null
+                                }
+                            }
+                        }
+                }
+                .awaitAll()
+                .filterNotNull()
+        }
+        val items =
+            (remaining + (selectedIndex to selected)).sortedBy { it.first }.map { it.second }
+        if (items.isEmpty()) {
+            error("Selected playback item disappeared during queue preparation")
         }
         return PreparedPlaybackQueue.Ready(plan, items)
+    }
+
+    private companion object {
+        const val MAX_PARALLEL_QUEUE_RESOLUTIONS = 4
     }
 }
 

@@ -215,20 +215,24 @@ constructor(
         mimeType: String?,
     ): StorageResult<PendingDownloadDocument> =
         withContext(Dispatchers.IO) {
-            val ready = inspectDestination()
-            if (ready !is DownloadDestinationState.Ready) {
-                return@withContext StorageResult.Failure(
-                    when (ready) {
-                        is DownloadDestinationState.Unavailable -> ready.reason
-                        DownloadDestinationState.NotSelected ->
-                            DownloadStorageFailure.PERMISSION_REVOKED
-                        is DownloadDestinationState.Ready -> error("Handled above")
-                    }
-                )
+            val destination =
+                settings.destination
+                    ?: return@withContext StorageResult.Failure(
+                        DownloadStorageFailure.PERMISSION_REVOKED
+                    )
+            val treeUri = Uri.parse(destination.treeUri)
+            if (!hasPersistedReadWriteGrant(treeUri)) {
+                return@withContext StorageResult.Failure(DownloadStorageFailure.PERMISSION_REVOKED)
             }
             val root =
-                DocumentFile.fromTreeUri(context, Uri.parse(ready.destination.treeUri))
+                DocumentFile.fromTreeUri(context, treeUri)
                     ?: return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_A_TREE)
+            if (!root.canRead()) {
+                return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_READABLE)
+            }
+            if (!root.canWrite()) {
+                return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_WRITABLE)
+            }
             val normalizedMime = mimeType?.takeIf(String::isNotBlank) ?: DEFAULT_MIME
             val fileName = uniqueFileName(root, title, jobId, normalizedMime)
             val document =

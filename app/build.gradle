@@ -16,8 +16,8 @@ android {
 
     defaultConfig {
         applicationId namespace
-        versionName "0.1.0-alpha.1"
-        versionCode 74
+        versionName "0.1.0-alpha.1-r11"
+        versionCode 75
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in
@@ -71,6 +71,10 @@ android {
         buildConfig true
     }
 
+}
+
+ksp {
+    arg("room.schemaLocation", file("$projectDir/schemas").path)
 }
 
 kotlin {

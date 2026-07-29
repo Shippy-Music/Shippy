@@ -222,6 +222,16 @@ internal abstract class LibraryRelationshipDao {
     }
 
     @Transaction
+    open suspend fun updateSavedDestinations(
+        trackId: String,
+        liked: Boolean,
+        playlistIds: List<String>,
+    ) {
+        setLiked(trackId, liked)
+        replacePlaylistMemberships(trackId, playlistIds)
+    }
+
+    @Transaction
     open suspend fun createPlaylist(playlistId: String, name: String, pinned: Boolean) {
         check(!playlistId.startsWith("system:")) {
             "System collections cannot be stored as user playlists"

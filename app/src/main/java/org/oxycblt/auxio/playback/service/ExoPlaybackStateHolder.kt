@@ -22,6 +22,7 @@ import android.content.Intent
 import android.media.audiofx.AudioEffect
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -50,6 +51,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.playback.CrossfadeEligibility
@@ -106,6 +108,9 @@ class ExoPlaybackStateHolder(
     private var crossfadeArmJob: Job? = null
     private var preparedStandbyIndex = C.INDEX_UNSET
     private var crossfadePromoting = false
+    private var lastErrorMediaId: String? = null
+    private var retriedCurrentError = false
+    private val failedMediaIds = mutableSetOf<String>()
 
     var sessionOngoing = false
         private set
@@ -282,6 +287,9 @@ class ExoPlaybackStateHolder(
 
     override fun newPlayback(command: PlaybackCommand) {
         cancelCrossfade()
+        lastErrorMediaId = null
+        retriedCurrentError = false
+        failedMediaIds.clear()
         parent = command.parent
         playbackRequestHeaders.replace(command.queue)
         player.shuffleModeEnabled = command.shuffled
@@ -550,6 +558,10 @@ class ExoPlaybackStateHolder(
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
         super.onMediaItemTransition(mediaItem, reason)
+        if (mediaItem?.mediaId != lastErrorMediaId) {
+            lastErrorMediaId = mediaItem?.mediaId
+            retriedCurrentError = false
+        }
 
         if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
             playbackManager.ack(this, StateAck.IndexMoved)
@@ -583,10 +595,25 @@ class ExoPlaybackStateHolder(
 
     override fun onPlayerError(error: PlaybackException) {
         cancelCrossfade()
-        // TODO: Replace with no skipping and a notification instead
-        // If there's any issue, just go to the next song.
-        L.e("Player error occurred")
-        L.e(error.stackTraceToString())
+        val mediaId = player.currentMediaItem?.mediaId.orEmpty()
+        if (mediaId != lastErrorMediaId) {
+            lastErrorMediaId = mediaId
+            retriedCurrentError = false
+        }
+        L.e(error, "Player error on $mediaId")
+        if (error.errorCode in 2000..2999 && !retriedCurrentError) {
+            retriedCurrentError = true
+            player.prepare()
+            player.play()
+            return
+        }
+        failedMediaIds += mediaId
+        Toast.makeText(context, R.string.err_track_playback, Toast.LENGTH_SHORT).show()
+        if (failedMediaIds.size >= player.mediaItemCount.coerceAtLeast(1)) {
+            player.pause()
+            playbackManager.ack(this, StateAck.ProgressionChanged)
+            return
+        }
         player.prepare()
         playbackManager.next()
     }

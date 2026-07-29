@@ -32,6 +32,7 @@ import org.oxycblt.auxio.playback.PlaybackDisplayItem
 import org.oxycblt.auxio.playback.PlaybackDisplayMapper
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
@@ -141,12 +142,15 @@ constructor(
      * @param adapterIndex The index of the queue item to play. Does nothing if the index is out of
      *   range.
      */
-    fun goto(adapterIndex: Int) {
-        if (adapterIndex !in queue.value.indices) {
-            return
-        }
-        L.d("Going to position $adapterIndex in queue")
-        playbackManager.goto(adapterIndex)
+    fun goto(itemId: QueueItemId) {
+        val currentIndex = playbackManager.queueItems.indexOfFirst { it.id == itemId }
+        if (currentIndex < 0) return
+        L.d("Going to queue item $itemId at $currentIndex")
+        playbackManager.goto(currentIndex)
+    }
+
+    fun gotoAdapterIndex(adapterIndex: Int) {
+        queue.value.getOrNull(adapterIndex)?.queueItem?.id?.let(::goto)
     }
 
     /**
@@ -155,12 +159,11 @@ constructor(
      * @param adapterIndex The index of the queue item to play. Does nothing if the index is out of
      *   range.
      */
-    fun removeQueueDataItem(adapterIndex: Int) {
-        if (adapterIndex !in queue.value.indices) {
-            return
-        }
-        L.d("Removing item $adapterIndex in queue")
-        playbackManager.removeQueueItem(adapterIndex)
+    fun removeQueueDataItem(itemId: QueueItemId) {
+        val currentIndex = playbackManager.queueItems.indexOfFirst { it.id == itemId }
+        if (currentIndex < 0) return
+        L.d("Removing queue item $itemId at $currentIndex")
+        playbackManager.removeQueueItem(currentIndex)
     }
 
     /**
@@ -170,12 +173,25 @@ constructor(
      * @param adapterTo The destination index for the queue item.
      * @return true if the items were moved, false otherwise.
      */
-    fun moveQueueDataItems(adapterFrom: Int, adapterTo: Int): Boolean {
-        if (adapterFrom !in queue.value.indices || adapterTo !in queue.value.indices) {
-            return false
-        }
-        L.d("Moving $adapterFrom to $adapterFrom in queue")
-        playbackManager.moveQueueItem(adapterFrom, adapterTo)
+    fun moveQueueDataItem(
+        itemId: QueueItemId,
+        beforeId: QueueItemId?,
+        afterId: QueueItemId?,
+    ): Boolean {
+        val current = playbackManager.queueItems
+        val from = current.indexOfFirst { it.id == itemId }
+        if (from < 0) return false
+        val before = beforeId?.let { id -> current.indexOfFirst { it.id == id } } ?: -1
+        val after = afterId?.let { id -> current.indexOfFirst { it.id == id } } ?: -1
+        val to =
+            when {
+                before >= 0 -> if (from < before) before - 1 else before
+                after >= 0 -> if (from < after) after else after + 1
+                else -> return false
+            }.coerceIn(current.indices)
+        if (from == to) return true
+        L.d("Moving queue item $itemId from $from to $to")
+        playbackManager.moveQueueItem(from, to)
         return true
     }
 }

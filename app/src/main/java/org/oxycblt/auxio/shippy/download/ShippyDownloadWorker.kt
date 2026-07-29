@@ -57,6 +57,7 @@ constructor(
     @Assisted workerParams: WorkerParameters,
     private val jobs: DownloadJobRepository,
     private val storage: SafDownloadStorage,
+    private val transferStaging: DownloadTransferStaging,
     private val crewTemporaryStaging: CrewTemporaryDownloadStaging,
     private val transferEngine: DownloadTransferEngine,
     private val queueItemFactory: QueueItemFactory,
@@ -80,6 +81,7 @@ constructor(
                         stored?.job?.state == DownloadState.CANCELLED
                 ) {
                     cleanupPending(stored)
+                    transferStaging.cleanup(jobId)
                     if (stored.job.state == DownloadState.CANCELLED) {
                         crewTemporaryStaging.cleanup(jobId)
                     }
@@ -100,6 +102,7 @@ constructor(
                 stored.job.state == DownloadState.FAILED_FINAL ||
                     stored.job.state == DownloadState.CANCELLED
             ) {
+                transferStaging.cleanup(jobId)
                 crewTemporaryStaging.cleanup(jobId)
             }
             return Result.success()
@@ -113,6 +116,7 @@ constructor(
         }
         if (stored.job.state == DownloadState.TRANSFERRING) {
             cleanupPending(stored)
+            transferStaging.cleanup(jobId)
             fail(
                 jobId,
                 DownloadFailure("interrupted", "The previous transfer was interrupted"),
@@ -148,31 +152,6 @@ constructor(
             stored = jobs.get(jobId) ?: return Result.failure()
         }
 
-        val pending =
-            stored.pendingDocument
-                ?: when (
-                    val created =
-                        storage.createPendingDocument(
-                            jobId,
-                            stored.track.title,
-                            resolved.playback.mimeType,
-                        )
-                ) {
-                    is StorageResult.Success -> {
-                        jobs.setPendingDocument(jobId, created.value, now())
-                        created.value
-                    }
-                    is StorageResult.Failure -> {
-                        fail(
-                            jobId,
-                            DownloadFailure("storage_${created.reason.name.lowercase()}"),
-                            retryable = created.reason.isRetryable(),
-                        )
-                        return if (created.reason.isRetryable()) Result.retry()
-                        else Result.failure()
-                    }
-                }
-
         if (
             jobs.apply(jobId, DownloadEvent.TransferStarted, now()) !is DownloadTransition.Applied
         ) {
@@ -182,17 +161,13 @@ constructor(
         setForeground(createForegroundInfo(stored.track.title, 0, null))
 
         val output =
-            when (val opened = storage.openOutput(pending)) {
-                is StorageResult.Success -> opened.value
-                is StorageResult.Failure -> {
-                    cleanupPending(jobs.get(jobId) ?: stored)
-                    fail(
-                        jobId,
-                        DownloadFailure("storage_${opened.reason.name.lowercase()}"),
-                        opened.reason.isRetryable(),
-                    )
-                    return if (opened.reason.isRetryable()) Result.retry() else Result.failure()
-                }
+            try {
+                transferStaging.openOutput(jobId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                fail(jobId, DownloadFailure("private_staging_unavailable"), retryable = true)
+                return Result.retry()
             }
         val transferResult =
             transfer(output, resolved) { progress ->
@@ -218,6 +193,7 @@ constructor(
         when (transferResult) {
             is DownloadTransferResult.Failure -> {
                 cleanupPending(jobs.get(jobId) ?: stored)
+                transferStaging.cleanup(jobId)
                 fail(
                     jobId,
                     DownloadFailure(transferResult.reason.code()),
@@ -279,8 +255,67 @@ constructor(
         }
 
     private suspend fun finishPending(stored: PersistedDownload): Result {
-        val pending = stored.pendingDocument ?: return Result.failure()
         val expected = stored.job.expectedBytes
+        val staged =
+            transferStaging.verifiedFile(stored.job.id, expected)
+                ?: run {
+                    cleanupPending(stored)
+                    fail(
+                        stored.job.id,
+                        DownloadFailure("private_staging_verification_failed"),
+                        retryable = true,
+                    )
+                    return Result.retry()
+                }
+        val pending =
+            stored.pendingDocument
+                ?: when (
+                    val created =
+                        storage.createPendingDocument(
+                            stored.job.id,
+                            stored.track.title,
+                            stored.track.candidates
+                                .firstOrNull { it.id == stored.job.candidateId }
+                                ?.media
+                                ?.mimeType,
+                        )
+                ) {
+                    is StorageResult.Success -> {
+                        jobs.setPendingDocument(stored.job.id, created.value, now())
+                        created.value
+                    }
+                    is StorageResult.Failure -> {
+                        fail(
+                            stored.job.id,
+                            DownloadFailure("storage_${created.reason.name.lowercase()}"),
+                            retryable = created.reason.isRetryable(),
+                        )
+                        return if (created.reason.isRetryable()) Result.retry()
+                        else Result.failure()
+                    }
+                }
+        val destination =
+            when (val opened = storage.openOutput(pending)) {
+                is StorageResult.Success -> opened.value
+                is StorageResult.Failure -> {
+                    cleanupPending(stored.copy(pendingDocument = pending))
+                    fail(
+                        stored.job.id,
+                        DownloadFailure("storage_${opened.reason.name.lowercase()}"),
+                        opened.reason.isRetryable(),
+                    )
+                    return if (opened.reason.isRetryable()) Result.retry() else Result.failure()
+                }
+            }
+        try {
+            transferStaging.copyTo(staged, destination)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            cleanupPending(stored.copy(pendingDocument = pending))
+            fail(stored.job.id, DownloadFailure("storage_publish_failed"), retryable = true)
+            return Result.retry()
+        }
         val verification = storage.verify(pending, expected, now())
         if (verification is StorageResult.Failure) {
             cleanupPending(stored)
@@ -320,6 +355,7 @@ constructor(
                 current.track.id,
                 jobs.hasAvailableForTrack(current.track.id),
             )
+            transferStaging.cleanup(current.job.id)
             crewTemporaryStaging.cleanup(current.job.id)
             Result.success(
                 workDataOf(
@@ -333,6 +369,7 @@ constructor(
     private suspend fun abortFinalization(stored: PersistedDownload): Result {
         if (stored.job.state != DownloadState.AVAILABLE) {
             cleanupPending(stored)
+            transferStaging.cleanup(stored.job.id)
         }
         return if (
             stored.job.state == DownloadState.PAUSED ||
@@ -432,6 +469,7 @@ private fun DownloadTransferFailure.code(): String =
         DownloadTransferFailure.NetworkUnavailable -> "network_unavailable"
         DownloadTransferFailure.SourceUnavailable -> "source_unavailable"
         DownloadTransferFailure.TlsRejected -> "tls_rejected"
+        is DownloadTransferFailure.RedirectRejected -> "redirect_rejected"
         DownloadTransferFailure.SourceReadFailed -> "source_read_failed"
         DownloadTransferFailure.DestinationWriteFailed -> "destination_write_failed"
         is DownloadTransferFailure.PrematureEof -> "premature_eof"

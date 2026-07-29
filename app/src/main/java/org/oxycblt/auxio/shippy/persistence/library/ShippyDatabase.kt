@@ -50,7 +50,7 @@ import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointItemEntit
             SavedProviderEntityRecord::class,
         ],
     version = 10,
-    exportSchema = false,
+    exportSchema = true,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
     abstract fun libraryRelationshipDao(): LibraryRelationshipDao

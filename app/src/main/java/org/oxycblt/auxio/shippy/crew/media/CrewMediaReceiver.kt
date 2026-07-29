@@ -52,6 +52,7 @@ class CrewMediaReceiver(
     private var reservedBytes = 0L
     private var bufferedBytes = 0L
 
+    @Synchronized
     fun accept(manifest: CrewMediaManifest): CrewMediaReceiveResult {
         if (manifest.transfer.sessionId != activeSessionId)
             return CrewMediaReceiveResult.Rejected("wrong session")
@@ -73,6 +74,7 @@ class CrewMediaReceiver(
         return CrewMediaReceiveResult.Accepted
     }
 
+    @Synchronized
     fun accept(chunk: CrewMediaChunk): CrewMediaReceiveResult {
         if (chunk.transfer.sessionId != activeSessionId)
             return CrewMediaReceiveResult.Rejected("wrong session")
@@ -100,18 +102,9 @@ class CrewMediaReceiver(
         }
         if (assembly.chunks.size != assembly.manifest.chunks.size)
             return CrewMediaReceiveResult.Accepted
-        val objectBytes = ByteArray(assembly.manifest.objectSizeBytes.toInt())
-        var offset = 0
-        assembly.manifest.chunks.indices.forEach { index ->
-            val payload = assembly.chunks.getValue(index)
-            payload.copyInto(objectBytes, offset)
-            offset += payload.size
-        }
-        if (CrewMediaDigest.sha256(objectBytes) != assembly.manifest.objectIntegrity) {
-            cancel(chunk.transfer)
-            return CrewMediaReceiveResult.Rejected("object integrity mismatch")
-        }
-        return runCatching { cache.put(assembly.manifest, objectBytes) }
+        val orderedChunks =
+            assembly.manifest.chunks.indices.map { index -> assembly.chunks.getValue(index) }
+        return runCatching { cache.put(assembly.manifest, orderedChunks) }
             .fold(
                 onSuccess = { file ->
                     cancel(chunk.transfer)
@@ -125,6 +118,7 @@ class CrewMediaReceiver(
             )
     }
 
+    @Synchronized
     fun cancel(transfer: CrewMediaTransferRef): Boolean {
         val assembly = assemblies.remove(transfer) ?: return false
         reservedBytes -= assembly.manifest.objectSizeBytes

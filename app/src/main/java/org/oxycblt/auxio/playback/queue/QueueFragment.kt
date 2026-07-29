@@ -117,7 +117,7 @@ class QueueFragment :
     }
 
     override fun onClick(item: PlaybackDisplayItem, viewHolder: RecyclerView.ViewHolder) {
-        queueModel.goto(viewHolder.bindingAdapterPosition)
+        queueModel.goto(item.queueItem.id)
     }
 
     override fun onPickUp(viewHolder: RecyclerView.ViewHolder) {

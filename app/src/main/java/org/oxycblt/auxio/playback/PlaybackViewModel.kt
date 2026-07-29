@@ -127,14 +127,10 @@ constructor(
     val openPanel: Event<OpenPanel>
         get() = _openPanel
 
-    private val _pagerQueue = MutableStateFlow(PagerQueue(listOf(), 0))
+    private val _pagerQueue =
+        MutableStateFlow(PagerQueue(listOf(), 0, PagerCommand(update = null, scroll = null)))
     /** The current queue in a special bundled format suitable for the cover ViewPager2. */
     val pagerQueue: StateFlow<PagerQueue> = _pagerQueue
-
-    private val _pagerCommand = MutableEvent<PagerCommand>()
-    /** Specialized ViewPager2-friendly queue commands */
-    val pagerCommand: Event<PagerCommand>
-        get() = _pagerCommand
 
     private val _playbackDecision = MutableEvent<PlaybackDecision>()
     /**
@@ -168,8 +164,11 @@ constructor(
             playbackManager.resolvedQueue.getOrNull(index)?.let(playbackDisplayMapper::map)
         )
 
-        _pagerCommand.put(PagerCommand(update = null, scroll = index))
-        _pagerQueue.value = _pagerQueue.value.copy(index = index)
+        _pagerQueue.value =
+            _pagerQueue.value.copy(
+                index = index,
+                command = PagerCommand(update = null, scroll = index),
+            )
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
@@ -244,10 +243,13 @@ constructor(
             viewModelScope.launch {
                 val displayQueue =
                     withContext(Dispatchers.Default) { queue.map(playbackDisplayMapper::map) }
-                _pagerCommand.put(
-                    command.copy(scroll = command.scroll?.let { playbackManager.index })
-                )
-                _pagerQueue.value = PagerQueue(queue = displayQueue, index = playbackManager.index)
+                val currentIndex = playbackManager.index
+                _pagerQueue.value =
+                    PagerQueue(
+                        queue = displayQueue,
+                        index = currentIndex,
+                        command = command.copy(scroll = command.scroll?.let { currentIndex }),
+                    )
             }
     }
 
@@ -259,6 +261,7 @@ constructor(
         // Replace the previous position co-routine with a new one that uses the new
         // state information.
         lastPositionJob?.cancel()
+        if (!progression.isPlaying) return
         lastPositionJob =
             viewModelScope.launch {
                 while (true) {
@@ -418,7 +421,7 @@ constructor(
         L.d(
             "Cannot use given artist parameter for $song [$artist from ${song.artists}], showing choice dialog"
         )
-        startPlaybackDecision(PlaybackDecision.PlayFromArtist(song))
+        startPlaybackDecision(PlaybackDecision.PlayFromGenre(song))
     }
 
     private fun playFromGenreImpl(song: Song, genre: Genre?, shuffle: ShuffleMode) {
@@ -787,7 +790,11 @@ constructor(
     }
 }
 
-data class PagerQueue(val queue: List<PlaybackDisplayItem>, val index: Int)
+data class PagerQueue(
+    val queue: List<PlaybackDisplayItem>,
+    val index: Int,
+    val command: PagerCommand,
+)
 
 data class PagerCommand(val update: UpdateInstructions?, val scroll: Int?)
 

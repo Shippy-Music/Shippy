@@ -92,6 +92,10 @@ sealed interface DownloadTransferFailure {
         override val retryable = false
     }
 
+    data class RedirectRejected(val detail: String) : DownloadTransferFailure {
+        override val retryable = false
+    }
+
     data object SourceReadFailed : DownloadTransferFailure {
         override val retryable = true
     }
@@ -178,6 +182,12 @@ internal constructor(
                 } catch (_: IllegalArgumentException) {
                     return@withContext DownloadTransferResult.Failure(
                         DownloadTransferFailure.InvalidRequest
+                    )
+                } catch (error: DownloadRedirectException) {
+                    return@withContext DownloadTransferResult.Failure(
+                        DownloadTransferFailure.RedirectRejected(
+                            error.message ?: "redirect_rejected"
+                        )
                     )
                 } catch (_: IOException) {
                     return@withContext DownloadTransferResult.Failure(
@@ -366,11 +376,49 @@ private class AndroidDownloadTransferSourceFactory(private val contentResolver: 
     ): DownloadTransferSource =
         when (uri.scheme?.lowercase()) {
             "http",
-            "https" -> HttpDownloadTransferSource(uri, headers, connectTimeoutMs, readTimeoutMs)
+            "https" -> openHttp(uri, headers, connectTimeoutMs, readTimeoutMs)
             "content" -> ContentDownloadTransferSource(contentResolver, uri)
             "file" -> FileDownloadTransferSource(uri)
             else -> throw IOException("Unsupported transfer source")
         }
+
+    private fun openHttp(
+        uri: URI,
+        headers: Map<String, String>,
+        connectTimeoutMs: Int,
+        readTimeoutMs: Int,
+    ): DownloadTransferSource {
+        var current = uri
+        repeat(MAX_REDIRECTS + 1) { hop ->
+            val source =
+                HttpDownloadTransferSource(current, headers, connectTimeoutMs, readTimeoutMs)
+            if (source.httpStatusCode !in REDIRECT_CODES) return source
+            val location = source.redirectLocation
+            source.close()
+            if (hop == MAX_REDIRECTS) {
+                throw DownloadRedirectException("too_many_redirects")
+            }
+            if (location.isNullOrBlank()) {
+                throw DownloadRedirectException("missing_location")
+            }
+            val redirected =
+                try {
+                    current.resolve(location)
+                } catch (_: IllegalArgumentException) {
+                    throw DownloadRedirectException("invalid_location")
+                }
+            if (redirected.scheme?.lowercase() != "https") {
+                throw DownloadRedirectException("redirect_must_use_https")
+            }
+            current = redirected
+        }
+        throw DownloadRedirectException("too_many_redirects")
+    }
+
+    private companion object {
+        const val MAX_REDIRECTS = 5
+        val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
+    }
 }
 
 private class HttpDownloadTransferSource(
@@ -390,6 +438,9 @@ private class HttpDownloadTransferSource(
         }
 
     override val httpStatusCode: Int = connection.responseCode
+    val redirectLocation: String?
+        get() = connection.getHeaderField("Location")
+
     override val declaredLength: Long? = connection.contentLengthLong.takeIf { it >= 0 }
 
     override fun openInput(): InputStream = connection.inputStream
@@ -398,6 +449,8 @@ private class HttpDownloadTransferSource(
         connection.disconnect()
     }
 }
+
+private class DownloadRedirectException(message: String) : IOException(message)
 
 private class ContentDownloadTransferSource(
     private val contentResolver: ContentResolver,

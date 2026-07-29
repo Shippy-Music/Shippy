@@ -29,6 +29,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.media.MediaBrowserServiceCompat
+import androidx.media.MediaSessionManager
 import androidx.media.utils.MediaConstants
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -93,7 +94,14 @@ class AuxioService :
         clientPackageName: String,
         clientUid: Int,
         rootHints: Bundle?,
-    ): BrowserRoot {
+    ): BrowserRoot? {
+        val remote = MediaSessionManager.RemoteUserInfo(clientPackageName, -1, clientUid)
+        if (
+            clientUid != applicationInfo.uid &&
+                !MediaSessionManager.getSessionManager(this).isTrustedForMediaControl(remote)
+        ) {
+            return null
+        }
         return musicFragment.getRoot()
     }
 

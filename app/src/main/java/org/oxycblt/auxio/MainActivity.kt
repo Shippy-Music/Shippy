@@ -139,9 +139,8 @@ class MainActivity : AppCompatActivity() {
             L.d("Already used this intent")
             return true
         }
-        intent.putExtra(KEY_INTENT_USED, true)
-
         if (intent.action == Intent.ACTION_VIEW && isShippyTrackLink(intent)) {
+            intent.putExtra(KEY_INTENT_USED, true)
             val track = ShippyTrackLinkCodec.decode(intent.data.toString())
             if (track == null) {
                 showToast(R.string.err_shippy_track_link)
@@ -166,6 +165,7 @@ class MainActivity : AppCompatActivity() {
                     return false
                 }
             }
+        intent.putExtra(KEY_INTENT_USED, true)
         L.d("Translated intent to $action")
         playbackModel.playDeferred(action)
         return true

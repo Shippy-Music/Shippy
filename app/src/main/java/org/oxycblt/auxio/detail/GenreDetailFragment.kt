@@ -285,7 +285,10 @@ class GenreDetailFragment : DetailFragment<Genre, Music>() {
                     L.d("Launching play from artist dialog for $decision")
                     GenreDetailFragmentDirections.playFromArtist(decision.song.uid)
                 }
-                is PlaybackDecision.PlayFromGenre -> error("Unexpected playback decision $decision")
+                is PlaybackDecision.PlayFromGenre -> {
+                    L.d("Launching play from genre dialog for $decision")
+                    GenreDetailFragmentDirections.playFromGenre(decision.song.uid)
+                }
             }
         findNavController().navigateSafe(directions)
     }

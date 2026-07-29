@@ -17,12 +17,14 @@
  */
 package org.oxycblt.auxio.shippy.download
 
+import androidx.room.withTransaction
 import javax.inject.Inject
 import javax.inject.Singleton
 import org.oxycblt.auxio.shippy.domain.TrackId
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
+import org.oxycblt.auxio.shippy.persistence.library.ShippyDatabase
 
 /**
  * Repairs the Downloads projection from the selected directory without treating similarly named
@@ -32,10 +34,11 @@ import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepositor
 @Singleton
 class DownloadDestinationReconciler
 @Inject
-constructor(
+internal constructor(
     private val storage: SafDownloadStorage,
     private val jobs: DownloadJobRepository,
     private val relationships: LibraryRelationshipRepository,
+    private val database: ShippyDatabase,
     private val publicationGate: DownloadPublicationGate,
 ) {
     suspend fun reconcile(
@@ -45,11 +48,13 @@ constructor(
             val plan =
                 DownloadReconciliationPlanner.plan(storage.inspectDestination(), jobs.getAll())
 
-            plan.missingArtifactJobIds.forEach { jobId ->
-                jobs.apply(jobId, DownloadEvent.Remove, nowEpochMs)
-            }
-            plan.relationshipRepairs.forEach { repair ->
-                relationships.setDownloaded(repair.trackId, repair.downloaded)
+            database.withTransaction {
+                plan.missingArtifactJobIds.forEach { jobId ->
+                    jobs.apply(jobId, DownloadEvent.Remove, nowEpochMs)
+                }
+                plan.relationshipRepairs.forEach { repair ->
+                    relationships.setDownloaded(repair.trackId, repair.downloaded)
+                }
             }
 
             plan.result

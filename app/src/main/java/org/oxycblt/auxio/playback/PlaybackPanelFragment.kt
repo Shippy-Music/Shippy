@@ -101,11 +101,6 @@ class PlaybackPanelFragment :
     private val reactionViews = mutableSetOf<View>()
     private var peerMediaDialog: androidx.appcompat.app.AlertDialog? = null
     private var promptedForCurrentPeerBlock = false
-    private var pendingShuffleTarget: Boolean? = null
-    private val commitShuffle = Runnable {
-        pendingShuffleTarget?.let(playbackModel::setShuffled)
-        pendingShuffleTarget = null
-    }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -150,7 +145,7 @@ class PlaybackPanelFragment :
                 UserAwarePagerCallback(this) {
                         // Posting the queue goto command prevents the seekbar pos from desyncing
                         // from the song's duration, which creates a visual flicker in the seekbar.
-                        post { queueModel.goto(it) }
+                        post { queueModel.gotoAdapterIndex(it) }
                     }
                     .also { it.attach() }
             setPageTransformer(CarouselTransformer())
@@ -200,15 +195,13 @@ class PlaybackPanelFragment :
         binding.playbackShuffle.setOnClickListener {
             val shuffle = binding.playbackShuffle
             val target = !shuffle.isChecked
-            pendingShuffleTarget = target
             shuffle.isChecked = target
             shuffle.setIconResource(
                 if (target) R.drawable.ic_shuffle_on_24 else R.drawable.ic_shuffle_off_24
             )
-            shuffle.removeCallbacks(commitShuffle)
-            // Preserve MaterialButtonGroup's expressive neighbor bounce, but let the release
-            // animation establish itself before the queue reorder does heavier playback work.
-            shuffle.postDelayed(commitShuffle, SHUFFLE_COMMIT_DELAY_MS)
+            // Commit playback state at the interaction boundary. The button group may continue
+            // its visual spring independently, but lifecycle changes must never discard intent.
+            playbackModel.setShuffled(target)
         }
         binding.playbackSave.setOnClickListener {
             val state = playerActionsModel.state.value
@@ -295,9 +288,7 @@ class PlaybackPanelFragment :
         binding.root.onCollapseGesture = null
         binding.playbackLyricsHint?.setOnClickListener(null)
         binding.playbackRepeat.clearPendingIcon()
-        binding.playbackShuffle.removeCallbacks(commitShuffle)
         binding.playbackShuffle.clearPendingIcon()
-        pendingShuffleTarget = null
         binding.playbackSong.isSelected = false
         binding.playbackArtist.isSelected = false
         binding.playbackAlbum?.isSelected = false
@@ -729,18 +720,7 @@ class PlaybackPanelFragment :
         // but only on some devices.
         val binding = binding ?: return
 
-        val command = playbackModel.pagerCommand.consume()
-        if (command == null) {
-            // This probably shouldn't happen in practice, as QueueViewModel directly
-            // attaches to PlaybackStateManager and will basically always initialize
-            // with a command as a result.
-            //
-            // If it does happen we should just make sure the UI state is aligned. Don't
-            // want broken UI.
-            coverPagerAdapter.update(queue.queue, null)
-            binding.playbackPager.setCurrentItem(queue.index, false)
-            return
-        }
+        val command = queue.command
 
         if (command.update != null) {
             // queue needs to be updated.
@@ -781,10 +761,6 @@ class PlaybackPanelFragment :
             Direction.FORWARDS -> playbackModel.stepForward()
             Direction.BACKWARDS -> playbackModel.stepBackwards()
         }
-    }
-
-    private companion object {
-        const val SHUFFLE_COMMIT_DELAY_MS = 120L
     }
 }
 

@@ -137,20 +137,26 @@ constructor(
 
     private suspend fun flush() {
         val auth = credentials.load() ?: return
-        val batch = dao.oldest(MAX_BATCH)
-        if (batch.isEmpty()) return
-        when (client.scrobble(batch, auth)) {
-            LastFmDelivery.DELIVERED -> {
-                dao.delete(batch.map { it.id })
-                reauth.clear()
+        repeat(MAX_BATCHES_PER_FLUSH) {
+            val batch = dao.oldest(MAX_BATCH)
+            if (batch.isEmpty()) return
+            when (client.scrobble(batch, auth)) {
+                LastFmDelivery.DELIVERED -> {
+                    dao.delete(batch.map { it.id })
+                    reauth.clear()
+                }
+                LastFmDelivery.DROP -> dao.delete(batch.map { it.id })
+                LastFmDelivery.REAUTH -> {
+                    reauth.markRequired()
+                    return
+                }
+                LastFmDelivery.RETRY -> return
             }
-            LastFmDelivery.DROP -> dao.delete(batch.map { it.id })
-            LastFmDelivery.REAUTH -> reauth.markRequired()
-            LastFmDelivery.RETRY -> Unit
         }
     }
 
     private companion object {
         const val MAX_BATCH = 50
+        const val MAX_BATCHES_PER_FLUSH = 4
     }
 }

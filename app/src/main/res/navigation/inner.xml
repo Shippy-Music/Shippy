@@ -413,6 +413,9 @@
         <action
             android:id="@+id/play_from_artist"
             app:destination="@id/play_from_artist_dialog" />
+        <action
+            android:id="@+id/play_from_genre"
+            app:destination="@id/play_from_genre_dialog" />
     </fragment>
 
     <dialog

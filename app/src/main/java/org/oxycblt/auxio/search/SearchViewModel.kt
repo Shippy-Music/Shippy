@@ -21,11 +21,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.list.BasicHeader
 import org.oxycblt.auxio.list.Item
@@ -138,6 +141,8 @@ constructor(
         L.d("Searching Shippy for $normalizedQuery")
         currentSearchJob =
             viewModelScope.launch {
+                // Coalesce keyboard bursts before scanning large device libraries.
+                delay(90)
                 val providerSearch =
                     if (localOnly) {
                         null
@@ -150,7 +155,9 @@ constructor(
                         }
                     }
                 val localItems =
-                    musicRepository.library?.let { searchImpl(it, normalizedQuery) }.orEmpty()
+                    withContext(Dispatchers.Default) {
+                        musicRepository.library?.let { searchImpl(it, normalizedQuery) }.orEmpty()
+                    }
                 if (localOnly) {
                     _searchResults.value =
                         combineSearchResults(
@@ -179,16 +186,16 @@ constructor(
     }
 
     fun playProviderTrack(track: Track) {
-        recordSearchSelection(
-            title = track.title,
-            subtitle = track.artists.joinToString(", ").ifBlank { track.album },
-            artwork = track.artwork,
-        )
         currentProviderPlaybackJob?.cancel()
         currentProviderPlaybackJob =
             viewModelScope.launch {
                 when (val result = shippyPlaybackController.play(track, contextId = "search")) {
-                    is PlaybackStartResult.Started -> Unit
+                    is PlaybackStartResult.Started ->
+                        recordSearchSelection(
+                            title = track.title,
+                            subtitle = track.artists.joinToString(", ").ifBlank { track.album },
+                            artwork = track.artwork,
+                        )
                     is PlaybackStartResult.Failed -> _providerPlaybackFailure.put(result.failure)
                 }
             }

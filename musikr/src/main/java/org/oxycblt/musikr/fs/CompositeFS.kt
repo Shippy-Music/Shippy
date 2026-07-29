@@ -59,7 +59,7 @@ class CompositeFS(private val primary: FS, private val secondary: FS) : FS {
         destination: Channel<File>,
         seenPaths: MutableSet<Path>,
     ) = coroutineScope {
-        val sourceFiles = Channel<File>(Channel.UNLIMITED)
+        val sourceFiles = Channel<File>(SOURCE_BUFFER_CAPACITY)
         val forwardTask =
             async(Dispatchers.Default) {
                 for (file in sourceFiles) {
@@ -71,5 +71,9 @@ class CompositeFS(private val primary: FS, private val secondary: FS) : FS {
         val result = source.explore(sourceFiles).await()
         result.getOrThrow()
         forwardTask.await()
+    }
+
+    private companion object {
+        const val SOURCE_BUFFER_CAPACITY = 128
     }
 }

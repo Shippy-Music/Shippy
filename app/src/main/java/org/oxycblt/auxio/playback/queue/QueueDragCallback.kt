@@ -20,6 +20,7 @@ package org.oxycblt.auxio.playback.queue
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
 import org.oxycblt.auxio.list.recycler.MaterialDragCallback
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 
 /**
  * A highly customized [ItemTouchHelper.Callback] that enables some extra eye candy in the queue UI,
@@ -33,6 +34,7 @@ class QueueDragCallback(
 ) : MaterialDragCallback() {
     private var dragStart = RecyclerView.NO_POSITION
     private var dragEnd = RecyclerView.NO_POSITION
+    private var draggedItemId: QueueItemId? = null
 
     override fun onMove(
         recyclerView: RecyclerView,
@@ -42,24 +44,43 @@ class QueueDragCallback(
         val from = viewHolder.bindingAdapterPosition
         val to = target.bindingAdapterPosition
         if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
-        if (dragStart == RecyclerView.NO_POSITION) dragStart = from
+        if (dragStart == RecyclerView.NO_POSITION) {
+            dragStart = from
+            draggedItemId = queueAdapter.currentList.getOrNull(from)?.queueItem?.id
+        }
         if (!queueAdapter.previewMove(from, to)) return false
         dragEnd = to
         return true
     }
 
     override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-        queueModel.removeQueueDataItem(viewHolder.bindingAdapterPosition)
+        queueAdapter.currentList
+            .getOrNull(viewHolder.bindingAdapterPosition)
+            ?.queueItem
+            ?.id
+            ?.let(queueModel::removeQueueDataItem)
     }
 
     override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
         super.clearView(recyclerView, viewHolder)
         val from = dragStart
         val to = dragEnd
+        val itemId = draggedItemId
         dragStart = RecyclerView.NO_POSITION
         dragEnd = RecyclerView.NO_POSITION
-        if (from != RecyclerView.NO_POSITION && to != RecyclerView.NO_POSITION && from != to) {
-            queueModel.moveQueueDataItems(from, to)
+        draggedItemId = null
+        if (
+            itemId != null &&
+                from != RecyclerView.NO_POSITION &&
+                to != RecyclerView.NO_POSITION &&
+                from != to
+        ) {
+            val finalItems = queueAdapter.currentList
+            queueModel.moveQueueDataItem(
+                itemId = itemId,
+                beforeId = finalItems.getOrNull(to + 1)?.queueItem?.id,
+                afterId = finalItems.getOrNull(to - 1)?.queueItem?.id,
+            )
         }
     }
 }

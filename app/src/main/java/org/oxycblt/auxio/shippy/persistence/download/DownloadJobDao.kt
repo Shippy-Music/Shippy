@@ -113,6 +113,16 @@ internal abstract class DownloadJobDao {
     abstract fun observeAvailable(): Flow<List<StoredDownloadJob>>
 
     @Transaction
+    @Query(
+        """
+        SELECT * FROM download_job
+        WHERE trackId = :trackId
+        ORDER BY createdAtEpochMs DESC, jobId DESC
+        """
+    )
+    abstract fun observeForTrack(trackId: String): Flow<List<StoredDownloadJob>>
+
+    @Transaction
     @Query("SELECT * FROM download_job WHERE jobId = :jobId")
     abstract suspend fun get(jobId: String): StoredDownloadJob?
 

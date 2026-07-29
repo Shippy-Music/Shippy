@@ -49,6 +49,7 @@ constructor(
     @ApplicationContext context: Context,
     private val jobs: DownloadJobRepository,
     private val storage: SafDownloadStorage,
+    private val transferStaging: DownloadTransferStaging,
     private val crewTemporaryStaging: CrewTemporaryDownloadStaging,
     private val relationships: LibraryRelationshipRepository,
     private val publicationGate: DownloadPublicationGate,
@@ -145,6 +146,7 @@ constructor(
         workManager.cancelUniqueWork(workName(jobId)).result.await()
         jobs.get(jobId)?.pendingDocument?.let { storage.delete(it.contentUri) }
         jobs.setPendingDocument(jobId, null, nowEpochMs)
+        transferStaging.cleanup(jobId)
         crewTemporaryStaging.cleanup(jobId)
     }
 
@@ -155,11 +157,12 @@ constructor(
         publicationGate.run {
             val stored = jobs.get(jobId) ?: return@run false
             val artifact = stored.job.artifact ?: return@run false
-            if (!storage.delete(artifact.contentUri)) return@run false
             val transition = jobs.apply(jobId, DownloadEvent.Remove, nowEpochMs)
             if (transition !is DownloadTransition.Applied) return@run false
             relationships.setDownloaded(stored.track.id, jobs.hasAvailableForTrack(stored.track.id))
-            true
+            transferStaging.cleanup(jobId)
+            crewTemporaryStaging.cleanup(jobId)
+            storage.delete(artifact.contentUri)
         }
 
     private fun enqueue(

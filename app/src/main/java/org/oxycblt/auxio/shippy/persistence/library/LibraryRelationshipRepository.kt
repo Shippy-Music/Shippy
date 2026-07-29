@@ -68,6 +68,12 @@ interface LibraryRelationshipRepository {
     suspend fun replacePlaylistMemberships(trackId: TrackId, playlistIds: Set<LibraryCollectionId>)
 
     suspend fun replacePlaylistMemberships(track: Track, playlistIds: Set<LibraryCollectionId>)
+
+    suspend fun updateSavedDestinations(
+        track: Track,
+        liked: Boolean,
+        playlistIds: Set<LibraryCollectionId>,
+    )
 }
 
 internal class RoomLibraryRelationshipRepository
@@ -200,6 +206,20 @@ constructor(
     ) {
         metadata.upsert(track)
         replacePlaylistMemberships(track.id, playlistIds)
+    }
+
+    override suspend fun updateSavedDestinations(
+        track: Track,
+        liked: Boolean,
+        playlistIds: Set<LibraryCollectionId>,
+    ) {
+        playlistIds.forEach(::requireUserPlaylistId)
+        metadata.upsert(track)
+        dao.updateSavedDestinations(
+            track.id.value,
+            liked,
+            playlistIds.map(LibraryCollectionId::value).sorted(),
+        )
     }
 }
 

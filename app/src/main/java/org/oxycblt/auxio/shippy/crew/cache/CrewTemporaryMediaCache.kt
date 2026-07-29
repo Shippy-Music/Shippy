@@ -18,6 +18,8 @@
 package org.oxycblt.auxio.shippy.crew.cache
 
 import java.io.File
+import java.io.FileOutputStream
+import java.security.MessageDigest
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.media.CREW_MEDIA_MAX_OBJECT_BYTES
 import org.oxycblt.auxio.shippy.crew.media.CrewMediaDigest
@@ -65,6 +67,47 @@ class CrewTemporaryMediaCache(
         target.outputStream().use { it.write(bytes) }
         usedBytes = usedBytes - replaced + bytes.size
         return target
+    }
+
+    /** Writes an assembled object once without allocating a second full-size byte array. */
+    @Synchronized
+    fun put(manifest: CrewMediaManifest, chunks: List<ByteArray>): File {
+        require(sessionId == manifest.sessionId) {
+            "Temporary media is only valid for the active Crew"
+        }
+        require(chunks.size == manifest.chunks.size) { "Temporary media chunk count mismatch" }
+        val total = chunks.sumOf { it.size.toLong() }
+        require(total == manifest.objectSizeBytes) { "Temporary media size mismatch" }
+        val target = objectFile(manifest)
+        if (target.isFile && target.length() == total) return target
+        val partial = File(target.parentFile, "${target.name}.partial")
+        val replaced = if (target.exists()) target.length() else 0L
+        require(usedBytes - replaced + total <= maxBytes) { "Crew cache capacity exceeded" }
+        val digest = MessageDigest.getInstance("SHA-256")
+        partial.delete()
+        try {
+            FileOutputStream(partial).use { output ->
+                chunks.forEachIndexed { index, bytes ->
+                    require(CrewMediaDigest.sha256(bytes) == manifest.chunks[index].integrity) {
+                        "Temporary media chunk integrity mismatch"
+                    }
+                    output.write(bytes)
+                    digest.update(bytes)
+                }
+                output.fd.sync()
+            }
+            require(
+                CrewMediaDigest(digest.digest()) == manifest.objectIntegrity &&
+                    partial.length() == total
+            ) {
+                "Temporary media integrity mismatch"
+            }
+            require(partial.renameTo(target)) { "Cannot publish Crew media cache entry" }
+            usedBytes = usedBytes - replaced + total
+            return target
+        } finally {
+            partial.delete()
+        }
     }
 
     @Synchronized

@@ -758,4 +758,5 @@
     <string name="lbl_lastfm_top_tracks">Your top tracks</string>
     <string name="lbl_recently_played">Recently played</string>
     <string name="lbl_recent_downloads">Recent downloads</string>
+    <string name="err_track_playback">This track could not be played. Trying the next one.</string>
 </resources>

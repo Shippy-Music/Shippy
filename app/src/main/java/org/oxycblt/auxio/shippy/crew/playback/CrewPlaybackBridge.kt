@@ -60,6 +60,7 @@ import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.provider.ProviderSettings
 import org.oxycblt.auxio.shippy.provider.StreamConstraints
+import timber.log.Timber as L
 
 private const val RECONCILE_DELAY_MS = 150L
 private const val SEEK_DRIFT_MS = 900L
@@ -89,6 +90,7 @@ constructor(
     private var attached = false
     private var applyingRemote = false
     private var seededSession: String? = null
+    private var lastQueueResolutionKey: String? = null
     @Volatile private var latestCrew: CrewState? = null
     @Volatile private var localCrewMemberId: CrewMemberId? = null
     private val applyMutex = Mutex()
@@ -156,6 +158,7 @@ constructor(
         localCrewMemberId = null
         applyingRemote = false
         seededSession = null
+        lastQueueResolutionKey = null
     }
 
     override fun onIndexMoved(index: Int) = scheduleReconciliation()
@@ -213,15 +216,22 @@ constructor(
             }
             return
         }
-        if (crew.queue.isEmpty()) return
-
         applyingRemote = true
         try {
+            val queueResolutionKey = "${crew.sessionId}:${crew.term}:${crew.lastSequence}"
+            if (crew.queue.isEmpty()) {
+                lastQueueResolutionKey = queueResolutionKey
+                if (playbackManager.queueItems.isNotEmpty()) playbackManager.endSession()
+                return
+            }
             val targetId = crew.playback.currentQueueItemId
             val playerIds = playbackManager.queueItems.map(QueueItem::id)
             val crewIds = crew.queue.map(QueueItem::id)
             var replacedQueue = false
-            if (forceQueueResolution || playerIds != crewIds) {
+            if (
+                forceQueueResolution ||
+                    (playerIds != crewIds && lastQueueResolutionKey != queueResolutionKey)
+            ) {
                 val policy =
                     ResolutionPolicy(
                         providerPriority =
@@ -251,12 +261,20 @@ constructor(
                     ) {
                         is PlaybackPreparation.Ready -> prepared += result.value
                         is PlaybackPreparation.Failed ->
-                            return // Leave the working player intact for prefetch/retry.
+                            L.w(
+                                "Crew item ${item.id} is temporarily unavailable; " +
+                                    "installing the remaining playable queue"
+                            )
                     }
                 }
+                lastQueueResolutionKey = queueResolutionKey
+                if (prepared.isEmpty()) return
+                val selectedId =
+                    targetId?.takeIf { target -> prepared.any { it.item.id == target } }
+                        ?: prepared.first().item.id
                 playbackManager.play(
                     PlaybackCommandFactoryImpl.PlaybackCommandImpl(
-                        selectedItemId = targetId ?: prepared.first().item.id,
+                        selectedItemId = selectedId,
                         queue = prepared,
                         parent = null,
                         shuffled = crew.shuffleEnabled,
@@ -313,8 +331,10 @@ constructor(
             }
         } catch (error: CancellationException) {
             throw error
-        } catch (_: Exception) {
-            // A provider/player failure must not take down playback service or the active Crew.
+        } catch (error: Exception) {
+            // Keep the service alive, but retain a diagnosable failure instead of silently
+            // pretending the remote state was applied.
+            L.e(error, "Could not apply authoritative Crew playback state")
         } finally {
             applyingRemote = false
         }

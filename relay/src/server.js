@@ -79,6 +79,7 @@ export function loadConfig(env = process.env) {
     heartbeatMs: intEnv(env, "CREW_RELAY_HEARTBEAT_MS", 30_000),
     shutdownMs: intEnv(env, "CREW_RELAY_SHUTDOWN_MS", 1_000),
     rate: intEnv(env, "CREW_RELAY_MESSAGES_PER_MINUTE", 240),
+    iceRate: intEnv(env, "CREW_RELAY_ICE_REQUESTS_PER_MINUTE", 30),
     turnUrls: turnUrls(env.CREW_RELAY_TURN_URLS),
     turnSecret: turnSecret(env.CREW_RELAY_TURN_SECRET),
     turnTtlSeconds: boundedIntEnv(
@@ -157,23 +158,23 @@ const log = (event, detail = {}) =>
   );
 
 export function createRelayServer(config = loadConfig()) {
-  let inflight = 0;
   const clients = new Set();
+  const iceWindows = new Map();
   const send = (client, frame) => {
     if (
       client.ws.readyState !== WebSocket.OPEN ||
       client.ws.bufferedAmount + frame.length > config.maxInflight ||
-      inflight + frame.length > config.maxInflight
+      client.inflight + frame.length > config.maxInflight
     )
       return false;
-    inflight += frame.length;
+    client.inflight += frame.length;
     try {
       client.ws.send(frame, { binary: true }, () => {
-        inflight = Math.max(0, inflight - frame.length);
+        client.inflight = Math.max(0, client.inflight - frame.length);
       });
       return true;
     } catch {
-      inflight = Math.max(0, inflight - frame.length);
+      client.inflight = Math.max(0, client.inflight - frame.length);
       return false;
     }
   };
@@ -195,6 +196,30 @@ export function createRelayServer(config = loadConfig()) {
       return;
     }
     if (req.method === "POST" && new URL(req.url, "http://relay").pathname === "/v1/ice") {
+      const now = Date.now();
+      const address = req.socket.remoteAddress ?? "unknown";
+      const prior = iceWindows.get(address);
+      const window =
+        !prior || now - prior.startedAt >= 60_000
+          ? { startedAt: now, count: 0 }
+          : prior;
+      window.count += 1;
+      iceWindows.set(address, window);
+      if (window.count > (config.iceRate ?? 30)) {
+        req.resume();
+        res
+          .writeHead(429, {
+            "cache-control": "no-store",
+            "retry-after": "60",
+          })
+          .end();
+        return;
+      }
+      if (iceWindows.size > 1024) {
+        for (const [key, value] of iceWindows) {
+          if (now - value.startedAt >= 60_000) iceWindows.delete(key);
+        }
+      }
       if (!config.turnUrls.length || !config.turnSecret) {
         req.resume();
         res.writeHead(503, { "cache-control": "no-store" }).end();
@@ -259,6 +284,7 @@ export function createRelayServer(config = loadConfig()) {
       lastSeen: Date.now(),
       windowAt: Date.now(),
       messages: 0,
+      inflight: 0,
     };
     clients.add(client);
     const close = (target, reason) => {

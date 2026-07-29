@@ -73,7 +73,7 @@ constructor(
                     item?.queueItem?.track ?: return@flatMapLatest flowOf(PlayerActionsState())
                 combine(
                     relationships.observe(track.id),
-                    downloads.observeAll(),
+                    downloads.observeForTrack(track.id),
                     relationships.observeUserPlaylists(),
                 ) { relationship, jobs, playlists ->
                     PlayerActionsState(
@@ -110,10 +110,7 @@ constructor(
 
     fun updateSavedDestinations(liked: Boolean, playlistIds: Set<LibraryCollectionId>) {
         val track = state.value.track ?: return
-        viewModelScope.launch {
-            relationships.setLiked(track, liked)
-            relationships.replacePlaylistMemberships(track, playlistIds)
-        }
+        viewModelScope.launch { relationships.updateSavedDestinations(track, liked, playlistIds) }
     }
 
     fun removeDownload(jobId: DownloadJobId) {

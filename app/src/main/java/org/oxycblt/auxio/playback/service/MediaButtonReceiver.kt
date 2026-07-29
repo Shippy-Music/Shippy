@@ -21,6 +21,8 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.view.KeyEvent
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -41,6 +43,14 @@ class MediaButtonReceiver : BroadcastReceiver() {
 
     // TODO: Figure this out
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != Intent.ACTION_MEDIA_BUTTON) return
+        val event =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
+            } else {
+                @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT)
+            } ?: return
+        if (event.action != KeyEvent.ACTION_DOWN || event.keyCode !in ALLOWED_MEDIA_KEYS) return
         if (playbackManager.currentQueueItem != null) {
             // We have a song, so we can assume that the service will start a foreground state.
             // At least, I hope. Again, *this is why we don't do this*. I cannot describe how
@@ -54,5 +64,18 @@ class MediaButtonReceiver : BroadcastReceiver() {
             intent.putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_MEDIA_BUTTON)
             ContextCompat.startForegroundService(context, intent)
         }
+    }
+
+    private companion object {
+        val ALLOWED_MEDIA_KEYS =
+            setOf(
+                KeyEvent.KEYCODE_MEDIA_PLAY,
+                KeyEvent.KEYCODE_MEDIA_PAUSE,
+                KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE,
+                KeyEvent.KEYCODE_MEDIA_NEXT,
+                KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+                KeyEvent.KEYCODE_MEDIA_STOP,
+                KeyEvent.KEYCODE_HEADSETHOOK,
+            )
     }
 }

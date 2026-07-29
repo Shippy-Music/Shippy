@@ -61,41 +61,94 @@ interface ProviderHttpTransport {
 class DefaultProviderHttpTransport @Inject constructor() : ProviderHttpTransport {
     override suspend fun execute(request: ProviderHttpRequest): ProviderHttpResponse =
         withContext(Dispatchers.IO) {
-            val connection = URL(request.url).openConnection() as HttpURLConnection
-            try {
-                connection.requestMethod = request.method.name
-                connection.connectTimeout = CONNECT_TIMEOUT_MS
-                connection.readTimeout = READ_TIMEOUT_MS
-                connection.instanceFollowRedirects = false
-                connection.useCaches = false
-                request.headers.forEach(connection::setRequestProperty)
-                request.body?.let { body ->
-                    connection.doOutput = true
-                    connection.setFixedLengthStreamingMode(body.size)
-                    connection.outputStream.use { it.write(body) }
+            var current = request
+            repeat(MAX_REDIRECTS + 1) { hop ->
+                val response = executeOnce(current)
+                if (response.statusCode !in REDIRECT_CODES) return@withContext response
+                if (hop == MAX_REDIRECTS) throw IOException("Too many provider redirects")
+                val location =
+                    response.headers.entries
+                        .firstOrNull { it.key.equals("Location", ignoreCase = true) }
+                        ?.value
+                        ?.firstOrNull() ?: throw IOException("Provider redirect had no Location")
+                val redirected = URL(URL(current.url), location)
+                if (redirected.protocol != "https") {
+                    throw IOException("Provider redirect must remain HTTPS")
                 }
-
-                val statusCode = connection.responseCode
-                val stream =
-                    if (statusCode in 200..299) {
-                        connection.inputStream
-                    } else {
-                        connection.errorStream
-                    }
-                ProviderHttpResponse(
-                    statusCode = statusCode,
-                    headers =
-                        connection.headerFields.entries
-                            .mapNotNull { (key, values) ->
-                                if (key != null && values != null) key to values else null
-                            }
-                            .toMap(),
-                    body = stream?.use { it.readBounded(MAX_RESPONSE_BYTES) } ?: ByteArray(0),
-                )
-            } finally {
-                connection.disconnect()
+                val sameAuthority = URL(current.url).authority == redirected.authority
+                current =
+                    current.copy(
+                        url = redirected.toString(),
+                        method =
+                            if (
+                                response.statusCode == HttpURLConnection.HTTP_SEE_OTHER ||
+                                    (response.statusCode in
+                                        setOf(
+                                            HttpURLConnection.HTTP_MOVED_PERM,
+                                            HttpURLConnection.HTTP_MOVED_TEMP,
+                                        ) && current.method == ProviderHttpMethod.POST)
+                            ) {
+                                ProviderHttpMethod.GET
+                            } else {
+                                current.method
+                            },
+                        headers =
+                            if (sameAuthority) current.headers
+                            else
+                                current.headers.filterKeys {
+                                    !it.equals("Authorization", ignoreCase = true) &&
+                                        !it.equals("Cookie", ignoreCase = true)
+                                },
+                        body =
+                            current.body.takeUnless {
+                                response.statusCode == HttpURLConnection.HTTP_SEE_OTHER ||
+                                    (response.statusCode in
+                                        setOf(
+                                            HttpURLConnection.HTTP_MOVED_PERM,
+                                            HttpURLConnection.HTTP_MOVED_TEMP,
+                                        ) && current.method == ProviderHttpMethod.POST)
+                            },
+                    )
             }
+            error("Redirect loop exhausted")
         }
+
+    private fun executeOnce(request: ProviderHttpRequest): ProviderHttpResponse {
+        val connection = URL(request.url).openConnection() as HttpURLConnection
+        return try {
+            connection.requestMethod = request.method.name
+            connection.connectTimeout = CONNECT_TIMEOUT_MS
+            connection.readTimeout = READ_TIMEOUT_MS
+            connection.instanceFollowRedirects = false
+            connection.useCaches = false
+            request.headers.forEach(connection::setRequestProperty)
+            request.body?.let { body ->
+                connection.doOutput = true
+                connection.setFixedLengthStreamingMode(body.size)
+                connection.outputStream.use { it.write(body) }
+            }
+
+            val statusCode = connection.responseCode
+            val stream =
+                if (statusCode in 200..299) {
+                    connection.inputStream
+                } else {
+                    connection.errorStream
+                }
+            ProviderHttpResponse(
+                statusCode = statusCode,
+                headers =
+                    connection.headerFields.entries
+                        .mapNotNull { (key, values) ->
+                            if (key != null && values != null) key to values else null
+                        }
+                        .toMap(),
+                body = stream?.use { it.readBounded(MAX_RESPONSE_BYTES) } ?: ByteArray(0),
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
 
     private fun java.io.InputStream.readBounded(maxBytes: Int): ByteArray {
         val output = ByteArrayOutputStream()
@@ -117,5 +170,14 @@ class DefaultProviderHttpTransport @Inject constructor() : ProviderHttpTransport
         const val CONNECT_TIMEOUT_MS = 8_000
         const val READ_TIMEOUT_MS = 10_000
         const val MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+        const val MAX_REDIRECTS = 5
+        val REDIRECT_CODES =
+            setOf(
+                HttpURLConnection.HTTP_MOVED_PERM,
+                HttpURLConnection.HTTP_MOVED_TEMP,
+                HttpURLConnection.HTTP_SEE_OTHER,
+                307,
+                308,
+            )
     }
 }
