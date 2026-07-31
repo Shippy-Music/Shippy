@@ -1,34 +1,39 @@
 # Shippy Live Status
 
-**Updated:** 2026-07-29
-**Current stage:** R11.2 exact queue-order hotfix and owner-device handoff
-**Overall state:** R11.2 removes a second playback-layer mutation that rotated
-neighbouring tracks after every normal-queue drag. Normal and shuffled queues
-now use separate exact move plans, covered in both directions. Formatting, 444
-app JVM tests (443 passed; one opt-in live smoke skipped), 19 relay tests,
-native compilation, lint, APK assembly, signature/package inspection, and
-Drive publication pass.
-Physical-device performance, provider longevity, and multi-phone Crew
-acceptance remain owner-tested.
+**Updated:** 2026-08-01
+**Current stage:** R12 official Lucide icon refresh and owner-device handoff
+**Overall state:** R12 replaces 71 application icons with vectors generated
+from the official Lucide SVG source, including `settings-2` for Settings. The
+existing Android resource IDs and checked/unchecked state selectors remain
+unchanged, and no runtime icon dependency was added. Formatting, 444 app JVM
+tests (443 passed; one opt-in live smoke skipped), 109 Musikr tests, native
+compilation, lint, APK assembly, signature/package inspection, and Drive
+publication pass. Physical-device visual acceptance, provider longevity, and
+multi-phone Crew acceptance remain owner-tested.
 
 **Progress snapshot:** source implementation ~99% · functional product ~96% ·
 UX intent ~98% · automated verification 100% · APK verification 100% ·
-physical-device R11.2 verification 0%
+physical-device R12 verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
 
-**R11.2 artifact:** `Shippy-Alpha-R11.2-20260729.apk`, version
-`0.1.0-alpha.1-r11.2` (77), 61,048,721 bytes, SHA-256
-`B7FB3DFDC830C938D1C2BD1279C376BA2DB851B0D9C69B45E661C013CCB0EFCA`,
-APK Signature Scheme v2 verified. It is the only APK at
-`gdrive:Shippy Builds`; 13 older builds are under `Shippy Builds/Archive`.
+**R12 artifact:** `Shippy-Alpha-R12-20260801.apk`, version
+`0.1.0-alpha.1-r12` (78), 61,047,845 bytes, SHA-256
+`C691F10308A93DF6A17AD2E83C45782427AC7996843FC66209975106FDCFDAA8`,
+APK Signature Scheme v2 verified and uploaded to `gdrive:Shippy Builds`.
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Completed
 
+- R12 official Lucide icon refresh:
+  - Replaced 71 UI icon resources from the pinned official Lucide source.
+  - Settings uses Lucide `settings-2`; stateful shuffle/repeat/playing selectors
+    retain their existing resource and tint contracts.
+  - Added a deterministic SVG-to-Android-vector generator, mapping manifest,
+    source license, and icon-system documentation without adding a framework.
 - R11.2 exact queue-order hotfix:
   - Removed the inherited second media move that rotated adjacent tracks after
     the requested queue move had already completed.
@@ -781,13 +786,13 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 ## In Progress
 
 - No remaining functional first-pass source work is knowingly open.
-- Owner physical-device regression acceptance of the 2026-07-27 APK is the
-  next gate.
+- Owner physical-device visual and regression acceptance of R12 is the next
+  gate.
 - Accessibility remains deliberately deferred until that gate passes.
 
 ## Not Started
 
-- Physical-device verification of the current regression-fixed APK.
+- Physical-device verification of the R12 icon-refresh APK.
 - Real multi-device Crew acceptance.
 
 ## Current Risks
@@ -858,14 +863,13 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Install `Shippy-debug-4.1.3-20260727-r10.apk` on the owner phone.
-2. First open Library repeatedly, test track actions from Search/Home/player/
-   Crew, and scroll Home and Crew to their final content with the mini-player
-   visible.
-3. Verify local Home artwork, the synced lyrics card/full view, and native Crew
-   QR scanning. Then retest playback latency and queue interactions.
-4. Return the first reproducible runtime failure, then run the real multi-device
-   Crew LAN/remote matrix.
+1. Install `Shippy-Alpha-R12-20260801.apk` on the owner phone.
+2. Visually verify Lucide icons across Home, Search, Library, Crew, player,
+   queue, dialogs, and Settings in light/dark/dynamic themes.
+3. Verify checked/unchecked shuffle and repeat states plus enabled/disabled
+   download and playback actions.
+4. Return the first reproducible runtime or visual failure, then run the real
+   multi-device Crew LAN/remote matrix.
 5. Start accessibility and release polish only after functional acceptance.
 
 ## Verification Ledger
@@ -878,8 +882,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
 | App code | Compiled, linted, and JVM-tested; device acceptance pending | Canonical player/UI/system consumers and direct actions, Home continuation/Last.fm projections, Quick Settings tile, native-gapless/bounded-crossfade transitions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox/saved-provider persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding/saved-provider routes, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube/YouTube Music provider Search-to-play plus JioSaavn album/artist/playlist browse/save/download/queue paths, Last.fm secure scrobble foundation, local adapter, Crew active UI/reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, renewable encrypted rejoin transport, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
-| App tests | 433 executed: 432 passed and 1 opt-in live smoke skipped | Resolver, provider, Search, downloads, lyrics, Last.fm, playback, persistence, and Crew policy/runtime coverage |
+| App tests | 444 executed: 443 passed and 1 opt-in live smoke skipped; Musikr 109/109 passed | Resolver, provider, Search, downloads, lyrics, Last.fm, playback, persistence, Crew policy/runtime coverage, and music-library behavior |
 | External provider shape | Live-inspected | JioSaavn and LRCLIB responses plus real YouTube Music search and playable HTTPS stream resolution, latest 2026-07-27 |
 | Relay service | Unit/integration tested | `npm test`: 19/19 passed, including host resume, opaque routing, bounded backpressure, health, and coturn credential minting |
-| Static structure | Parsed | Curated app Graphify AST refreshed at 484/484 files, 9,845 nodes, and 966,644 edges; XML parsing and `git diff --check` used where applicable |
-| APK/device | APK assembled, signed, hashed, and Drive-uploaded; physical device pending | Owner handoff stage |
+| Static structure | Parsed | Curated app Graphify AST refreshed at 491/491 files, 9,895 nodes, and 984,628 edges; all 71 generated vectors independently compiled with AAPT2 and regeneration check passes |
+| APK/device | R12 APK assembled, v2-signed, hashed, and Drive-uploaded; physical device pending | `Shippy-Alpha-R12-20260801.apk` owner handoff stage |
