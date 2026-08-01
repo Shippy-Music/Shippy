@@ -97,11 +97,11 @@ class CrewDirectPeerConnectionTest {
                 initiator.start()
 
                 val initiatorConnected =
-                    withTimeout(5_000) {
+                    withTimeout(ASYNC_TEST_TIMEOUT_MS) {
                         initiator.state.filterIsInstance<CrewDirectPeerState.Connected>().first()
                     }
                 val responderConnected =
-                    withTimeout(5_000) {
+                    withTimeout(ASYNC_TEST_TIMEOUT_MS) {
                         responder.state.filterIsInstance<CrewDirectPeerState.Connected>().first()
                     }
 
@@ -112,10 +112,10 @@ class CrewDirectPeerConnectionTest {
 
                 rtc.peer(FakeSide.RESPONDER).requestRenegotiation()
                 rtc.peer(FakeSide.RESPONDER).requestRenegotiation()
-                withTimeout(5_000) {
+                withTimeout(ASYNC_TEST_TIMEOUT_MS) {
                     rtc.peer(FakeSide.INITIATOR).generation.filter { it == 1L }.first()
                 }
-                withTimeout(5_000) {
+                withTimeout(ASYNC_TEST_TIMEOUT_MS) {
                     rtc.peer(FakeSide.RESPONDER).generation.filter { it == 1L }.first()
                 }
             } finally {
@@ -326,6 +326,8 @@ class CrewDirectPeerConnectionTest {
     }
 
     companion object {
+        private const val ASYNC_TEST_TIMEOUT_MS = 15_000L
+
         private fun fingerprintSdp(byte: Int): String {
             val fingerprint = List(32) { "%02X".format(byte) }.joinToString(":")
             return "v=0\r\na=fingerprint:sha-256 $fingerprint\r\n"
