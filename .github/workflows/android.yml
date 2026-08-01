@@ -13,13 +13,12 @@ jobs:
     steps:
     - name: Install ninja-build
       run: sudo apt-get install -y ninja-build
+    - name: Use the official FFmpeg GitHub mirror
+      run: git config --global url.https://github.com/FFmpeg/FFmpeg.git.insteadOf https://git.ffmpeg.org/ffmpeg.git
     - name: Clone repository
       uses: actions/checkout@v4
       with:
         submodules: recursive
-        # FFmpeg's server rejects shallow requests for the pinned Media3
-        # commit. A full fetch lets Git resolve that historical object.
-        fetch-depth: 0
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
