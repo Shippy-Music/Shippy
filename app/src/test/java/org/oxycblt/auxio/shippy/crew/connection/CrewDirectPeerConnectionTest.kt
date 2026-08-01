@@ -18,6 +18,8 @@
 package org.oxycblt.auxio.shippy.crew.connection
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,6 +74,7 @@ class CrewDirectPeerConnectionTest {
                     fixture.responderMemberId,
                 )
             val rtc = FakeRtcLink()
+            val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
             val initiator =
                 CrewDirectPeerConnection(
                     rtc.factory(FakeSide.INITIATOR),
@@ -81,6 +84,7 @@ class CrewDirectPeerConnectionTest {
                     CrewDirectPeerRole.INITIATOR,
                     emptyList(),
                     { fixture.now },
+                    dispatcher = dispatcher,
                 )
             val responder =
                 CrewDirectPeerConnection(
@@ -91,6 +95,7 @@ class CrewDirectPeerConnectionTest {
                     CrewDirectPeerRole.RESPONDER,
                     emptyList(),
                     { fixture.now },
+                    dispatcher = dispatcher,
                 )
             try {
                 responder.start()
@@ -121,6 +126,7 @@ class CrewDirectPeerConnectionTest {
             } finally {
                 initiator.close()
                 responder.close()
+                dispatcher.close()
             }
         }
     }
