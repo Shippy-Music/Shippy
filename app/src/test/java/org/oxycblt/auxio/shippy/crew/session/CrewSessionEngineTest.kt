@@ -575,6 +575,13 @@ class CrewSessionEngineTest {
                 .filter { it.members.none { member -> member.id == coordinatorId } }
                 .first()
         }
+        withTimeout(2_000) {
+            // StateFlow publishes the accepted leave before checkpoint cleanup finishes.
+            // Await that durable side effect explicitly instead of racing it on slower CI hosts.
+            while (fixture.coordinatorStore.latest != null) {
+                yield()
+            }
+        }
 
         assertEquals(CoordinatorTerm(2), remaining.term)
         assertEquals(EventSequence(2), remaining.lastSequence)
