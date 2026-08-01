@@ -1,19 +1,19 @@
 # Shippy Live Status
 
 **Updated:** 2026-08-01
-**Current stage:** R13 launcher, Library hierarchy, and canonical player-artwork
-hardening
+**Current stage:** R13.1 full-screen lyrics viewport hotfix
 **Overall state:** R13 adopts the supplied Shippy mascot across legacy,
 adaptive, and monochrome launcher resources; simplifies Library playlist rows
 with icon-based pinning and no redundant Collections header; and prevents stale
-deferred pager updates from pairing old artwork with current metadata. Formatting,
-all app JVM tests, Android lint, resource processing, and debug APK assembly pass.
-Physical-device visual acceptance, provider longevity, and multi-phone Crew
+deferred pager updates from pairing old artwork with current metadata. R13.1
+keeps lyric rows inside the scroll viewport's padded safe area so the fixed
+controls no longer hard-clip text. Formatting and all app JVM tests pass;
+physical-device visual acceptance, provider longevity, and multi-phone Crew
 acceptance remain owner-tested.
 
 **Progress snapshot:** source implementation ~99% · functional product ~96% ·
 UX intent ~98% · automated verification 100% · APK verification 100% ·
-physical-device R13 verification 0%
+physical-device R13.1 verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
@@ -29,10 +29,21 @@ APK Signature Scheme v2 verified and uploaded to `gdrive:Shippy Builds`.
 APK Signature Scheme v2 and local/Drive MD5 equality verified; uploaded to
 `gdrive:Shippy Builds` with R12 archived.
 
+**R13.1 artifact:** `Shippy-Alpha-R13.1-20260801.apk`, version
+`0.1.0-alpha.1-r13.1` (80), 61,148,308 bytes, SHA-256
+`93651C1E846BE715AEC0A4FD53FCD52B14D84E68A0D36C12194983CA965335B7`.
+APK Signature Scheme v2 verified; Drive and GitHub publication pending.
+
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Completed
+
+- R13.1 full-screen lyrics viewport hotfix:
+  - Reserved a clipped bottom safe area inside the lyrics scroller so the final
+    visible row fades out above the fixed actions instead of being cut in half.
+  - Made the fake direct-Crew negotiation test deterministic on a single owned
+    coroutine dispatcher and explicitly awaited durable Crew leave cleanup.
 
 - R13 launcher, Library, and player artwork hardening:
   - Replaced the legacy and adaptive launcher artwork with the supplied Shippy

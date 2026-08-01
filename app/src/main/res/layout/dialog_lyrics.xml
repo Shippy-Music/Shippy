@@ -64,13 +64,13 @@
         android:layout_height="0dp"
         android:layout_marginTop="@dimen/spacing_medium"
         android:layout_weight="1"
-        android:clipToPadding="false"
+        android:clipToPadding="true"
         android:fadingEdgeLength="@dimen/size_touchable_small"
         android:fillViewport="true"
         android:overScrollMode="never"
         android:paddingStart="@dimen/spacing_medium"
         android:paddingEnd="@dimen/spacing_medium"
-        android:paddingBottom="@dimen/spacing_large"
+        android:paddingBottom="@dimen/size_touchable_small"
         android:requiresFadingEdge="vertical">
 
         <LinearLayout
