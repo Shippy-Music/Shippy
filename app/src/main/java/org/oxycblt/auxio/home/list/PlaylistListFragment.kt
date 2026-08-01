@@ -68,7 +68,6 @@ class PlaylistListFragment :
     override val musicModel: MusicViewModel by activityViewModels()
     override val playbackModel: PlaybackViewModel by activityViewModels()
     private val collectionsModel: LibraryCollectionsViewModel by viewModels()
-    private val collectionsHeaderAdapter = LibrarySectionHeaderAdapter(R.string.lbl_collections)
     private val collectionAdapter = UnifiedLibraryCollectionAdapter { row ->
         homeModel.openShippyCollection(row.id)
     }
@@ -85,7 +84,6 @@ class PlaylistListFragment :
     private val playlistAdapter = PlaylistAdapter(this)
     private val libraryAdapter =
         ConcatAdapter(
-            collectionsHeaderAdapter,
             collectionAdapter,
             onboardingAdapter,
             savedProvidersHeaderAdapter,
@@ -196,7 +194,6 @@ class PlaylistListFragment :
 
     private fun updateCollections(state: LibraryCollectionsState) {
         collectionState = state
-        collectionsHeaderAdapter.setShown(true)
         savedProvidersHeaderAdapter.setShown(state.savedProviderEntities.isNotEmpty())
         savedProviderAdapter.submitList(state.savedProviderEntities)
         renderSystemCollections()

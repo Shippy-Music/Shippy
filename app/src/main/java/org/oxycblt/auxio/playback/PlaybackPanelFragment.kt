@@ -93,7 +93,7 @@ class PlaybackPanelFragment :
     private val detailModel: DetailViewModel by activityViewModels()
     private val playerActionsModel: PlayerActionsViewModel by viewModels()
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
-    private var currentPagerPosition = 0
+    private var pagerUpdateGeneration = 0
     private var renderedLyricsState: PlaybackLyricsState = PlaybackLyricsState.None
     private var renderedLyricsLineIndex = Int.MIN_VALUE
     private val reactionViews = mutableSetOf<View>()
@@ -678,6 +678,9 @@ class PlaybackPanelFragment :
     }
 
     private fun updatePager(queue: PagerQueue) {
+        // Updates are deliberately delayed until a stable frame. Invalidate every older deferred
+        // callback so an earlier song can never overwrite the current song's artwork afterward.
+        val generation = ++pagerUpdateGeneration
         // Right now there's easily 140ms of frame skipping when going next/prev. This is primarily
         // the fault of specifically the nested bottom sheet UI setup, which is intractable to
         // optimize. If I don't do multiple remeasures/relayouts on every slightest state
@@ -701,49 +704,64 @@ class PlaybackPanelFragment :
         // Actual snippet here was codex, just cleaned & adapted it / cognitive ownership
         requireBinding().playbackPager.apply {
             if (!isAttachedToWindow) {
-                post { updatePagerImpl(queue) }
+                post { updatePagerImpl(queue, generation) }
                 return
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isHardwareAccelerated) {
                 // New version using post-Q frame hooks
                 viewTreeObserver.registerFrameCommitCallback {
-                    post { postOnAnimation { updatePagerImpl(queue) } }
+                    post { postOnAnimation { updatePagerImpl(queue, generation) } }
                 }
                 postInvalidateOnAnimation()
             } else {
                 // Let current layout happen, then wait for the next to conclude
-                postOnAnimation { postOnAnimation { updatePagerImpl(queue) } }
+                postOnAnimation { postOnAnimation { updatePagerImpl(queue, generation) } }
             }
         }
     }
 
-    private fun updatePagerImpl(queue: PagerQueue) {
+    private fun updatePagerImpl(queue: PagerQueue, generation: Int) {
         // Android insanity means this may be executed after view destruction
         // but only on some devices.
         val binding = binding ?: return
+        if (generation != pagerUpdateGeneration) return
 
         val command = queue.command
 
         if (command.update != null) {
-            // queue needs to be updated.
-            coverPagerAdapter.update(queue.queue, command.update)
+            // A diff may complete asynchronously. Align only after the adapter owns the same
+            // canonical queue, and ignore it if a newer playback update arrived meanwhile.
+            coverPagerAdapter.update(queue.queue, command.update) {
+                alignPagerToCanonicalItem(queue, generation)
+            }
+        } else {
+            alignPagerToCanonicalItem(queue, generation)
         }
+    }
 
-        if (command.scroll != null) {
-            // we need to scroll, however the smooth scroll only really looks best
-            // when we are only doing next/prev due to various factors. better to
-            // just not animate on outright gotos or queue updates
-            val delta = binding.playbackPager.currentItem - command.scroll
-            if (delta == 0) {
-                // user scroll, carry on
-                return
-            }
-            if (command.update == null && abs(delta) == 1) {
-                binding.playbackPager.smoothScrollByPageTo(command.scroll)
-            } else {
-                binding.playbackPager.setCurrentItem(command.scroll, false)
-            }
+    private fun alignPagerToCanonicalItem(queue: PagerQueue, generation: Int) {
+        val binding = binding ?: return
+        if (generation != pagerUpdateGeneration || queue.queue.isEmpty()) return
+
+        val targetId = queue.queue.getOrNull(queue.index)?.queueItem?.id ?: return
+        val targetIndex = coverPagerAdapter.currentList.indexOfFirst { it.queueItem.id == targetId }
+        if (targetIndex < 0) return
+
+        val currentId =
+            coverPagerAdapter.currentList
+                .getOrNull(binding.playbackPager.currentItem)
+                ?.queueItem
+                ?.id
+        if (currentId == targetId) return
+
+        // Smooth animation is only safe for an adjacent index-only move. Queue mutations and
+        // mapping updates snap silently to avoid showing an intermediate song.
+        val delta = binding.playbackPager.currentItem - targetIndex
+        if (queue.command.update == null && queue.command.scroll != null && abs(delta) == 1) {
+            binding.playbackPager.smoothScrollByPageTo(targetIndex)
+        } else {
+            binding.playbackPager.setCurrentItem(targetIndex, false)
         }
     }
 

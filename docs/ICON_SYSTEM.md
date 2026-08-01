@@ -26,7 +26,10 @@ presentation remains owned by the existing selectors and tint variants:
 
 The launcher artwork, notification silhouette, seek triangle, animated playing
 indicator, and splash animation remain Shippy-specific assets rather than being
-forced into the Lucide family.
+forced into the Lucide family. The canonical supplied launcher source is
+`assets/branding/shippy_icon.ico`; `tools/branding/generate_launcher_icons.py`
+produces the density-specific legacy icons plus safe-zone-aware adaptive and
+monochrome layers.
 
 ## Regeneration
 

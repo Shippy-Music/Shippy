@@ -261,13 +261,22 @@ constructor(
         index: Int,
         command: PagerCommand,
     ) {
+        // The index can change while the queue is mapped off the main thread. Keep the stable
+        // identity of the intended item so artwork and metadata can never be paired by a stale
+        // numeric position.
+        val currentItemId = queue.getOrNull(index)?.item?.id
         queueMappingJob?.cancel()
         queueMappingJob =
             viewModelScope.launch {
                 val displayQueue =
                     withContext(Dispatchers.Default) { queue.map(playbackDisplayMapper::map) }
                 currentCoroutineContext().ensureActive()
-                val currentIndex = index.coerceIn(0, displayQueue.lastIndex.coerceAtLeast(0))
+                val currentIndex =
+                    resolvePagerIndex(
+                        queueItemIds = displayQueue.map { it.queueItem.id },
+                        currentItemId = currentItemId,
+                        fallbackIndex = index,
+                    )
                 _pagerQueue.value =
                     PagerQueue(
                         queue = displayQueue,
@@ -827,6 +836,19 @@ data class PagerQueue(
 )
 
 data class PagerCommand(val update: UpdateInstructions?, val scroll: Int?)
+
+/**
+ * Resolve the visible pager item by canonical queue identity, never by a potentially stale slot.
+ */
+internal fun resolvePagerIndex(
+    queueItemIds: List<QueueItemId>,
+    currentItemId: QueueItemId?,
+    fallbackIndex: Int,
+): Int {
+    val stableIndex = currentItemId?.let(queueItemIds::indexOf) ?: -1
+    if (stableIndex >= 0) return stableIndex
+    return fallbackIndex.coerceIn(0, queueItemIds.lastIndex.coerceAtLeast(0))
+}
 
 /**
  * Command for controlling the main playback panel UI.
