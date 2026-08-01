@@ -37,8 +37,9 @@ Drive and as a GitHub prerelease.
 **R13.2 artifact:** `Shippy-Alpha-R13.2-20260801.apk`, version
 `0.1.0-alpha.1-r13.2` (81), 61,148,876 bytes, SHA-256
 `68892A03DE0354D8A55F5E64744A39EC88C4BECC3FE83AE8D93260CD0DEAD9B8`.
-APK Signature Scheme v2 and package metadata verified locally; Drive and
-GitHub publication pending.
+APK Signature Scheme v2 and package metadata verified locally; local/Drive MD5
+`0775D1E446AA14C9BEDF3C0A602DF598` matches. Published at Drive root with
+R13.1 archived and as a GitHub prerelease.
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
