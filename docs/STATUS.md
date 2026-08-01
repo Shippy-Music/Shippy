@@ -1,18 +1,19 @@
 # Shippy Live Status
 
 **Updated:** 2026-08-01
-**Current stage:** R13.2 Last.fm and Crew connectivity hotfix
-**Overall state:** R13.2 replaces the fragile Last.fm XML authentication path
-with bounded JSON parsing and identifiable API requests. Crew now requests the
-Android 16 nearby-network permission before hosting or joining, tolerates OEM
-NSD responses that omit TXT records or rename a colliding service, and gives
-LAN discovery more time on real devices. Formatting, JVM tests, lint, assembly,
-and APK signature/package inspection pass; real-account Last.fm and two-phone
-Crew acceptance remain owner-tested.
+**Current stage:** R14 Crew local-first transport release
+**Overall state:** Crew now attempts authenticated offline Nearby proximity
+first, then QR-scoped LAN discovery, then a configured hosted relay. The same
+session/queue/media engine is reused for every route. Runtime permissions are
+version-aware from Android 7 onward, Android 14+ NSD resolution uses the current
+callback API, and permission denial still permits viable LAN/relay attempts.
+Compilation and 458 app JVM tests (457 passed, one opt-in live smoke skipped)
+pass; real two-phone Nearby, LAN, hotspot, and remote-relay acceptance remains
+owner-tested.
 
 **Progress snapshot:** source implementation ~99% · functional product ~96% ·
-UX intent ~98% · automated verification 100% · APK verification 100% ·
-physical-device R13.2 verification 0%
+UX intent ~98% · automated JVM verification 100% · latest published APK
+verification 100% · physical-device local-first Crew verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
@@ -41,10 +42,30 @@ APK Signature Scheme v2 and package metadata verified locally; local/Drive MD5
 `0775D1E446AA14C9BEDF3C0A602DF598` matches. Published at Drive root with
 R13.1 archived and as a GitHub prerelease.
 
+**R14 artifact:** `Shippy-Alpha-R14-20260801.apk`, version
+`0.1.0-alpha.1-r14` (82), 61,464,850 bytes, SHA-256
+`237E05BC206C9E683DAB8C2B7C5EF36152581FD4E57891D6E0E5B7D204A612B7`.
+APK Signature Scheme v2 and package metadata verified locally; local/Drive MD5
+`9CE5FA608624BEB4EFCD60609A7F4B08` matches. Published at Drive root with
+R13.2 archived.
+
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Completed
+
+- Post-R13.2 Crew local-first source hardening:
+  - Added Google Nearby Connections `P2P_STAR` as an offline proximity route
+    while retaining the canonical Crew admission/session/media engines.
+  - Added mutual QR-secret HMAC authentication bound to the exact session and
+    member identities before exposing Crew frames.
+  - Host and join now select local routes before the optional hosted relay;
+    reconnect uses the same route policy and losing routes are closed.
+  - Added Android 7-current runtime permission mapping and Android 14+ NSD
+    service-info callback resolution.
+  - Added deterministic authentication/frame/permission/lifecycle tests. App
+    compilation and 458 app JVM tests pass; R14 is assembled, linted, signed,
+    hashed, and published for owner device acceptance.
 
 - R13.2 Last.fm and Crew connectivity hotfix:
   - Last.fm authentication requests JSON and parses it without Android XML
@@ -845,7 +866,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 ## Not Started
 
 - Physical-device verification of the R12 icon-refresh APK.
-- Real multi-device Crew acceptance.
+- Real multi-device Crew acceptance across offline Nearby, LAN/hotspot, and
+  configured remote-relay routes.
 
 ## Current Risks
 
@@ -854,7 +876,10 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 - YouTube extraction can change upstream; an opt-in real-network smoke test is
   retained for refresh checks.
 - JioSaavn relies on an undocumented external API and can drift.
-- Crew still needs a real multi-phone LAN/remote acceptance matrix.
+- Crew still needs a real multi-phone Android 7-15 acceptance matrix. In
+  particular, OEM hotspot isolation, Google Play services availability, Nearby
+  permission presentation, and remote NAT/TURN behavior cannot be proven by JVM
+  tests.
 
 ## Archived Pre-build Risks
 
@@ -915,13 +940,14 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Next Concrete Actions
 
-1. Install `Shippy-Alpha-R12-20260801.apk` on the owner phone.
-2. Visually verify Lucide icons across Home, Search, Library, Crew, player,
-   queue, dialogs, and Settings in light/dark/dynamic themes.
-3. Verify checked/unchecked shuffle and repeat states plus enabled/disabled
-   download and playback actions.
-4. Return the first reproducible runtime or visual failure, then run the real
-   multi-device Crew LAN/remote matrix.
+1. Produce a new APK only after this working tree's full regression suite
+   completes.
+2. Install it on two phones and verify QR join in this order: offline Nearby,
+   same Wi-Fi, phone hotspot, then configured remote relay.
+3. Confirm shared play/pause/seek/queue/reactions and a missing local track via
+   temporary Push & Pull on every viable route.
+4. Capture the exact route diagnostics and failure reason for the first failed
+   matrix cell.
 5. Start accessibility and release polish only after functional acceptance.
 
 ## Verification Ledger
@@ -934,8 +960,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
 | Auxio foundation | Inspected | `AUXIO_FOUNDATION_AUDIT.md` |
 | Bloomee donor | Inspected | `BLOOMEE_DONOR_AUDIT.md` |
 | App code | Compiled, linted, and JVM-tested; device acceptance pending | Canonical player/UI/system consumers and direct actions, Home continuation/Last.fm projections, Quick Settings tile, native-gapless/bounded-crossfade transitions, Room library/canonical-track/download/lyrics/Crew-checkpoint/Last.fm-outbox/saved-provider persistence, SAF/reconciliation, WorkManager transfer pipeline, Library projections/playable details/onboarding/saved-provider routes, Musixmatch-broker/LRCLIB playback lyrics lookup/cache/synced-line presentation, JioSaavn/YouTube/YouTube Music provider Search-to-play plus JioSaavn album/artist/playlist browse/save/download/queue paths, Last.fm secure scrobble foundation, local adapter, Crew active UI/reducer/snapshots/clock/reactions/preparation/invites/sequencing/optimistic reconciliation/control codec/framing/session engine, renewable encrypted rejoin transport, bounded temporary-media transfer foundation, authenticated LAN signaling, direct peer orchestration, WebRTC boundary, and hosted-relay signaling adapter |
-| App tests | 444 executed: 443 passed and 1 opt-in live smoke skipped; Musikr 109/109 passed | Resolver, provider, Search, downloads, lyrics, Last.fm, playback, persistence, Crew policy/runtime coverage, and music-library behavior |
+| App tests | 458 executed: 457 passed and 1 opt-in live smoke skipped; Musikr 109/109 passed | Resolver, provider, Search, downloads, lyrics, Last.fm, playback, persistence, Crew policy/runtime coverage, and music-library behavior |
 | External provider shape | Live-inspected | JioSaavn and LRCLIB responses plus real YouTube Music search and playable HTTPS stream resolution, latest 2026-07-27 |
 | Relay service | Unit/integration tested | `npm test`: 19/19 passed, including host resume, opaque routing, bounded backpressure, health, and coturn credential minting |
 | Static structure | Parsed | Curated app Graphify AST refreshed at 491/491 files, 9,895 nodes, and 984,628 edges; all 71 generated vectors independently compiled with AAPT2 and regeneration check passes |
-| APK/device | R12 APK assembled, v2-signed, hashed, and Drive-uploaded; physical device pending | `Shippy-Alpha-R12-20260801.apk` owner handoff stage |
+| APK/device | R14 APK assembled, v2-signed, hashed, and Drive-uploaded; physical multi-device acceptance pending | `Shippy-Alpha-R14-20260801.apk` owner handoff stage |

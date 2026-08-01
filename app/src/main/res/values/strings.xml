@@ -340,8 +340,9 @@
     <string name="lng_crew_invite_expired">This Crew invite has expired. Ask the host for a new one.</string>
     <string name="lng_crew_invite_verification_failed">This Crew invite could not be verified.</string>
     <string name="lng_crew_nearby_unavailable">Nearby Crew is unavailable. Check local network access and try again.</string>
-    <string name="lng_crew_connection_timed_out">Crew took too long to respond. Keep both devices nearby and try again.</string>
-    <string name="lng_crew_nearby_permission_required">Allow Nearby devices so Crew can find and connect to members on your network.</string>
+    <string name="lng_crew_connection_timed_out">No Crew route responded. Keep both phones close with Bluetooth and Wi-Fi on, or configure a hosted relay for remote joining.</string>
+    <string name="lng_crew_remote_route_failed">Local Crew routes could not find the host, and the configured relay did not connect. Check both phones’ internet access and the relay address.</string>
+    <string name="lng_crew_nearby_permission_required">Allow Nearby devices for offline Crew. Without it, Shippy can only try LAN or a configured relay.</string>
     <string name="lng_crew_incompatible">This Crew uses an incompatible Shippy version.</string>
     <string name="lng_tasker_start">
         Starts Auxio using the previously saved state. If no saved state is available, all songs will be shuffled. Playback will start immediately.

@@ -17,7 +17,6 @@
  */
 package org.oxycblt.auxio.shippy.crew.ui
 
-import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -81,16 +80,17 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
     private var pendingNetworkAction: PendingNetworkAction? = null
     private var pendingInviteLink: String? = null
     private val nearbyPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
             val action = pendingNetworkAction
             val invite = pendingInviteLink
             pendingNetworkAction = null
             pendingInviteLink = null
-            if (!granted) {
+            if (grants.any { !it.value } && isAdded) {
                 if (isAdded)
                     requireContext().showToast(R.string.lng_crew_nearby_permission_required)
-                return@registerForActivityResult
             }
+            // LAN sockets or a configured relay may still work when proximity permissions are
+            // denied, so do not turn the permission choice into an artificial hard failure.
             when (action) {
                 PendingNetworkAction.START_HOST -> model.startHost()
                 PendingNetworkAction.JOIN -> invite?.let(model::join)
@@ -514,7 +514,8 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
     }
 
     private fun runCrewNetworkAction(action: PendingNetworkAction, inviteLink: String? = null) {
-        if (!needsNearbyPermission()) {
+        val missingPermissions = missingCrewPermissions()
+        if (missingPermissions.isEmpty()) {
             when (action) {
                 PendingNetworkAction.START_HOST -> model.startHost()
                 PendingNetworkAction.JOIN -> inviteLink?.let(model::join)
@@ -523,15 +524,15 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         }
         pendingNetworkAction = action
         pendingInviteLink = inviteLink
-        nearbyPermissionLauncher.launch(Manifest.permission.NEARBY_WIFI_DEVICES)
+        nearbyPermissionLauncher.launch(missingPermissions.toTypedArray())
     }
 
-    private fun needsNearbyPermission(): Boolean =
-        Build.VERSION.SDK_INT >= 36 &&
-            ContextCompat.checkSelfPermission(
-                requireContext(),
-                Manifest.permission.NEARBY_WIFI_DEVICES,
-            ) != PackageManager.PERMISSION_GRANTED
+    private fun missingCrewPermissions(): List<String> {
+        return crewRuntimePermissions(Build.VERSION.SDK_INT).filter {
+            ContextCompat.checkSelfPermission(requireContext(), it) !=
+                PackageManager.PERMISSION_GRANTED
+        }
+    }
 
     private fun hostFailureMessage(failure: CrewLanHostLaunchFailure) =
         when (failure) {
@@ -563,7 +564,7 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
                         R.string.lng_could_not_connect_crew
                     CrewLanSignalConnectFailure.PROTOCOL_ERROR -> R.string.lng_crew_incompatible
                 }
-            CrewLanJoinLaunchFailure.RemoteSignalingFailed -> R.string.lng_could_not_connect_crew
+            CrewLanJoinLaunchFailure.RemoteSignalingFailed -> R.string.lng_crew_remote_route_failed
             is CrewLanJoinLaunchFailure.JoinRejected ->
                 when (failure.reason) {
                     CrewJoinFailure.ProtocolMismatch -> R.string.lng_crew_incompatible

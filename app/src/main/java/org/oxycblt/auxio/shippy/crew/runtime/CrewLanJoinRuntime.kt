@@ -23,6 +23,7 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -57,6 +58,8 @@ import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingClient
 import org.oxycblt.auxio.shippy.crew.lan.CrewSignalPeer
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntime
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
+import org.oxycblt.auxio.shippy.crew.nearby.CrewNearbyConnectResult
+import org.oxycblt.auxio.shippy.crew.nearby.CrewNearbyConnections
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinInviteFactory
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayJoin
@@ -75,6 +78,7 @@ import org.oxycblt.auxio.shippy.persistence.crew.CrewRejoinLeaseStore
 
 private const val CREW_JOIN_PROTOCOL_V1 = 1
 private const val CREW_LAN_DISCOVERY_TIMEOUT_MS = 20_000L
+private const val CREW_NEARBY_HEAD_START_MS = 6_000L
 private const val CREW_RECONNECT_DIAL_TIMEOUT_MS = 15_000L
 private const val CREW_JOIN_TERMINAL_EVENT_WAIT_MS = 1_500L
 
@@ -210,6 +214,7 @@ class CrewLanJoinLauncher
 constructor(
     @ApplicationContext private val context: Context,
     private val lanDiscovery: CrewLanDiscovery,
+    private val nearbyConnections: CrewNearbyConnections,
     private val profileSettings: CrewProfileSettings,
     @CrewRelayHttpClient private val relayClient: OkHttpClient,
     private val relayIceServerProvider: CrewRelayIceServerProvider,
@@ -240,47 +245,13 @@ constructor(
                 .getOrElse {
                     return CrewLanJoinLaunchResult.Failed(CrewLanJoinLaunchFailure.Initialization)
                 }
+        val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull()
         val selected =
-            if (invite.relayLocator == null) {
-                val discovery =
-                    runCatching { lanDiscovery.discover(invite) }
-                        .getOrElse {
-                            return CrewLanJoinLaunchResult.Failed(
-                                CrewLanJoinLaunchFailure.Initialization
-                            )
-                        }
-                val rendezvous = awaitRendezvous(discovery, invite)
-                if (rendezvous !is RendezvousAwaitResult.Found) {
-                    runCatching { discovery.close() }
-                    return CrewLanJoinLaunchResult.Failed(rendezvous.toFailure())
-                }
-                val signaling =
-                    try {
-                        CrewLanSignalingClient.connect(
-                            rendezvous.rendezvous,
-                            invite,
-                            localMemberId,
-                            localMember.displayName,
-                            nowEpochMs(),
-                        )
-                    } finally {
-                        runCatching { discovery.close() }
-                    }
-                when (signaling) {
-                    is CrewLanSignalConnectResult.Connected ->
-                        SignalingSelection(signaling.peer, CrewConnectivityPresentation.NEARBY)
-                    is CrewLanSignalConnectResult.Failed ->
-                        return CrewLanJoinLaunchResult.Failed(
-                            CrewLanJoinLaunchFailure.SignalingFailed(signaling.reason)
-                        )
-                }
-            } else {
-                val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull()
-                selectSignalingPeer(discovery, invite, localMemberId, localMember.displayName)
-                    ?: return CrewLanJoinLaunchResult.Failed(
-                        CrewLanJoinLaunchFailure.RemoteSignalingFailed
-                    )
-            }
+            selectSignalingPeer(discovery, invite, localMemberId, localMember.displayName)
+                ?: return CrewLanJoinLaunchResult.Failed(
+                    if (invite.relayLocator == null) CrewLanJoinLaunchFailure.DiscoveryTimedOut
+                    else CrewLanJoinLaunchFailure.RemoteSignalingFailed
+                )
         val signalPeer = selected.peer
 
         var engine: CrewSessionEngine? = null
@@ -319,16 +290,18 @@ constructor(
                         signalingPeer = signalPeer,
                         initiators =
                             CrewDirectInitiatorHandleFactory { peer ->
-                                CrewDirectPeerConnectionHandle(
-                                    CrewDirectPeerConnection(
-                                        peerFactory = activeWebRtc,
-                                        signalingPeer = peer,
-                                        invite = invite,
-                                        localMemberId = localMemberId,
-                                        role = CrewDirectPeerRole.INITIATOR,
-                                        iceServers = iceServers,
+                                peer.toInitiatorHandleOr { signalingPeer ->
+                                    CrewDirectPeerConnectionHandle(
+                                        CrewDirectPeerConnection(
+                                            peerFactory = activeWebRtc,
+                                            signalingPeer = signalingPeer,
+                                            invite = invite,
+                                            localMemberId = localMemberId,
+                                            role = CrewDirectPeerRole.INITIATOR,
+                                            iceServers = iceServers,
+                                        )
                                     )
-                                )
+                                }
                             },
                         sessions =
                             CrewJoinSessionFactory { snapshot ->
@@ -484,16 +457,18 @@ constructor(
         val handle =
             runCatching {
                     val iceServers = relayIceServerProvider.resolve(invite)
-                    CrewDirectPeerConnectionHandle(
-                        CrewDirectPeerConnection(
-                            peerFactory = webRtcRuntime,
-                            signalingPeer = signalingPeer,
-                            invite = invite,
-                            localMemberId = localMember.id,
-                            role = CrewDirectPeerRole.INITIATOR,
-                            iceServers = iceServers,
+                    signalingPeer.toInitiatorHandleOr { peer ->
+                        CrewDirectPeerConnectionHandle(
+                            CrewDirectPeerConnection(
+                                peerFactory = webRtcRuntime,
+                                signalingPeer = peer,
+                                invite = invite,
+                                localMemberId = localMember.id,
+                                role = CrewDirectPeerRole.INITIATOR,
+                                iceServers = iceServers,
+                            )
                         )
-                    )
+                    }
                 }
                 .getOrElse {
                     if (it is CancellationException) throw it
@@ -564,31 +539,8 @@ constructor(
         invite: CrewInvite,
         localMember: CrewMember,
     ): SignalingSelection? {
-        if (invite.relayLocator != null) {
-            val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull()
-            return selectSignalingPeer(discovery, invite, localMember.id, localMember.displayName)
-        }
-        val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull() ?: return null
-        return try {
-            val rendezvous =
-                awaitRendezvous(discovery, invite) as? RendezvousAwaitResult.Found ?: return null
-            when (
-                val signaling =
-                    CrewLanSignalingClient.connect(
-                        rendezvous.rendezvous,
-                        invite,
-                        localMember.id,
-                        localMember.displayName,
-                        nowEpochMs(),
-                    )
-            ) {
-                is CrewLanSignalConnectResult.Connected ->
-                    SignalingSelection(signaling.peer, CrewConnectivityPresentation.NEARBY)
-                is CrewLanSignalConnectResult.Failed -> null
-            }
-        } finally {
-            runCatching { discovery.close() }
-        }
+        val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull()
+        return selectSignalingPeer(discovery, invite, localMember.id, localMember.displayName)
     }
 
     private suspend fun selectSignalingPeer(
@@ -597,6 +549,22 @@ constructor(
         localMemberId: CrewMemberId,
         localDisplayName: String,
     ): SignalingSelection? {
+        val nearby =
+            try {
+                nearbyConnections.connect(
+                    invite,
+                    CrewMember(localMemberId, localDisplayName),
+                    CREW_NEARBY_HEAD_START_MS,
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
+        if (nearby is CrewNearbyConnectResult.Connected) {
+            discovery?.close()
+            return SignalingSelection(nearby.peer, invite.connectivityPresentation())
+        }
         return supervisorScope {
             val outcomes = Channel<SignalingSelection?>(2)
             suspend fun publish(selection: SignalingSelection?) {
@@ -626,10 +594,7 @@ constructor(
                                         )
                                     }
                                 (result as? CrewLanSignalConnectResult.Connected)?.peer?.let {
-                                    SignalingSelection(
-                                        it,
-                                        CrewConnectivityPresentation.NEARBY_AND_REMOTE,
-                                    )
+                                    SignalingSelection(it, invite.connectivityPresentation())
                                 }
                             } catch (error: CancellationException) {
                                 throw error
@@ -641,47 +606,61 @@ constructor(
                         publish(selection)
                     }
                 }
-            val relay = launch {
-                val selection =
-                    try {
-                        val result =
-                            CrewHostedRelayJoin.connect(
-                                relayClient,
-                                invite,
-                                localMemberId,
-                                localDisplayName,
-                                nowEpochMs,
-                            )
-                        (result as? CrewHostedRelayJoinResult.Connected)?.peer?.let {
-                            SignalingSelection(it, CrewConnectivityPresentation.NEARBY_AND_REMOTE)
-                        }
-                    } catch (error: CancellationException) {
-                        throw error
-                    } catch (_: Exception) {
-                        null
+            val relay =
+                if (invite.relayLocator != null) {
+                    launch {
+                        // Nearby already had a deterministic head start. Give mDNS/TCP one final
+                        // chance before internet signaling so local stays the preferred route.
+                        delay(700L)
+                        val selection =
+                            try {
+                                val result =
+                                    CrewHostedRelayJoin.connect(
+                                        relayClient,
+                                        invite,
+                                        localMemberId,
+                                        localDisplayName,
+                                        nowEpochMs,
+                                    )
+                                (result as? CrewHostedRelayJoinResult.Connected)?.peer?.let {
+                                    SignalingSelection(
+                                        it,
+                                        CrewConnectivityPresentation.NEARBY_AND_REMOTE,
+                                    )
+                                }
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                null
+                            }
+                        publish(selection)
                     }
-                publish(selection)
-            }
+                } else {
+                    null
+                }
             var winner: SignalingSelection? = null
             var received = 0
-            val expectedOutcomes = if (lan == null) 1 else 2
+            val jobs = listOfNotNull(lan, relay)
+            val expectedOutcomes = jobs.size
             while (received < expectedOutcomes && winner == null) {
                 val candidate = outcomes.receive()
                 received++
                 if (candidate != null) winner = candidate
             }
-            lan?.cancel()
-            relay.cancel()
-            lan?.join()
-            relay.join()
+            jobs.forEach { it.cancel() }
+            jobs.forEach { it.join() }
             while (true) {
                 val simultaneous = outcomes.tryReceive().getOrNull() ?: break
-                simultaneous?.peer?.close()
+                simultaneous.peer.close()
             }
             outcomes.close()
             winner
         }
     }
+
+    private fun CrewInvite.connectivityPresentation() =
+        if (relayLocator == null) CrewConnectivityPresentation.NEARBY
+        else CrewConnectivityPresentation.NEARBY_AND_REMOTE
 
     private data class SignalingSelection(
         val peer: CrewSignalPeer,

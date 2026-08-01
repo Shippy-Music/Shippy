@@ -30,6 +30,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -52,6 +53,9 @@ import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalInviteResolver
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalingHost
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntime
 import org.oxycblt.auxio.shippy.crew.media.CrewActiveMediaRuntimeFactory
+import org.oxycblt.auxio.shippy.crew.nearby.CrewNearbyConnections
+import org.oxycblt.auxio.shippy.crew.nearby.CrewNearbyHost
+import org.oxycblt.auxio.shippy.crew.nearby.CrewNearbyOperationState
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinCredentialRegistry
 import org.oxycblt.auxio.shippy.crew.relay.CrewHostedRelayHost
@@ -118,6 +122,7 @@ internal constructor(
     private val admissionCoordinator: CrewHostAdmissionCoordinator,
     private val advertisement: CrewLanAdvertisement,
     private val signalingHost: CrewLanSignalingHost,
+    private val nearbyHost: CrewNearbyHost?,
     private val relayHost: CrewHostedRelayHost?,
     private val mediaRuntime: CrewActiveMediaRuntime,
     private val webRtcRuntime: CrewWebRtcRuntime,
@@ -189,6 +194,7 @@ internal constructor(
         runCatching { admissionCoordinator.close() }
         runCatching { advertisement.close() }
         runCatching { signalingHost.close() }
+        runCatching { nearbyHost?.close() }
         runCatching { relayHost?.close() }
         runCatching { engine.close() }
         runCatching { mediaRuntime.close() }
@@ -205,6 +211,7 @@ class CrewLanHostLauncher
 constructor(
     @ApplicationContext private val context: Context,
     private val lanDiscovery: CrewLanDiscovery,
+    private val nearbyConnections: CrewNearbyConnections,
     private val profileSettings: CrewProfileSettings,
     private val crewSettings: CrewSettings,
     @CrewRelayHttpClient private val relayClient: OkHttpClient,
@@ -317,20 +324,24 @@ constructor(
         var mediaRuntime: CrewActiveMediaRuntime? = null
         var webRtc: CrewWebRtcRuntime? = null
         var signaling: CrewLanSignalingHost? = null
+        var nearbyHost: CrewNearbyHost? = null
         var admission: CrewHostAdmissionCoordinator? = null
         var advertisement: CrewLanAdvertisement? = null
         var collectorScope: CoroutineScope? = null
         var collector: Job? = null
         var relayCollector: Job? = null
+        var nearbyCollector: Job? = null
         val sessionId = bootstrap.initialState.sessionId
 
         suspend fun fail(reason: CrewLanHostLaunchFailure): CrewLanHostLaunchResult.Failed {
             runCatching { collector?.cancel() }
             runCatching { relayCollector?.cancel() }
+            runCatching { nearbyCollector?.cancel() }
             runCatching { collectorScope?.cancel() }
             runCatching { admission?.close() }
             runCatching { advertisement?.close() }
             runCatching { signaling?.close() }
+            runCatching { nearbyHost?.close() }
             runCatching { relayHost?.close() }
             runCatching { engine?.close() }
             runCatching { mediaRuntime?.close() }
@@ -434,16 +445,18 @@ constructor(
                         session = CrewSessionEngineAdmissionPort(activeEngine),
                         responders =
                             CrewDirectResponderHandleFactory { peer ->
-                                CrewDirectPeerConnectionHandle(
-                                    CrewDirectPeerConnection(
-                                        peerFactory = activeWebRtc,
-                                        signalingPeer = peer,
-                                        invite = bootstrap.invite,
-                                        localMemberId = localMemberId,
-                                        role = CrewDirectPeerRole.RESPONDER,
-                                        iceServers = iceServers,
+                                peer.toResponderHandleOr { signalingPeer ->
+                                    CrewDirectPeerConnectionHandle(
+                                        CrewDirectPeerConnection(
+                                            peerFactory = activeWebRtc,
+                                            signalingPeer = signalingPeer,
+                                            invite = bootstrap.invite,
+                                            localMemberId = localMemberId,
+                                            role = CrewDirectPeerRole.RESPONDER,
+                                            iceServers = iceServers,
+                                        )
                                     )
-                                )
+                                }
                             },
                         credentialIssuer = { memberId ->
                             val issuedAt = nowEpochMs()
@@ -476,6 +489,13 @@ constructor(
             relayHost?.let { hosted ->
                 activeCollectorScope.launch { hosted.peers.collect(activeAdmission::accept) }
             }
+        nearbyHost =
+            runCatching { nearbyConnections.advertise(bootstrap.invite, sessionId, localMember) }
+                .getOrNull()
+        nearbyCollector =
+            nearbyHost?.let { host ->
+                activeCollectorScope.launch { host.peers.collect(activeAdmission::accept) }
+            }
         advertisement =
             runCatching { lanDiscovery.advertise(bootstrap.invite, activeSignaling.port) }
                 .getOrElse {
@@ -483,20 +503,23 @@ constructor(
                 }
         val activeAdvertisement = checkNotNull(advertisement)
 
-        when (val state = awaitAdvertisement(activeAdvertisement)) {
-            CrewLanOperationState.Active -> Unit
-            is CrewLanOperationState.Failed ->
-                return fail(
-                    CrewLanHostLaunchFailure.AdvertisementFailed(
-                        state.operation,
-                        state.platformCode,
+        val reachability = awaitReachability(activeAdvertisement, nearbyHost)
+        if (!reachability.reachable) {
+            when (val state = reachability.lanState) {
+                is CrewLanOperationState.Failed ->
+                    return fail(
+                        CrewLanHostLaunchFailure.AdvertisementFailed(
+                            state.operation,
+                            state.platformCode,
+                        )
                     )
-                )
-            CrewLanOperationState.Closed ->
-                return fail(CrewLanHostLaunchFailure.AdvertisementClosed)
-            null,
-            CrewLanOperationState.Starting ->
-                return fail(CrewLanHostLaunchFailure.AdvertisementTimedOut)
+                CrewLanOperationState.Closed ->
+                    return fail(CrewLanHostLaunchFailure.AdvertisementClosed)
+                null,
+                CrewLanOperationState.Starting,
+                CrewLanOperationState.Active ->
+                    return fail(CrewLanHostLaunchFailure.AdvertisementTimedOut)
+            }
         }
         // Credential issuance belongs to the authenticated coordinator registry. The bootstrap
         // invite is deliberately never persisted as a process-rejoin secret.
@@ -511,10 +534,11 @@ constructor(
                 admissionStates = activeAdmission.states,
                 advertisementState = activeAdvertisement.state,
                 peerCollectorScope = activeCollectorScope,
-                peerCollectors = listOfNotNull(activeCollector, relayCollector),
+                peerCollectors = listOfNotNull(activeCollector, relayCollector, nearbyCollector),
                 admissionCoordinator = activeAdmission,
                 advertisement = activeAdvertisement,
                 signalingHost = activeSignaling,
+                nearbyHost = nearbyHost,
                 relayHost = relayHost,
                 mediaRuntime = activeMediaRuntime,
                 webRtcRuntime = activeWebRtc,
@@ -524,10 +548,36 @@ constructor(
         )
     }
 
-    private suspend fun awaitAdvertisement(
-        advertisement: CrewLanAdvertisement
-    ): CrewLanOperationState? =
+    private suspend fun awaitReachability(
+        advertisement: CrewLanAdvertisement,
+        nearbyHost: CrewNearbyHost?,
+    ): ReachabilityResult =
         withTimeoutOrNull(advertisementTimeoutMs) {
-            advertisement.state.first { it !is CrewLanOperationState.Starting }
-        }
+            advertisement.state
+                .combine(
+                    nearbyHost?.state
+                        ?: kotlinx.coroutines.flow.flowOf(
+                            CrewNearbyOperationState.Failed(
+                                org.oxycblt.auxio.shippy.crew.nearby.CrewNearbyFailure.UNAVAILABLE
+                            )
+                        )
+                ) { lan, nearby ->
+                    ReachabilityResult(
+                        lanState = lan,
+                        reachable =
+                            lan is CrewLanOperationState.Active ||
+                                nearby is CrewNearbyOperationState.Active,
+                        terminal =
+                            lan !is CrewLanOperationState.Starting &&
+                                nearby !is CrewNearbyOperationState.Starting,
+                    )
+                }
+                .first { it.reachable || it.terminal }
+        } ?: ReachabilityResult(null, reachable = false, terminal = true)
+
+    private data class ReachabilityResult(
+        val lanState: CrewLanOperationState?,
+        val reachable: Boolean,
+        val terminal: Boolean,
+    )
 }

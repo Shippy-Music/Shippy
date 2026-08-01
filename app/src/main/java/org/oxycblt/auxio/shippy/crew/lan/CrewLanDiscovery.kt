@@ -294,6 +294,7 @@ private class Discovery(
     private val resolvedByServiceKey = linkedMapOf<String, CrewLanRendezvous>()
     private val discoveryRequested = AtomicBoolean(false)
     private var resolutionActive = false
+    private var activeServiceInfoCallback: NsdManager.ServiceInfoCallback? = null
 
     override val state = mutableState.asStateFlow()
     override val matches = mutableMatches.asStateFlow()
@@ -403,6 +404,10 @@ private class Discovery(
                 (if (pendingResolutions.isEmpty()) null else pendingResolutions.removeFirst())
                     ?.also { resolutionActive = true }
             } ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            resolveWithServiceInfoCallback(serviceInfo)
+            return
+        }
         val listener =
             object : NsdManager.ResolveListener {
                 override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
@@ -415,12 +420,56 @@ private class Discovery(
             }
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                nsdManager.resolveService(serviceInfo, executor, listener)
+                @Suppress("DEPRECATION") nsdManager.resolveService(serviceInfo, executor, listener)
             } else {
                 @Suppress("DEPRECATION") nsdManager.resolveService(serviceInfo, listener)
             }
         } catch (_: RuntimeException) {
             finishResolution(serviceInfo, null)
+        }
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun resolveWithServiceInfoCallback(serviceInfo: NsdServiceInfo) {
+        val completed = AtomicBoolean(false)
+        lateinit var callback: NsdManager.ServiceInfoCallback
+        fun finish(rendezvous: CrewLanRendezvous?) {
+            if (!completed.compareAndSet(false, true)) return
+            synchronized(lock) {
+                if (activeServiceInfoCallback === callback) activeServiceInfoCallback = null
+            }
+            try {
+                nsdManager.unregisterServiceInfoCallback(callback)
+            } catch (_: IllegalArgumentException) {
+                Unit
+            } catch (_: RuntimeException) {
+                Unit
+            }
+            finishResolution(serviceInfo, rendezvous)
+        }
+        callback =
+            object : NsdManager.ServiceInfoCallback {
+                override fun onServiceInfoCallbackRegistrationFailed(errorCode: Int) {
+                    finish(null)
+                }
+
+                override fun onServiceUpdated(updatedServiceInfo: NsdServiceInfo) {
+                    finish(updatedServiceInfo.toRendezvousOrNull())
+                }
+
+                override fun onServiceLost() {
+                    finish(null)
+                }
+
+                override fun onServiceInfoCallbackUnregistered() = Unit
+            }
+        synchronized(lock) { activeServiceInfoCallback = callback }
+        try {
+            nsdManager.registerServiceInfoCallback(serviceInfo, executor, callback)
+        } catch (_: SecurityException) {
+            finish(null)
+        } catch (_: RuntimeException) {
+            finish(null)
         }
     }
 
@@ -471,6 +520,22 @@ private class Discovery(
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         stopDiscoveryIfRequested()
+        val serviceInfoCallback =
+            synchronized(lock) {
+                activeServiceInfoCallback.also { activeServiceInfoCallback = null }
+            }
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                serviceInfoCallback != null
+        ) {
+            try {
+                nsdManager.unregisterServiceInfoCallback(serviceInfoCallback)
+            } catch (_: IllegalArgumentException) {
+                Unit
+            } catch (_: RuntimeException) {
+                Unit
+            }
+        }
         synchronized(lock) {
             pendingResolutions.clear()
             knownServiceKeys.clear()

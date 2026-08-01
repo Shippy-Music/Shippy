@@ -360,11 +360,18 @@ session clock. It is not a privileged user role and transfers automatically.
 - QR code and deep-link invitation
 - Invitation carries a short-lived session locator and secret, not a permanent
   raw device address
-- LAN discovery/connection without internet
-- Remote direct peer-to-peer attempt through signaling and ICE
-- Hosted relay fallback
+- Route selection is automatic and local-first: authenticated offline Nearby
+  proximity, then LAN discovery/connection, then a configured hosted relay
+- Nearby proximity and LAN routes work without internet; the QR provides the
+  exact session identity and authentication material needed to negotiate them
+- Remote direct peer-to-peer is attempted through signaling and ICE when a
+  hosted relay is configured and both devices have usable internet
+- Hosted relay fallback is used only after local routes fail
 - Explicit self-hosted relay configuration
 - Small direct sessions and larger relay-backed sessions
+- Android 7 through current supported Android versions request only the runtime
+  Bluetooth/location/nearby permissions required by that OS version. A denied
+  proximity permission must not prevent an otherwise viable LAN or relay route.
 
 ### 9.4 Push & Pull
 

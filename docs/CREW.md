@@ -352,11 +352,18 @@ not guessed product promises.
 
 ### LAN
 
-- Discover active invitation/service through Android NSD/DNS-SD where supported.
 - QR provides trust and exact session selection.
-- Connect directly over the selected encrypted transport.
+- Prefer an authenticated Google Nearby Connections route for physically close
+  devices, including devices without internet or a shared Wi-Fi network.
+- If Nearby is unavailable, discover the QR-scoped host with Android NSD and
+  connect directly over the selected encrypted transport.
 - Works without internet once session credentials are exchanged locally.
-- Handle Android local-network permissions/API differences.
+- Android 7-9 request coarse location; Android 10-11 request fine location;
+  Android 12+ request the Bluetooth runtime permissions (Android 12 also needs
+  fine location); Android 13+ also requests Nearby Wi-Fi devices. Denial
+  degrades proximity discovery but LAN and configured relay attempts continue.
+- Android 14+ NSD resolution uses the service-info callback API so host
+  addresses remain available on current Android releases.
 
 ### Remote direct
 
@@ -552,6 +559,9 @@ Required deterministic tests:
 Required later physical-device tests:
 
 - Two and three Android phones on LAN with no internet
+- Two nearby phones with Wi-Fi disconnected, using the offline Nearby route
+- Phone hotspot, nested hotspot, and OEM access-point client-isolation cases
+- Android 7/10/12/13/15 permission and connection behavior
 - Remote networks behind different NATs
 - Relay fallback
 - Wi-Fi to mobile-data transition
@@ -563,7 +573,19 @@ Required later physical-device tests:
 
 ## 18. Transport Decision
 
-The 2026-07-25 code/static spike selected Android NSD plus data-only WebRTC:
+The local-first route stack is:
+
+1. Google Nearby Connections with `P2P_STAR` for authenticated offline
+   proximity transport.
+2. Android NSD/DNS-SD plus data-only WebRTC for same-network LAN transport.
+3. Configured hosted signaling plus WebRTC/ICE for remote connectivity.
+
+All three routes enter the same Crew admission, session, queue, clock,
+reaction, and temporary-media engines. Route selection does not create a
+second Crew state model.
+
+The 2026-07-25 code/static spike selected Android NSD plus data-only WebRTC for
+LAN and remote routing:
 
 - `NsdManager`/DNS-SD advertises and discovers the active LAN rendezvous.
 - A short-lived versioned Shippy invite authenticates the intended session.
@@ -572,6 +594,13 @@ The 2026-07-25 code/static spike selected Android NSD plus data-only WebRTC:
   traversal and relay.
 - Hosted signaling and optional coturn credential minting are self-hostable;
   ordered larger-session control/media fan-out remains separate relay work.
+
+The 2026-08-01 proximity hardening added Google Nearby Connections rather than
+replacing the existing engine. The QR advertises only a scoped locator; both
+devices complete a mutual HMAC challenge bound to the exact session and member
+identities before any Crew frames are exposed. Nearby byte payloads carry the
+existing control, clock, reaction, and media channels, so Push & Pull remains
+temporary and active-Crew-only.
 
 The Android dependency is
 `io.github.webrtc-sdk:android-prefixed-stripped:144.7559.09`. It is shadowed to
