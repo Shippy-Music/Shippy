@@ -32,7 +32,8 @@ APK Signature Scheme v2 and local/Drive MD5 equality verified; uploaded to
 **R13.1 artifact:** `Shippy-Alpha-R13.1-20260801.apk`, version
 `0.1.0-alpha.1-r13.1` (80), 61,148,308 bytes, SHA-256
 `93651C1E846BE715AEC0A4FD53FCD52B14D84E68A0D36C12194983CA965335B7`.
-APK Signature Scheme v2 verified; Drive and GitHub publication pending.
+APK Signature Scheme v2 and local/Drive MD5 equality verified; published to
+Drive and as a GitHub prerelease.
 
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
