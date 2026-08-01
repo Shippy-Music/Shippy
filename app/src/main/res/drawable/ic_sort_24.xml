@@ -1,11 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:tint="?attr/colorControlNormal"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/white"
-        android:pathData="M3,18V16H9V18ZM3,13V11H15V13ZM3,8V6H21V8Z" />
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="?attr/colorControlNormal">
+    <!-- Lucide arrow-up-down; generated from the pinned official SVG. -->
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="m21 16-4 4-4-4" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M17 20V4" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="m3 8 4-4 4 4" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M7 4v16" />
 </vector>

@@ -1,11 +1,7 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="960"
-    android:viewportHeight="960"
-    android:tint="?attr/colorControlNormal"
-    android:autoMirrored="true">
-    <path
-        android:fillColor="@android:color/white"
-        android:pathData="M256,720L200,664L584,280L240,280L240,200L720,200L720,680L640,680L640,336L256,720Z"/>
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="?attr/colorControlNormal" android:autoMirrored="true">
+    <!-- Lucide external-link; generated from the pinned official SVG. -->
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M15 3h6v6" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M10 14 21 3" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
 </vector>

@@ -1,10 +1,6 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="960"
-    android:viewportHeight="960"
-    android:tint="?attr/colorControlNormal">
-  <path
-      android:fillColor="@android:color/white"
-      android:pathData="M160,800Q127,800 103.5,776.5Q80,753 80,720L80,240Q80,207 103.5,183.5Q127,160 160,160L800,160Q833,160 856.5,183.5Q880,207 880,240L880,720Q880,753 856.5,776.5Q833,800 800,800L160,800ZM480,520L160,320L160,720Q160,720 160,720Q160,720 160,720L800,720Q800,720 800,720Q800,720 800,720L800,320L480,520ZM480,440L800,240L160,240L480,440ZM160,320L160,240L160,240L160,320L160,720Q160,720 160,720Q160,720 160,720L160,720Q160,720 160,720Q160,720 160,720L160,320Z"/>
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="?attr/colorControlNormal">
+    <!-- Lucide mail; generated from the pinned official SVG. -->
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M 4 4 H 20 A 2 2 0 0 1 22 6 V 18 A 2 2 0 0 1 20 20 H 4 A 2 2 0 0 1 2 18 V 6 A 2 2 0 0 1 4 4 Z" />
 </vector>

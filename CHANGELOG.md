@@ -4,6 +4,16 @@ Shippy's first public alpha combines an Android-native local player with a
 unified provider/download model and the first complete Crew collaboration
 foundation.
 
+### R12 icon refresh
+
+- Replaced 71 application glyphs with Android vectors generated directly from
+  pinned official Lucide SVG geometry.
+- Uses Lucide `Settings2` for Settings and a consistent Lucide family across
+  navigation, playback, Library, Crew, menus, widgets, and preferences.
+- Retains Shippy-specific branding, the animated playing indicator, and all
+  existing checked/unchecked drawable selectors and resource IDs.
+- Adds no icon framework or runtime dependency.
+
 ### Included
 
 - Home, Search, Library, and Crew navigation with a persistent mini-player

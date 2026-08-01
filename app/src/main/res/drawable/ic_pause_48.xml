@@ -1,11 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp"
-    android:height="48dp"
-    android:viewportWidth="960"
-    android:viewportHeight="960"
-    android:tint="?attr/colorControlNormal">
-  <path
-      android:fillColor="@android:color/white"
-      android:pathData="M555,760L555,200L730,200L730,760L555,760ZM230,760L230,200L405,200L405,760L230,760Z"/>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="24" android:viewportHeight="24" android:tint="?attr/colorControlNormal">
+    <!-- Lucide pause; generated from the pinned official SVG. -->
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M 15 3 H 18 A 1 1 0 0 1 19 4 V 20 A 1 1 0 0 1 18 21 H 15 A 1 1 0 0 1 14 20 V 4 A 1 1 0 0 1 15 3 Z" />
+    <path android:fillColor="@android:color/transparent" android:strokeColor="@android:color/white" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M 6 3 H 9 A 1 1 0 0 1 10 4 V 20 A 1 1 0 0 1 9 21 H 6 A 1 1 0 0 1 5 20 V 4 A 1 1 0 0 1 6 3 Z" />
 </vector>
