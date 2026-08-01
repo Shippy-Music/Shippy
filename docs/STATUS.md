@@ -61,6 +61,8 @@ Keep it factual and short. Move durable decisions into the canonical documents.
   - Focused Last.fm and Crew regressions plus the full app/Musikr JVM suites,
     Android lint, debug assembly, formatting, package metadata, and APK
     Signature Scheme v2 verification pass.
+  - The Crew reconnect regression now waits for both peer attachment and its
+    canonical snapshot request, removing a scheduler-dependent CI race.
 
 - R13.1 full-screen lyrics viewport hotfix:
   - Reserved a clipped bottom safe area inside the lyrics scroller so the final

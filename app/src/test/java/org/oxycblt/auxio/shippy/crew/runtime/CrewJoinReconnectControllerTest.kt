@@ -67,7 +67,7 @@ class CrewJoinReconnectControllerTest {
         val transport = FakeTransport(coordinator)
         fixture.results.send(CrewReconnectDialResult.Authenticated(connection, transport))
         fixture.controller.start()
-        await { fixture.port.attached.size == 1 }
+        await { fixture.port.attached.size == 1 && fixture.port.snapshotRequests == 1 }
         assertEquals(listOf(transport), fixture.port.attached)
         assertEquals(1, fixture.port.snapshotRequests)
         assertFalse(connection.closed)
