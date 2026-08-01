@@ -92,6 +92,7 @@ internal class LibrarySystemCollectionAdapter(
                 binding.root.context.getString(titleRes),
             )
             binding.collectionTitle.setText(titleRes)
+            binding.collectionPin.isVisible = false
             binding.collectionSummary.text =
                 when (row.kind) {
                     SystemCollectionKind.LIKED ->
@@ -261,6 +262,7 @@ internal class UnifiedLibraryCollectionAdapter(
                 binding.root.context.getString(titleRes),
             )
             binding.collectionTitle.setText(titleRes)
+            binding.collectionPin.isVisible = row.isPinned
             val count =
                 when (collection.kind) {
                     SystemCollectionKind.LIKED ->
@@ -286,12 +288,7 @@ internal class UnifiedLibraryCollectionAdapter(
                             )
                         }
                 }
-            binding.collectionSummary.text =
-                listOfNotNull(
-                        binding.root.context.getString(R.string.lbl_pinned).takeIf { row.isPinned },
-                        count,
-                    )
-                    .joinToString(" â€¢ ")
+            binding.collectionSummary.text = count
         }
 
         private fun bindPlaylist(row: LibraryCollectionListRow.Playlist) {
@@ -300,13 +297,8 @@ internal class UnifiedLibraryCollectionAdapter(
                 row.playlist.displayName,
             )
             binding.collectionTitle.text = row.playlist.displayName
-            binding.collectionSummary.setText(
-                if (row.isPinned) {
-                    R.string.lng_pinned_shippy_playlist
-                } else {
-                    R.string.lng_shippy_playlist
-                }
-            )
+            binding.collectionPin.isVisible = row.isPinned
+            binding.collectionSummary.setText(R.string.lng_shippy_playlist)
         }
     }
 }
@@ -346,6 +338,7 @@ internal class LibraryOnboardingAdapter(private val onChooseFolders: () -> Unit)
                 binding.root.context.getString(R.string.lbl_choose_music_folders),
             )
             binding.collectionTitle.setText(R.string.lbl_choose_music_folders)
+            binding.collectionPin.isVisible = false
             binding.collectionSummary.setText(R.string.lng_choose_music_folders)
             binding.root.apply {
                 isClickable = true
@@ -519,13 +512,8 @@ internal class ShippyPlaylistProjectionAdapter(
                 playlist.displayName,
             )
             binding.collectionTitle.text = playlist.displayName
-            binding.collectionSummary.setText(
-                if (playlist.isPinned) {
-                    R.string.lng_pinned_shippy_playlist
-                } else {
-                    R.string.lng_shippy_playlist
-                }
-            )
+            binding.collectionPin.isVisible = playlist.isPinned
+            binding.collectionSummary.setText(R.string.lng_shippy_playlist)
             binding.root.contentDescription =
                 binding.root.context.getString(
                     R.string.desc_library_collection,

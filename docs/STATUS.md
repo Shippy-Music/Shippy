@@ -1,19 +1,19 @@
 # Shippy Live Status
 
 **Updated:** 2026-08-01
-**Current stage:** R12 official Lucide icon refresh and owner-device handoff
-**Overall state:** R12 replaces 71 application icons with vectors generated
-from the official Lucide SVG source, including `settings-2` for Settings. The
-existing Android resource IDs and checked/unchecked state selectors remain
-unchanged, and no runtime icon dependency was added. Formatting, 444 app JVM
-tests (443 passed; one opt-in live smoke skipped), 109 Musikr tests, native
-compilation, lint, APK assembly, signature/package inspection, and Drive
-publication pass. Physical-device visual acceptance, provider longevity, and
-multi-phone Crew acceptance remain owner-tested.
+**Current stage:** R13 launcher, Library hierarchy, and canonical player-artwork
+hardening
+**Overall state:** R13 adopts the supplied Shippy mascot across legacy,
+adaptive, and monochrome launcher resources; simplifies Library playlist rows
+with icon-based pinning and no redundant Collections header; and prevents stale
+deferred pager updates from pairing old artwork with current metadata. Formatting,
+all app JVM tests, Android lint, resource processing, and debug APK assembly pass.
+Physical-device visual acceptance, provider longevity, and multi-phone Crew
+acceptance remain owner-tested.
 
 **Progress snapshot:** source implementation ~99% · functional product ~96% ·
 UX intent ~98% · automated verification 100% · APK verification 100% ·
-physical-device R12 verification 0%
+physical-device R13 verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
@@ -23,10 +23,26 @@ Accessibility is deferred to the dedicated pre-release hardening pass.
 `C691F10308A93DF6A17AD2E83C45782427AC7996843FC66209975106FDCFDAA8`,
 APK Signature Scheme v2 verified and uploaded to `gdrive:Shippy Builds`.
 
+**R13 artifact:** `Shippy-Alpha-R13-20260801.apk`, version
+`0.1.0-alpha.1-r13` (79), 61,148,304 bytes, SHA-256
+`E6F6D057783BE34CD2883B852837D02869CB000E4BBD0DAB7E1B4B5D63BDEEB2`.
+APK Signature Scheme v2 and local/Drive MD5 equality verified; uploaded to
+`gdrive:Shippy Builds` with R12 archived.
+
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Completed
+
+- R13 launcher, Library, and player artwork hardening:
+  - Replaced the legacy and adaptive launcher artwork with the supplied Shippy
+    mascot, retaining a deterministic generator and canonical ICO source.
+  - Replaced pinned text with a Lucide pin glyph, removed the redundant
+    Collections heading, and removed the corrupted bullet separator.
+  - Invalidated stale frame-delayed pager updates and anchored the visible page
+    to the canonical queue item's stable ID.
+  - Added pager-index regression coverage and a reproducible Windows native
+    Gradle wrapper.
 
 - R12 official Lucide icon refresh:
   - Replaced 71 UI icon resources from the pinned official Lucide source.
