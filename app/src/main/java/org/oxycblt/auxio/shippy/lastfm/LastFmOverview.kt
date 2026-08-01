@@ -113,6 +113,8 @@ class LastFmOverviewClient @Inject constructor(private val transport: ProviderHt
                         "&user=${encode(credentials.username)}" +
                         "&limit=${LastFmOverview.MAX_TRACKS}&format=json",
                     ProviderHttpMethod.GET,
+                    headers =
+                        mapOf("Accept" to "application/json", "User-Agent" to LAST_FM_USER_AGENT),
                 )
             )
         } catch (_: IOException) {

@@ -223,7 +223,7 @@ private class Advertisement(
         } else {
             val serviceInfo =
                 NsdServiceInfo().apply {
-                    serviceName = "shippy-${identity.inviteId.value.take(24)}"
+                    serviceName = crewServiceName(identity)
                     serviceType = CREW_SERVICE_TYPE
                     port = signalingPort
                     CrewLanTxtCodec.encode(identity).forEach(::setAttribute)
@@ -448,7 +448,8 @@ private class Discovery(
     }
 
     private fun NsdServiceInfo.toRendezvousOrNull(): CrewLanRendezvous? {
-        val identity = CrewLanTxtCodec.decode(attributes) ?: return null
+        val identity =
+            resolveCrewLanIdentity(serviceName, attributes, expectedIdentity) ?: return null
         val addresses =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     hostAddresses
@@ -547,6 +548,31 @@ private fun Map<String, ByteArray>.requiredUtf8(key: String): String {
 }
 
 private fun CrewInvite.toLanIdentity() = CrewLanIdentity(protocolVersion, sessionLocator, inviteId)
+
+internal fun crewServiceName(identity: CrewLanIdentity) =
+    "shippy-${identity.inviteId.value.take(24)}"
+
+/**
+ * Some Android NSD implementations resolve the address and port but omit TXT attributes. The
+ * QR-scoped service instance name is sufficient for rendezvous in that case: the following TCP
+ * handshake still proves possession of the full short-lived invitation secret. A present but
+ * mismatched TXT identity is never accepted.
+ */
+internal fun resolveCrewLanIdentity(
+    serviceName: String,
+    attributes: Map<String, ByteArray>,
+    expected: CrewLanIdentity,
+): CrewLanIdentity? {
+    val advertised = CrewLanTxtCodec.decode(attributes)
+    if (advertised != null) return advertised.takeIf { it == expected }
+    return expected.takeIf { serviceName.matchesCrewServiceName(crewServiceName(expected)) }
+}
+
+private fun String.matchesCrewServiceName(expected: String): Boolean {
+    if (equals(expected, ignoreCase = true)) return true
+    if (!startsWith("$expected (", ignoreCase = true) || !endsWith(')')) return false
+    return substring(expected.length + 2, lastIndex).toIntOrNull()?.let { it > 1 } == true
+}
 
 private fun isCrewServiceType(value: String) =
     value.trimEnd('.').equals(CREW_SERVICE_TYPE.trimEnd('.'), ignoreCase = true)

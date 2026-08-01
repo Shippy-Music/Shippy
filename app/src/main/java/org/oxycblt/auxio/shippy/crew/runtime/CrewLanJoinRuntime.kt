@@ -74,7 +74,7 @@ import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
 import org.oxycblt.auxio.shippy.persistence.crew.CrewRejoinLeaseStore
 
 private const val CREW_JOIN_PROTOCOL_V1 = 1
-private const val CREW_LAN_DISCOVERY_TIMEOUT_MS = 10_000L
+private const val CREW_LAN_DISCOVERY_TIMEOUT_MS = 20_000L
 private const val CREW_RECONNECT_DIAL_TIMEOUT_MS = 15_000L
 private const val CREW_JOIN_TERMINAL_EVENT_WAIT_MS = 1_500L
 

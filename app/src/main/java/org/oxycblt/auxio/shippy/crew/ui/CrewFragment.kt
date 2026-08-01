@@ -17,7 +17,10 @@
  */
 package org.oxycblt.auxio.shippy.crew.ui
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -28,7 +31,9 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.coordinatorlayout.widget.CoordinatorLayout
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
@@ -73,12 +78,33 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
     private var qrDialog: androidx.appcompat.app.AlertDialog? = null
     private var reactionDialog: androidx.appcompat.app.AlertDialog? = null
     private val reactionViews = mutableSetOf<View>()
+    private var pendingNetworkAction: PendingNetworkAction? = null
+    private var pendingInviteLink: String? = null
+    private val nearbyPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val action = pendingNetworkAction
+            val invite = pendingInviteLink
+            pendingNetworkAction = null
+            pendingInviteLink = null
+            if (!granted) {
+                if (isAdded)
+                    requireContext().showToast(R.string.lng_crew_nearby_permission_required)
+                return@registerForActivityResult
+            }
+            when (action) {
+                PendingNetworkAction.START_HOST -> model.startHost()
+                PendingNetworkAction.JOIN -> invite?.let(model::join)
+                null -> Unit
+            }
+        }
 
     override fun onCreateBinding(inflater: LayoutInflater) = FragmentCrewBinding.inflate(inflater)
 
     override fun onBindingCreated(binding: FragmentCrewBinding, savedInstanceState: Bundle?) {
         binding.crewScroll.applyBottomContentInset()
-        binding.crewStart.setOnClickListener { model.startHost() }
+        binding.crewStart.setOnClickListener {
+            runCrewNetworkAction(PendingNetworkAction.START_HOST)
+        }
         binding.crewJoin.setOnClickListener { showJoinDialog() }
         binding.crewScanQr.setOnClickListener { startQrScan() }
         binding.crewDismissFailure.setOnClickListener { model.dismissFailure() }
@@ -134,7 +160,7 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
             .setView(input)
             .setNegativeButton(R.string.lbl_cancel, null)
             .setPositiveButton(R.string.lbl_join) { _, _ ->
-                model.join(input.text.toString().trim())
+                runCrewNetworkAction(PendingNetworkAction.JOIN, input.text.toString().trim())
             }
             .show()
     }
@@ -243,7 +269,9 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         GmsBarcodeScanning.getClient(requireContext(), options)
             .startScan()
             .addOnSuccessListener { barcode ->
-                barcode.rawValue?.trim()?.takeIf(String::isNotBlank)?.let(model::join)
+                barcode.rawValue?.trim()?.takeIf(String::isNotBlank)?.let { invite ->
+                    runCrewNetworkAction(PendingNetworkAction.JOIN, invite)
+                }
             }
             .addOnFailureListener { context?.showToast(R.string.err_crew_qr_scan) }
     }
@@ -485,6 +513,26 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         }
     }
 
+    private fun runCrewNetworkAction(action: PendingNetworkAction, inviteLink: String? = null) {
+        if (!needsNearbyPermission()) {
+            when (action) {
+                PendingNetworkAction.START_HOST -> model.startHost()
+                PendingNetworkAction.JOIN -> inviteLink?.let(model::join)
+            }
+            return
+        }
+        pendingNetworkAction = action
+        pendingInviteLink = inviteLink
+        nearbyPermissionLauncher.launch(Manifest.permission.NEARBY_WIFI_DEVICES)
+    }
+
+    private fun needsNearbyPermission(): Boolean =
+        Build.VERSION.SDK_INT >= 36 &&
+            ContextCompat.checkSelfPermission(
+                requireContext(),
+                Manifest.permission.NEARBY_WIFI_DEVICES,
+            ) != PackageManager.PERMISSION_GRANTED
+
     private fun hostFailureMessage(failure: CrewLanHostLaunchFailure) =
         when (failure) {
             CrewLanHostLaunchFailure.AdvertisementTimedOut -> R.string.lng_crew_connection_timed_out
@@ -534,4 +582,9 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
             CrewLanJoinLaunchFailure.Initialization,
             CrewLanJoinLaunchFailure.EngineOrPersistence -> R.string.lng_could_not_join_crew
         }
+}
+
+private enum class PendingNetworkAction {
+    START_HOST,
+    JOIN,
 }

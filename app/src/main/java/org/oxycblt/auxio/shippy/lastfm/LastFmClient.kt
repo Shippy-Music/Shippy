@@ -75,7 +75,11 @@ class LastFmClient @Inject constructor(private val transport: ProviderHttpTransp
                         ProviderHttpRequest(
                             URL,
                             ProviderHttpMethod.POST,
-                            mapOf("Content-Type" to "application/x-www-form-urlencoded"),
+                            mapOf(
+                                "Content-Type" to
+                                    "application/x-www-form-urlencoded; charset=UTF-8",
+                                "User-Agent" to LAST_FM_USER_AGENT,
+                            ),
                             credentials.entries
                                 .joinToString("&") { "${encode(it.key)}=${encode(it.value)}" }
                                 .toByteArray(),

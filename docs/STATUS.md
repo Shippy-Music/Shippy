@@ -1,19 +1,18 @@
 # Shippy Live Status
 
 **Updated:** 2026-08-01
-**Current stage:** R13.1 full-screen lyrics viewport hotfix
-**Overall state:** R13 adopts the supplied Shippy mascot across legacy,
-adaptive, and monochrome launcher resources; simplifies Library playlist rows
-with icon-based pinning and no redundant Collections header; and prevents stale
-deferred pager updates from pairing old artwork with current metadata. R13.1
-keeps lyric rows inside the scroll viewport's padded safe area so the fixed
-controls no longer hard-clip text. Formatting and all app JVM tests pass;
-physical-device visual acceptance, provider longevity, and multi-phone Crew
-acceptance remain owner-tested.
+**Current stage:** R13.2 Last.fm and Crew connectivity hotfix
+**Overall state:** R13.2 replaces the fragile Last.fm XML authentication path
+with bounded JSON parsing and identifiable API requests. Crew now requests the
+Android 16 nearby-network permission before hosting or joining, tolerates OEM
+NSD responses that omit TXT records or rename a colliding service, and gives
+LAN discovery more time on real devices. Formatting, JVM tests, lint, assembly,
+and APK signature/package inspection pass; real-account Last.fm and two-phone
+Crew acceptance remain owner-tested.
 
 **Progress snapshot:** source implementation ~99% · functional product ~96% ·
 UX intent ~98% · automated verification 100% · APK verification 100% ·
-physical-device R13.1 verification 0%
+physical-device R13.2 verification 0%
 
 **Current-pass boundary:** Complete and polish functional behavior first.
 Accessibility is deferred to the dedicated pre-release hardening pass.
@@ -35,10 +34,32 @@ APK Signature Scheme v2 and local/Drive MD5 equality verified; uploaded to
 APK Signature Scheme v2 and local/Drive MD5 equality verified; published to
 Drive and as a GitHub prerelease.
 
+**R13.2 artifact:** `Shippy-Alpha-R13.2-20260801.apk`, version
+`0.1.0-alpha.1-r13.2` (81), 61,148,876 bytes, SHA-256
+`68892A03DE0354D8A55F5E64744A39EC88C4BECC3FE83AE8D93260CD0DEAD9B8`.
+APK Signature Scheme v2 and package metadata verified locally; Drive and
+GitHub publication pending.
+
 This is the first file to read after `PRODUCT_SPEC.md` whenever work resumes.
 Keep it factual and short. Move durable decisions into the canonical documents.
 
 ## Completed
+
+- R13.2 Last.fm and Crew connectivity hotfix:
+  - Last.fm authentication requests JSON and parses it without Android XML
+    provider dependencies; authentication, scrobble, and overview requests send
+    an identifiable Shippy user agent.
+  - Hosting and joining request Android 16 nearby-network access before using
+    NSD or direct LAN sockets.
+  - Crew discovery accepts a QR-scoped Android NSD endpoint when an OEM omits
+    TXT attributes or appends a numeric collision suffix. The authenticated
+    invite-secret handshake remains authoritative, and mismatched TXT identity
+    is rejected.
+  - LAN discovery timeout increased from 10 to 20 seconds without delaying a
+    successful immediate connection.
+  - Focused Last.fm and Crew regressions plus the full app/Musikr JVM suites,
+    Android lint, debug assembly, formatting, package metadata, and APK
+    Signature Scheme v2 verification pass.
 
 - R13.1 full-screen lyrics viewport hotfix:
   - Reserved a clipped bottom safe area inside the lyrics scroller so the final

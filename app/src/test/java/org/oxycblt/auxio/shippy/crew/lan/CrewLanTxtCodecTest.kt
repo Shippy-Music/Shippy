@@ -66,6 +66,49 @@ class CrewLanTxtCodecTest {
     }
 
     @Test
+    fun `QR scoped service name recovers when Android omits TXT records`() {
+        val expected =
+            CrewLanIdentity(
+                ProtocolVersion(1),
+                CrewSessionLocator("session_locator_123"),
+                CrewInviteId("invite_123456789012345678901234567890"),
+            )
+
+        assertEquals(
+            expected,
+            resolveCrewLanIdentity(crewServiceName(expected), emptyMap(), expected),
+        )
+        assertEquals(
+            expected,
+            resolveCrewLanIdentity(crewServiceName(expected).uppercase(), emptyMap(), expected),
+        )
+        assertEquals(
+            expected,
+            resolveCrewLanIdentity("${crewServiceName(expected)} (2)", emptyMap(), expected),
+        )
+        assertEquals(null, resolveCrewLanIdentity("shippy-another-invite", emptyMap(), expected))
+        assertEquals(
+            null,
+            resolveCrewLanIdentity("${crewServiceName(expected)} (other)", emptyMap(), expected),
+        )
+    }
+
+    @Test
+    fun `present mismatched TXT identity cannot use service name fallback`() {
+        val expected =
+            CrewLanIdentity(
+                ProtocolVersion(1),
+                CrewSessionLocator("session_locator_123"),
+                CrewInviteId("invite_12345678"),
+            )
+        val different = expected.copy(sessionLocator = CrewSessionLocator("different_session"))
+        val attributes =
+            CrewLanTxtCodec.encode(different).mapValues { it.value.toByteArray(Charsets.UTF_8) }
+
+        assertEquals(null, resolveCrewLanIdentity(crewServiceName(expected), attributes, expected))
+    }
+
+    @Test
     fun `resolved endpoint diagnostics redact addresses and network`() {
         val rendezvous =
             CrewLanRendezvous(

@@ -341,6 +341,7 @@
     <string name="lng_crew_invite_verification_failed">This Crew invite could not be verified.</string>
     <string name="lng_crew_nearby_unavailable">Nearby Crew is unavailable. Check local network access and try again.</string>
     <string name="lng_crew_connection_timed_out">Crew took too long to respond. Keep both devices nearby and try again.</string>
+    <string name="lng_crew_nearby_permission_required">Allow Nearby devices so Crew can find and connect to members on your network.</string>
     <string name="lng_crew_incompatible">This Crew uses an incompatible Shippy version.</string>
     <string name="lng_tasker_start">
         Starts Auxio using the previously saved state. If no saved state is available, all songs will be shuffled. Playback will start immediately.
