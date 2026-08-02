@@ -246,6 +246,51 @@ class CrewCoordinatorSequencerTest {
         )
     }
 
+    @Test
+    fun `stale bare index is rejected while a stable anchor rebases`() {
+        val fixture = Fixture()
+        val sequencer = CrewCoordinatorSequencer(fixture.state, fixture.coordinatorId)
+        val existing = fixture.queueItem
+        val inserted = existing.copy(id = QueueItemId("inserted"))
+        assertTrue(
+            sequencer.sequence(
+                fixture
+                    .request("seed", fixture.memberId, CrewAction.QueueReplaced(listOf(existing)))
+                    .copy(baseSequence = EventSequence(0)),
+                fixture.memberId,
+            ) is CrewSequenceResult.Published
+        )
+
+        val staleBare =
+            sequencer.sequence(
+                fixture
+                    .request(
+                        "stale-bare",
+                        fixture.memberId,
+                        CrewAction.QueueItemInserted(inserted, 1),
+                    )
+                    .copy(baseSequence = EventSequence(0)),
+                fixture.memberId,
+            )
+        assertEquals(
+            CrewSequenceRejection.STALE_BASE_REVISION,
+            (staleBare as CrewSequenceResult.Rejected).reason,
+        )
+
+        val anchored =
+            sequencer.sequence(
+                fixture
+                    .request(
+                        "anchored",
+                        fixture.memberId,
+                        CrewAction.QueueItemInserted(inserted, 99, afterItemId = existing.id),
+                    )
+                    .copy(baseSequence = EventSequence(0)),
+                fixture.memberId,
+            ) as CrewSequenceResult.Published
+        assertEquals(listOf(existing.id, inserted.id), anchored.state.queue.map { it.id })
+    }
+
     private class Fixture {
         private val protocol = ProtocolVersion(1)
         private val sessionId = CrewSessionId("session", protocol)

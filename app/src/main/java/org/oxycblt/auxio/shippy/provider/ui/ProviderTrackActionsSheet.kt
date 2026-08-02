@@ -17,12 +17,14 @@
  */
 package org.oxycblt.auxio.shippy.provider.ui
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.media.audiofx.AudioEffect
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.view.SupportMenuInflater
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.core.view.children
@@ -46,6 +48,7 @@ import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.domain.Track
+import org.oxycblt.auxio.shippy.download.DownloadRemovalResult
 import org.oxycblt.auxio.shippy.download.DownloadState
 import org.oxycblt.auxio.shippy.download.DownloadWorkCoordinator
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
@@ -56,6 +59,8 @@ import org.oxycblt.auxio.shippy.playback.timer.SleepTimerMode
 import org.oxycblt.auxio.shippy.provider.ProviderCapability
 import org.oxycblt.auxio.shippy.provider.ProviderRegistry
 import org.oxycblt.auxio.shippy.share.ProviderTrackSharing
+import org.oxycblt.auxio.shippy.storage.LocalMediaDeletionCoordinator
+import org.oxycblt.auxio.shippy.storage.LocalMediaDeletionResult
 import org.oxycblt.auxio.ui.ViewBindingBottomSheetDialogFragment
 import org.oxycblt.auxio.util.showToast
 
@@ -69,6 +74,21 @@ class ProviderTrackActionsSheet :
     @Inject lateinit var downloadCoordinator: DownloadWorkCoordinator
     @Inject lateinit var providers: ProviderRegistry
     @Inject lateinit var sleepTimerController: SleepTimerController
+    @Inject lateinit var localMediaDeletion: LocalMediaDeletionCoordinator
+
+    private val localDeleteConsent =
+        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                androidx.lifecycle
+                    .ViewModelProvider(requireActivity())[
+                        org.oxycblt.auxio.music.MusicViewModel::class.java]
+                    .rescan()
+                requireContext().showToast(R.string.msg_delete_local_complete)
+                dismiss()
+            } else {
+                requireContext().showToast(R.string.msg_delete_local_failed)
+            }
+        }
 
     private val adapter = MenuItemAdapter(this)
     private lateinit var track: Track
@@ -170,6 +190,8 @@ class ProviderTrackActionsSheet :
                 }
             )
         }
+        menu.findItem(R.id.action_delete_local_media).isVisible =
+            track.candidates.any { it.kind == CandidateKind.LOCAL && it.locator != null }
         menu.findItem(R.id.action_share_original_link).isVisible =
             ProviderTrackSharing.originalLink(track) != null
         menu.findItem(R.id.action_share_with_shippy).isVisible =
@@ -204,13 +226,22 @@ class ProviderTrackActionsSheet :
                 activity.lifecycleScope.launch {
                     val existing = downloaded
                     if (existing?.job?.state == DownloadState.AVAILABLE) {
-                        downloadCoordinator.remove(existing.job.id)
+                        if (
+                            downloadCoordinator.remove(existing.job.id) !=
+                                DownloadRemovalResult.Removed
+                        ) {
+                            activity.showToast(R.string.msg_download_remove_failed)
+                        }
                     } else {
                         downloadableCandidate(track)?.let {
                             downloadCoordinator.request(track, it.id)
                         }
                     }
                 }
+            R.id.action_delete_local_media -> {
+                showLocalDeleteConfirmation()
+                return
+            }
             R.id.action_open_queue ->
                 activity.lifecycleScope.launch {
                     // Queue is already a player-owned surface; opening it through the active
@@ -229,6 +260,32 @@ class ProviderTrackActionsSheet :
             R.id.action_share_with_shippy -> ProviderTrackSharing.shippyLink(track)?.let(::share)
         }
         dismiss()
+    }
+
+    private fun showLocalDeleteConfirmation() {
+        com.google.android.material.dialog
+            .MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.lbl_delete_from_device)
+            .setMessage(getString(R.string.msg_delete_local_confirm, track.title))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.lbl_delete) { _, _ ->
+                when (val result = localMediaDeletion.delete(track)) {
+                    LocalMediaDeletionResult.Deleted -> {
+                        androidx.lifecycle
+                            .ViewModelProvider(requireActivity())[
+                                org.oxycblt.auxio.music.MusicViewModel::class.java]
+                            .rescan()
+                        requireContext().showToast(R.string.msg_delete_local_complete)
+                        dismiss()
+                    }
+                    is LocalMediaDeletionResult.ConsentRequired ->
+                        localDeleteConsent.launch(result.request)
+                    LocalMediaDeletionResult.Failed,
+                    LocalMediaDeletionResult.MissingLocalObject ->
+                        requireContext().showToast(R.string.msg_delete_local_failed)
+                }
+            }
+            .show()
     }
 
     private fun showPlaylistMemberships() {

@@ -40,6 +40,8 @@ interface CrewMediaSessionCallbacks {
         file: File,
     ): Boolean
 
+    fun onTemporaryMediaProgress(progress: CrewMediaReceiveProgress): Boolean = true
+
     fun onTransferRetryLater(transfer: CrewMediaTransferRef, peerMemberId: CrewMemberId) = Unit
 
     fun onTransferRejected(transfer: CrewMediaTransferRef, peerMemberId: CrewMemberId) = Unit
@@ -76,7 +78,8 @@ class CrewMediaSessionRouter(
                 ),
             )
         peers.put(peer.memberId, replacement)?.let { previous ->
-            previous.receivingTransfers.forEach(receiver::cancel)
+            // Keep verified ranges in the session cache. A replacement authenticated route can
+            // resend the manifest and resume from the receiver's cumulative range acknowledgement.
             previous.receivingTransfers.clear()
             previous.controller.clear()
             fanoutPolicy.releaseForTarget(previous.peer.memberId)
@@ -158,7 +161,8 @@ class CrewMediaSessionRouter(
     override fun onPeerDetached(peer: CrewAuthenticatedMediaPeer) {
         val state = peers[peer.memberId] ?: return
         if (state.peer.transport === peer.transport && peers.remove(peer.memberId, state)) {
-            state.receivingTransfers.forEach(receiver::cancel)
+            // Route loss is not transfer cancellation. Retain the bounded disk assembly so a
+            // Nearby/LAN/relay replacement can continue without restarting verified ranges.
             state.receivingTransfers.clear()
             fanoutPolicy.releaseForTarget(peer.memberId)
         }
@@ -279,8 +283,19 @@ class CrewMediaSessionRouter(
     ): CrewMediaFrameResult =
         when (val result = receiver.accept(frame.value)) {
             is CrewMediaReceiveResult.Accepted -> {
+                result.progress?.let { progress ->
+                    if (!callbacks.onTemporaryMediaProgress(progress)) {
+                        return reject(
+                            state,
+                            frame.transfer,
+                            "temporary media progress was rejected",
+                        )
+                    }
+                }
                 state.receivingTransfers.add(frame.transfer)
-                state.media.send(CrewMediaWireFrame.ManifestAccepted(frame.transfer))
+                state.media.send(
+                    CrewMediaWireFrame.ManifestAccepted(frame.transfer, result.nextChunkIndex)
+                )
                 CrewMediaFrameResult.Accepted
             }
             is CrewMediaReceiveResult.Retry -> {
@@ -298,8 +313,19 @@ class CrewMediaSessionRouter(
     ): CrewMediaFrameResult =
         when (val result = receiver.accept(frame.value)) {
             is CrewMediaReceiveResult.Accepted -> {
-                // This acknowledgement also advances the supplier's bounded one-chunk window.
-                state.media.send(CrewMediaWireFrame.ManifestAccepted(frame.transfer))
+                result.progress?.let { progress ->
+                    if (!callbacks.onTemporaryMediaProgress(progress)) {
+                        return reject(
+                            state,
+                            frame.transfer,
+                            "temporary media progress was rejected",
+                        )
+                    }
+                }
+                // Cumulative acknowledgement advances the supplier's bounded sliding window.
+                state.media.send(
+                    CrewMediaWireFrame.ManifestAccepted(frame.transfer, result.nextChunkIndex)
+                )
                 CrewMediaFrameResult.Accepted
             }
             is CrewMediaReceiveResult.Complete -> {

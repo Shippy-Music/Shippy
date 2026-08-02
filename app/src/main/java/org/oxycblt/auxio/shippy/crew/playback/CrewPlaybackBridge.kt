@@ -25,14 +25,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.oxycblt.auxio.playback.service.PlaybackTransitionGuard
 import org.oxycblt.auxio.playback.state.PlaybackCommandFactoryImpl
+import org.oxycblt.auxio.playback.state.PlaybackMutation
+import org.oxycblt.auxio.playback.state.PlaybackMutationInterceptor
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.RepeatMode
@@ -50,6 +52,9 @@ import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewSubmitResult
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
+import org.oxycblt.auxio.shippy.crew.sync.CrewDriftDecision
+import org.oxycblt.auxio.shippy.crew.sync.CrewDriftPolicy
+import org.oxycblt.auxio.shippy.crew.sync.correctPlaybackDrift
 import org.oxycblt.auxio.shippy.domain.CandidateKind
 import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
 import org.oxycblt.auxio.shippy.domain.PlaybackResolutionCoordinator
@@ -62,8 +67,14 @@ import org.oxycblt.auxio.shippy.provider.ProviderSettings
 import org.oxycblt.auxio.shippy.provider.StreamConstraints
 import timber.log.Timber as L
 
-private const val RECONCILE_DELAY_MS = 150L
-private const val SEEK_DRIFT_MS = 900L
+private const val DRIFT_RECONCILE_INTERVAL_MS = 2_000L
+internal const val CREW_START_LEAD_MS = 300L
+private val CREW_DRIFT_POLICY =
+    CrewDriftPolicy(
+        ignoredDriftMs = 120,
+        speedCorrectionLimitMs = 900,
+        speedCorrectionFraction = 0.025,
+    )
 
 /**
  * Lifecycle bridge between the active Crew's canonical state and Auxio's one playback manager. It
@@ -82,13 +93,15 @@ constructor(
     private val temporaryMediaIndex: CrewTemporaryMediaIndex,
     private val privateSources: CrewPrivateSourceRegistry,
     private val transitionGuard: PlaybackTransitionGuard,
-) : PlaybackStateManager.Listener {
+) : PlaybackStateManager.Listener, PlaybackMutationInterceptor {
     private var scope: CoroutineScope? = null
     private var stateJob: Job? = null
     private var completionJob: Job? = null
-    private var reconcileJob: Job? = null
+    private var driftJob: Job? = null
+    private var commandJob: Job? = null
+    private var commandQueue: Channel<List<CrewAction>>? = null
     private var attached = false
-    private var applyingRemote = false
+    @Volatile private var applyingRemote = false
     private var seededSession: String? = null
     private var lastQueueResolutionKey: String? = null
     @Volatile private var latestCrew: CrewState? = null
@@ -104,9 +117,13 @@ constructor(
         val newScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         scope = newScope
         playbackManager.addListener(this)
+        playbackManager.addMutationInterceptor(this)
+        val newCommandQueue = Channel<List<CrewAction>>(Channel.UNLIMITED)
+        commandQueue = newCommandQueue
+        commandJob = newScope.launch { for (actions in newCommandQueue) submitActions(actions) }
         stateJob =
             newScope.launch {
-                activeCrewRuntime.state.collectLatest { runtimeState ->
+                activeCrewRuntime.state.collect { runtimeState ->
                     val active = runtimeState as? ActiveCrewRuntimeState.Active
                     transitionGuard.setCrewActive(active != null)
                     latestCrew = active?.presentation?.crewState
@@ -120,7 +137,8 @@ constructor(
             }
         completionJob =
             newScope.launch {
-                temporaryMediaIndex.completions.collect { completion ->
+                merge(temporaryMediaIndex.playable, temporaryMediaIndex.completions).collect {
+                    completion ->
                     val active =
                         activeCrewRuntime.state.value as? ActiveCrewRuntimeState.Active
                             ?: return@collect
@@ -139,20 +157,39 @@ constructor(
                     }
                 }
             }
+        driftJob =
+            newScope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(DRIFT_RECONCILE_INTERVAL_MS)
+                    val active =
+                        activeCrewRuntime.state.value as? ActiveCrewRuntimeState.Active ?: continue
+                    if (active.presentation.crewState.playback.mode != CrewPlaybackMode.PLAYING) {
+                        continue
+                    }
+                    applyMutex.withLock {
+                        applyCrew(active.presentation.role, active.presentation.crewState)
+                    }
+                }
+            }
     }
 
     fun release() {
         if (!attached) return
         attached = false
         transitionGuard.setCrewActive(false)
+        playbackManager.removeMutationInterceptor(this)
         playbackManager.removeListener(this)
-        reconcileJob?.cancel()
         stateJob?.cancel()
         completionJob?.cancel()
+        driftJob?.cancel()
+        commandJob?.cancel()
+        commandQueue?.close()
         scope?.cancel()
-        reconcileJob = null
         stateJob = null
         completionJob = null
+        driftJob = null
+        commandJob = null
+        commandQueue = null
         scope = null
         latestCrew = null
         localCrewMemberId = null
@@ -161,39 +198,63 @@ constructor(
         lastQueueResolutionKey = null
     }
 
-    override fun onIndexMoved(index: Int) = scheduleReconciliation()
+    override fun onIndexMoved(index: Int) {
+        if (applyingRemote) return
+        val crew = latestCrew ?: return
+        // Every device's player can advance when a track ends. Only the coordinator publishes
+        // that callback; members wait for the canonical event instead of racing and skipping.
+        if (localCrewMemberId != crew.coordinatorMemberId) return
+        val itemId = playbackManager.currentQueueItem?.id ?: return
+        if (itemId != crew.playback.currentQueueItemId) {
+            enqueueActions(selectItemActions(crew, itemId, crewNowMs()))
+        }
+    }
 
     override fun onCanonicalQueueChanged(
         queue: List<org.oxycblt.auxio.shippy.domain.ResolvedQueueItem>,
         index: Int,
         change: org.oxycblt.auxio.playback.state.QueueChange,
-    ) = scheduleReconciliation()
+    ) = Unit
 
     override fun onCanonicalQueueReordered(
         queue: List<org.oxycblt.auxio.shippy.domain.ResolvedQueueItem>,
         index: Int,
         isShuffled: Boolean,
-    ) = scheduleReconciliation()
+    ) = Unit
 
     override fun onCanonicalNewPlayback(
         parent: org.oxycblt.musikr.MusicParent?,
         queue: List<org.oxycblt.auxio.shippy.domain.ResolvedQueueItem>,
         index: Int,
         isShuffled: Boolean,
-    ) = scheduleReconciliation()
+    ) = Unit
 
-    override fun onProgressionChanged(progression: Progression) = scheduleReconciliation()
+    override fun onProgressionChanged(progression: Progression) = Unit
 
-    override fun onRepeatModeChanged(repeatMode: RepeatMode) = scheduleReconciliation()
+    override fun onPlaybackEnded() {
+        if (applyingRemote) return
+        val crew = latestCrew ?: return
+        if (localCrewMemberId != crew.coordinatorMemberId) return
+        val first = crew.queue.firstOrNull()?.id ?: return
+        enqueueActions(
+            listOf(CrewAction.CurrentItemChanged(first), CrewAction.Pause(0, crewNowMs()))
+        )
+    }
 
-    private fun scheduleReconciliation() {
-        if (!attached || applyingRemote) return
-        reconcileJob?.cancel()
-        reconcileJob =
-            scope?.launch {
-                delay(RECONCILE_DELAY_MS)
-                reconcilePlayerToCrew()
-            }
+    override fun onRepeatModeChanged(repeatMode: RepeatMode) = Unit
+
+    override fun intercept(mutation: PlaybackMutation): Boolean {
+        if (!attached || applyingRemote) return false
+        val active = activeCrewRuntime.state.value as? ActiveCrewRuntimeState.Active ?: return false
+        val actions =
+            actionsForMutation(
+                active.presentation.crewState,
+                mutation,
+                active.presentation.localMemberId,
+                crewNowMs(),
+            )
+        if (actions.isEmpty()) return true
+        return enqueueActions(actions)
     }
 
     private suspend fun applyCrew(
@@ -209,10 +270,8 @@ constructor(
             val key = crew.sessionId.toString()
             if (seededSession != key) {
                 seededSession = key
-                // Reconcile from a sibling debounce job. Submitting the first
-                // coordinator action updates this StateFlow and collectLatest
-                // would otherwise cancel the remaining seed actions.
-                scheduleReconciliation()
+                val snapshot = playerSnapshot(playbackManager, crewNowMs(), localCrewMemberId)
+                enqueueActions(crewDiff(crew, snapshot))
             }
             return
         }
@@ -297,37 +356,75 @@ constructor(
             }
             val repeat = crew.repeatMode.toPlayerRepeatMode()
             if (playbackManager.repeatMode != repeat) playbackManager.repeatMode(repeat)
-            val targetPosition = crewPositionAt(crew.playback, monotonicNowMs())
+            val targetPosition = crewPositionAt(crew.playback, crewNowMs())
             val positionIsAuthoritative =
                 crew.playback.mode == CrewPlaybackMode.PLAYING ||
                     crew.playback.mode == CrewPlaybackMode.PAUSED
             if (
                 positionIsAuthoritative &&
                     targetId != null &&
-                    playbackManager.currentQueueItem?.id == targetId &&
-                    kotlin.math.abs(
-                        playbackManager.progression.calculateElapsedPositionMs() - targetPosition
-                    ) > SEEK_DRIFT_MS
+                    playbackManager.currentQueueItem?.id == targetId
             ) {
-                playbackManager.seekTo(targetPosition)
+                when (
+                    val correction =
+                        correctPlaybackDrift(
+                            expectedPositionMs = targetPosition,
+                            actualPositionMs =
+                                playbackManager.progression.calculateElapsedPositionMs(),
+                            supportsSpeedCorrection =
+                                crew.playback.mode == CrewPlaybackMode.PLAYING,
+                            policy = CREW_DRIFT_POLICY,
+                        )
+                ) {
+                    CrewDriftDecision.InSync -> playbackManager.playbackSpeed(1f)
+                    is CrewDriftDecision.CorrectSpeed ->
+                        playbackManager.playbackSpeed(correction.playbackRate)
+                    is CrewDriftDecision.Seek -> {
+                        playbackManager.playbackSpeed(1f)
+                        playbackManager.seekTo(correction.positionMs)
+                    }
+                }
             }
             when (crew.playback.mode) {
-                CrewPlaybackMode.PLAYING ->
+                CrewPlaybackMode.PLAYING -> {
+                    val waitMs = localDelayUntil(crew.playback.sessionEpochMs)
+                    if (waitMs > 0) {
+                        kotlinx.coroutines.delay(waitMs)
+                        val current =
+                            (activeCrewRuntime.state.value as? ActiveCrewRuntimeState.Active)
+                                ?.presentation
+                                ?.crewState
+                        if (
+                            current?.sessionId != crew.sessionId ||
+                                current.term != crew.term ||
+                                current.lastSequence != crew.lastSequence ||
+                                current.playback.mode != CrewPlaybackMode.PLAYING
+                        ) {
+                            return
+                        }
+                    }
                     if (!playbackManager.progression.isPlaying) playbackManager.playing(true)
+                }
                 CrewPlaybackMode.PAUSED ->
-                    if (playbackManager.progression.isPlaying) playbackManager.playing(false)
+                    if (playbackManager.progression.isPlaying) {
+                        playbackManager.playbackSpeed(1f)
+                        playbackManager.playing(false)
+                    }
                 CrewPlaybackMode.ENDED ->
                     if (playbackManager.progression.isPlaying) {
+                        playbackManager.playbackSpeed(1f)
                         playbackManager.playing(false)
                     }
                 CrewPlaybackMode.IDLE,
                 CrewPlaybackMode.PREPARING,
-                CrewPlaybackMode.BUFFERING ->
+                CrewPlaybackMode.BUFFERING -> {
+                    playbackManager.playbackSpeed(1f)
                     // newPlayback() starts ExoPlayer immediately. A queue event
                     // in PREPARING must not audibly race the later scheduled Play.
                     if (replacedQueue && playbackManager.progression.isPlaying) {
                         playbackManager.playing(false)
                     }
+                }
             }
         } catch (error: CancellationException) {
             throw error
@@ -340,19 +437,54 @@ constructor(
         }
     }
 
-    private suspend fun reconcilePlayerToCrew() {
-        val crew = latestCrew ?: return
-        val snapshot = playerSnapshot(playbackManager, monotonicNowMs(), localCrewMemberId)
-        for (action in crewDiff(crew, snapshot)) {
+    private fun enqueueActions(actions: List<CrewAction>): Boolean {
+        if (actions.isEmpty()) return true
+        val accepted = commandQueue?.trySend(actions)?.isSuccess == true
+        if (!accepted) L.e("Crew command queue unavailable; leaving local player unchanged")
+        return accepted
+    }
+
+    private suspend fun submitActions(actions: List<CrewAction>) {
+        for (action in actions) {
             val accepted =
-                activeCrewRuntime.submit(action) as? ActiveCrewSubmitResult.Accepted ?: return
+                activeCrewRuntime.submit(action) as? ActiveCrewSubmitResult.Accepted
+                    ?: run {
+                        L.w("Crew command was not submitted because the active session changed")
+                        return
+                    }
             when (accepted.result) {
                 is CrewSubmitResult.Submitted,
                 is CrewSubmitResult.AlreadyPending -> Unit
                 CrewSubmitResult.CapacityReached,
-                is CrewSubmitResult.Rejected -> return
+                is CrewSubmitResult.Rejected -> {
+                    L.w("Crew command was rejected by the active session")
+                    return
+                }
             }
         }
+    }
+
+    /** Current time in the active coordinator's epoch domain. */
+    private fun crewNowMs(): Long {
+        val localNow = System.currentTimeMillis().coerceAtLeast(0)
+        val estimate =
+            (activeCrewRuntime.state.value as? ActiveCrewRuntimeState.Active)
+                ?.presentation
+                ?.clockEstimate
+                ?.value
+        return estimate?.clientToCoordinator(localNow)?.coerceAtLeast(0) ?: localNow
+    }
+
+    /** Converts one coordinator epoch to a delay on this device's clock. */
+    private fun localDelayUntil(coordinatorEpochMs: Long): Long {
+        val localNow = System.currentTimeMillis().coerceAtLeast(0)
+        val estimate =
+            (activeCrewRuntime.state.value as? ActiveCrewRuntimeState.Active)
+                ?.presentation
+                ?.clockEstimate
+                ?.value
+        val localTarget = estimate?.coordinatorToClient(coordinatorEpochMs) ?: coordinatorEpochMs
+        return (localTarget - localNow).coerceAtLeast(0)
     }
 }
 
@@ -365,6 +497,196 @@ internal data class PlayerCrewSnapshot(
     val shuffled: Boolean,
     val repeatMode: CrewRepeatMode,
 )
+
+/**
+ * Converts one explicit local playback request into ordered Crew mutations. The local player is not
+ * touched until these actions return through the canonical Crew state.
+ */
+internal fun actionsForMutation(
+    crew: CrewState,
+    mutation: PlaybackMutation,
+    localMemberId: CrewMemberId?,
+    nowMs: Long,
+): List<CrewAction> =
+    when (mutation) {
+        is PlaybackMutation.Start -> {
+            val queue =
+                stampCrewContributor(
+                    canonicalQueueForCrew(mutation.command.queue.map { it.item }),
+                    localMemberId,
+                )
+            val selected =
+                mutation.command.selectedItemId?.takeIf { selectedId ->
+                    queue.any { it.id == selectedId }
+                } ?: queue.firstOrNull()?.id
+            if (selected == null) {
+                emptyList()
+            } else {
+                buildList {
+                    add(CrewAction.QueueReplaced(queue))
+                    add(CrewAction.CurrentItemChanged(selected))
+                    if (crew.shuffleEnabled != mutation.command.shuffled) {
+                        add(CrewAction.ShuffleChanged(mutation.command.shuffled))
+                    }
+                    add(
+                        CrewAction.Play(
+                            positionAtEpochMs = 0,
+                            sessionEpochMs = nowMs + CREW_START_LEAD_MS,
+                        )
+                    )
+                }
+            }
+        }
+        PlaybackMutation.Next ->
+            adjacentItemId(crew, forward = true)?.let { selected ->
+                selectItemActions(crew, selected, nowMs)
+            } ?: emptyList()
+        PlaybackMutation.Previous ->
+            adjacentItemId(crew, forward = false)?.let { selected ->
+                selectItemActions(crew, selected, nowMs)
+            } ?: emptyList()
+        is PlaybackMutation.GoTo ->
+            if (
+                mutation.itemId == crew.playback.currentQueueItemId ||
+                    crew.queue.none { it.id == mutation.itemId }
+            ) {
+                emptyList()
+            } else {
+                selectItemActions(crew, mutation.itemId, nowMs)
+            }
+        is PlaybackMutation.PlayNext -> {
+            val items =
+                stampCrewContributor(
+                    canonicalQueueForCrew(mutation.items.map { it.item }),
+                    localMemberId,
+                )
+            val insertionIndex =
+                (crew.queue.indexOfFirst { it.id == crew.playback.currentQueueItemId } + 1)
+                    .coerceIn(0, crew.queue.size)
+            val beforeItemId = crew.queue.getOrNull(insertionIndex)?.id
+            buildList {
+                items.forEachIndexed { offset, item ->
+                    add(
+                        CrewAction.QueueItemInserted(
+                            item = item,
+                            index = insertionIndex + offset,
+                            beforeItemId = beforeItemId,
+                            afterItemId =
+                                if (beforeItemId == null) {
+                                    items.getOrNull(offset - 1)?.id ?: crew.queue.lastOrNull()?.id
+                                } else null,
+                        )
+                    )
+                }
+                if (crew.queue.isEmpty() && items.isNotEmpty()) {
+                    add(CrewAction.Play(0, nowMs + CREW_START_LEAD_MS))
+                }
+            }
+        }
+        is PlaybackMutation.AddToQueue -> {
+            val items =
+                stampCrewContributor(
+                    canonicalQueueForCrew(mutation.items.map { it.item }),
+                    localMemberId,
+                )
+            buildList {
+                items.forEachIndexed { offset, item ->
+                    add(
+                        CrewAction.QueueItemInserted(
+                            item = item,
+                            index = crew.queue.size + offset,
+                            afterItemId =
+                                items.getOrNull(offset - 1)?.id ?: crew.queue.lastOrNull()?.id,
+                        )
+                    )
+                }
+                if (crew.queue.isEmpty() && items.isNotEmpty()) {
+                    add(CrewAction.Play(0, nowMs + CREW_START_LEAD_MS))
+                }
+            }
+        }
+        is PlaybackMutation.MoveQueueItem -> {
+            val withoutMoved = crew.queue.filterNot { it.id == mutation.itemId }
+            val destination =
+                mutation.beforeId?.let { beforeId ->
+                    withoutMoved.indexOfFirst { it.id == beforeId }.takeIf { it >= 0 }
+                }
+                    ?: mutation.afterId?.let { afterId ->
+                        withoutMoved.indexOfFirst { it.id == afterId }.takeIf { it >= 0 }?.plus(1)
+                    }
+            if (
+                destination == null ||
+                    crew.queue.none { it.id == mutation.itemId } ||
+                    destination !in 0..withoutMoved.size
+            ) {
+                emptyList()
+            } else {
+                listOf(
+                    CrewAction.QueueItemMoved(
+                        itemId = mutation.itemId,
+                        newIndex = destination,
+                        beforeItemId = mutation.beforeId,
+                        afterItemId = if (mutation.beforeId == null) mutation.afterId else null,
+                    )
+                )
+            }
+        }
+        is PlaybackMutation.RemoveQueueItem ->
+            if (crew.queue.any { it.id == mutation.itemId }) {
+                buildList {
+                    add(CrewAction.QueueItemRemoved(mutation.itemId))
+                    if (
+                        mutation.itemId == crew.playback.currentQueueItemId && crew.queue.size > 1
+                    ) {
+                        add(playbackModeAction(crew, positionMs = 0, nowMs = nowMs))
+                    }
+                }
+            } else {
+                emptyList()
+            }
+        is PlaybackMutation.SetShuffled ->
+            if (crew.shuffleEnabled == mutation.enabled) emptyList()
+            else listOf(CrewAction.ShuffleChanged(mutation.enabled))
+        is PlaybackMutation.SetPlaying -> {
+            val position = crewPlaybackPositionForCommand(crew, nowMs)
+            if (mutation.playing) {
+                listOf(CrewAction.Play(position, nowMs + CREW_START_LEAD_MS))
+            } else listOf(CrewAction.Pause(position, nowMs))
+        }
+        is PlaybackMutation.SetRepeatMode -> {
+            val mode = mutation.repeatMode.toCrewRepeatMode()
+            if (crew.repeatMode == mode) emptyList() else listOf(CrewAction.RepeatChanged(mode))
+        }
+        is PlaybackMutation.SeekTo -> listOf(CrewAction.Seek(mutation.positionMs, nowMs))
+    }
+
+private fun adjacentItemId(crew: CrewState, forward: Boolean): QueueItemId? {
+    if (crew.queue.isEmpty()) return null
+    val currentIndex = crew.queue.indexOfFirst { it.id == crew.playback.currentQueueItemId }
+    if (currentIndex < 0) return crew.queue.first().id
+    val nextIndex =
+        if (forward) (currentIndex + 1) % crew.queue.size
+        else (currentIndex - 1 + crew.queue.size) % crew.queue.size
+    return crew.queue[nextIndex].id
+}
+
+private fun selectItemActions(
+    crew: CrewState,
+    selected: QueueItemId,
+    nowMs: Long,
+): List<CrewAction> =
+    listOf(
+        CrewAction.CurrentItemChanged(selected),
+        playbackModeAction(crew, positionMs = 0, nowMs = nowMs),
+    )
+
+private fun playbackModeAction(crew: CrewState, positionMs: Long, nowMs: Long): CrewAction =
+    if (crew.playback.mode == CrewPlaybackMode.PLAYING) {
+        CrewAction.Play(positionMs, nowMs + CREW_START_LEAD_MS)
+    } else CrewAction.Pause(positionMs, nowMs)
+
+private fun crewPlaybackPositionForCommand(crew: CrewState, nowMs: Long): Long =
+    crewPositionAt(crew.playback, nowMs).coerceAtLeast(0)
 
 /** Removes device-only playback material before a queue crosses into the Crew protocol. */
 internal fun canonicalQueueForCrew(items: List<QueueItem>): List<QueueItem> =
@@ -391,10 +713,7 @@ internal fun stampCrewContributor(
     if (localMemberId == null) items
     else
         items.map { item ->
-            if (
-                item.contributorId == null &&
-                    item.track.candidates.any { it.kind == CandidateKind.LOCAL }
-            ) {
+            if (item.contributorId == null) {
                 item.copy(contributorId = localMemberId.value)
             } else item
         }
@@ -452,7 +771,9 @@ internal fun crewDiff(crew: CrewState, player: PlayerCrewSnapshot): List<CrewAct
             if (player.playing) CrewAction.Play(player.positionMs, player.sessionEpochMs)
             else CrewAction.Pause(player.positionMs, player.sessionEpochMs)
     } else if (
-        crewHasPlaybackIntent && kotlin.math.abs(player.positionMs - crewPosition) > SEEK_DRIFT_MS
+        crewHasPlaybackIntent &&
+            kotlin.math.abs(player.positionMs - crewPosition) >
+                CREW_DRIFT_POLICY.speedCorrectionLimitMs
     ) {
         actions += CrewAction.Seek(player.positionMs, player.sessionEpochMs)
     }
@@ -472,5 +793,3 @@ private fun RepeatMode.toCrewRepeatMode() =
         RepeatMode.ALL -> CrewRepeatMode.ALL
         RepeatMode.TRACK -> CrewRepeatMode.ONE
     }
-
-private fun monotonicNowMs(): Long = android.os.SystemClock.elapsedRealtime()

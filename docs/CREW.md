@@ -74,6 +74,19 @@ Join flow:
 All members have equal default product permissions. One coordinator exists to
 avoid conflicting clocks and unordered writes.
 
+### Profile boundary
+
+Crew has no account system. A local profile consists only of a display name, a
+stable profile UUID, and a deterministic 16-character avatar descriptor. The
+installation UUID is a separate device identity and is never placed in member
+metadata, media metadata, or artwork payloads. Membership is the existing
+protocol-scoped member ID. Only the bounded profile snapshot of active members
+is replicated through `MemberJoined`, `MemberUpdated`, and session snapshots;
+local artwork URIs, image bytes, and filesystem paths never cross a Crew link.
+
+New sessions use protocol V3 for that member shape. V1/V2 links are rejected as
+unsupported instead of being decoded with an incompatible profile payload.
+
 Coordinator responsibilities:
 
 - Assign monotonically increasing event sequence numbers
@@ -775,6 +788,46 @@ have loopback tests authored, but are not compiled or device-proven. Hosted
 signaling, optional coturn REST credentials, and joined-session network-change
 redial are implemented at source level; real NAT traversal, coturn allocation,
 and multi-phone runtime proof remain owner device acceptance.
+
+## Beta-readiness protocol v3 addendum (2026-08-02)
+
+This section supersedes older source-status wording below and elsewhere in this
+document.
+
+- Shared UI commands enter as typed user-intent mutations. Local Media3
+  callbacks acknowledge/project state; they never independently author a Crew
+  command. One ordered coordinator event is the only durable shared mutation.
+- CONTROL carries ordered commands/events/snapshots/readiness/availability;
+  CLOCK runs two-second NTP-style probes; REACTION is ephemeral; MEDIA is
+  independently backpressured. A saturated media lane cannot starve control.
+- Play/start targets use coordinator epoch. Members report readiness, the
+  coordinator chooses a bounded future start, late members catch up within a
+  bounded window, and steady-state drift uses ignore/speed-adjust/seek bands.
+- Canonical queue occurrences remain visible even when not yet playable.
+  Granular edits use stable occurrence IDs and before/after anchors, so
+  duplicates, stale views, and concurrent moves do not collapse into queue
+  replacement.
+- Push & Pull accepts an exact owned source from any active member. In the
+  coordinator-centred topology, a non-coordinator source is fetched, cached
+  temporarily, advertised, and redistributed by the coordinator. Transfers
+  use 44 KiB chunks, a four-chunk window, cumulative acknowledgements,
+  resumable verified ranges, disk-backed assembly, and exact final hashing.
+- `shippy-crew-temp://` is an opaque active-session locator. Media3 can read
+  verified contiguous ranges while transfer continues. Reader leases defer
+  cleanup; ending Crew removes temporary bytes after active readers release.
+  Explicit Download is the only permanent promotion.
+- Active/reconnecting Crew retains service ownership even while paused.
+  Checkpoint plus renewable member lease restore the same membership after
+  process/route loss where authentication remains valid. Revocation or an
+  explicit terminal event clears recovery state.
+- Profile ID, device install ID, and session membership ID are separate.
+  Display name/generated avatar updates are canonical member events; avatar
+  descriptors contain no local path or URI. Recent activity is session-local
+  and bounded.
+
+The source behavior above has JVM/source-level evidence. It remains a beta
+candidate until the two/three-device and route-transition matrix in
+`DEVICE_TEST_HANDOFF.md` passes.
 
 QR is an invitation/authentication mechanism. Signaling, ICE/STUN/TURN, LAN
 discovery, and relay remain necessary and are not collapsed into “QR contains

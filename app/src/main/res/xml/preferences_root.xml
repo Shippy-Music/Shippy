@@ -26,16 +26,26 @@
         app:summary="@string/set_audio_desc"
         app:title="@string/set_audio" />
 
+    <PreferenceCategory
+        app:key="@string/set_key_provider_category"
+        app:title="@string/set_connections" />
+
     <Preference
         app:key="@string/set_key_lastfm"
         app:summary="@string/set_lastfm_disconnected"
         app:title="@string/set_lastfm" />
 
-    <PreferenceCategory
-        app:key="@string/set_key_provider_category"
-        app:title="@string/set_streaming_providers" />
-
     <PreferenceCategory app:title="@string/lbl_crew">
+
+        <Preference
+            app:key="@string/set_key_crew_display_name"
+            app:summary="@string/set_crew_display_name_desc"
+            app:title="@string/set_crew_display_name" />
+
+        <Preference
+            app:key="@string/set_key_crew_avatar"
+            app:summary="@string/set_crew_avatar_desc_default"
+            app:title="@string/set_crew_avatar" />
 
         <SwitchPreferenceCompat
             app:defaultValue="false"
@@ -50,7 +60,7 @@
 
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/set_library">
+    <PreferenceCategory app:title="@string/set_library_and_files">
 
         <org.oxycblt.auxio.settings.ui.WrappedDialogPreference
             app:key="@string/set_key_music_dirs"
@@ -61,6 +71,11 @@
             app:key="@string/set_key_download_destination_picker"
             app:summary="@string/set_download_destination_unselected"
             app:title="@string/set_download_destination" />
+
+        <Preference
+            app:key="@string/set_key_clear_playback_cache"
+            app:summary="@string/set_clear_playback_cache_desc"
+            app:title="@string/set_clear_playback_cache" />
 
         <Preference
             app:key="@string/set_key_reindex"

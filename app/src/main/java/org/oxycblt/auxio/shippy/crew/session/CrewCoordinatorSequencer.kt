@@ -34,6 +34,8 @@ data class CrewActionRequest(
     val issuingMemberId: CrewMemberId,
     val clientMonotonicTimestampMs: Long,
     val action: CrewAction,
+    /** Canonical sequence observed when the issuer authored this request. */
+    val baseSequence: EventSequence? = null,
 ) {
     init {
         require(clientMonotonicTimestampMs >= 0) {
@@ -57,6 +59,7 @@ enum class CrewSequenceRejection {
     REQUESTER_NOT_ACTIVE,
     PROTOCOL_MISMATCH,
     DUPLICATE_RECEIPT_UNAVAILABLE,
+    STALE_BASE_REVISION,
     ACTION_REJECTED,
 }
 
@@ -115,6 +118,13 @@ class CrewCoordinatorSequencer(
         if (!isAuthorizedAction(request.action, authenticatedRequester)) {
             return rejected(CrewSequenceRejection.ACTION_REJECTED)
         }
+        if (
+            request.baseSequence != null &&
+                request.baseSequence != currentState.lastSequence &&
+                request.action.requiresExactQueueBase()
+        ) {
+            return rejected(CrewSequenceRejection.STALE_BASE_REVISION)
+        }
 
         val event =
             DurableCrewEvent(
@@ -160,6 +170,15 @@ class CrewCoordinatorSequencer(
             is CrewAction.MemberLeft ->
                 action.memberId == requester || requester == currentState.coordinatorMemberId
             else -> true
+        }
+
+    /** Stable IDs/anchors can rebase safely; whole replacements and bare indices cannot. */
+    private fun CrewAction.requiresExactQueueBase(): Boolean =
+        when (this) {
+            is CrewAction.QueueReplaced -> true
+            is CrewAction.QueueItemInserted -> beforeItemId == null && afterItemId == null
+            is CrewAction.QueueItemMoved -> beforeItemId == null && afterItemId == null
+            else -> false
         }
 
     private fun eventSequence(action: CrewAction): EventSequence =

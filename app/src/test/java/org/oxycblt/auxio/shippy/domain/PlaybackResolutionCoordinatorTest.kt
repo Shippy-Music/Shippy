@@ -84,6 +84,11 @@ class PlaybackResolutionCoordinatorTest {
             secondReady.value.playback.queueItemId,
         )
         assertEquals(first.track.id, second.track.id)
+        assertEquals(
+            firstReady.value.playback.mediaObjectKey,
+            secondReady.value.playback.mediaObjectKey,
+        )
+        assertTrue(firstReady.value.playback.cacheEligible)
     }
 
     @Test
@@ -333,8 +338,7 @@ class PlaybackResolutionCoordinatorTest {
                 mimeType = "audio/mpeg",
                 objectSizeBytes = bytes.size.toLong(),
                 objectIntegrity = CrewMediaDigest.sha256(bytes),
-                chunks =
-                    listOf(CrewMediaChunkDescriptor(0, bytes.size, CrewMediaDigest.sha256(bytes))),
+                chunks = listOf(CrewMediaChunkDescriptor(0, bytes.size)),
             )
         return CrewTemporaryMediaIndex().also {
             it.beginSession(session)

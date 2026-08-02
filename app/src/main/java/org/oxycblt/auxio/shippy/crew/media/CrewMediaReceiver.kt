@@ -18,11 +18,12 @@
 package org.oxycblt.auxio.shippy.crew.media
 
 import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaCache
+import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaCache.CrewTemporaryMediaAssembly
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 
 data class CrewMediaReceiverPolicy(
     val maxAssemblies: Int = 2,
-    val maxBufferedBytes: Long = CREW_MEDIA_MAX_OBJECT_BYTES,
+    val maxBufferedBytes: Long = CREW_MEDIA_SESSION_CACHE_BYTES,
 ) {
     init {
         require(maxAssemblies > 0 && maxBufferedBytes > 0)
@@ -30,7 +31,15 @@ data class CrewMediaReceiverPolicy(
 }
 
 sealed interface CrewMediaReceiveResult {
-    data object Accepted : CrewMediaReceiveResult
+    class Accepted(val nextChunkIndex: Int = 0, val progress: CrewMediaReceiveProgress? = null) :
+        CrewMediaReceiveResult {
+        override fun equals(other: Any?) =
+            other is Accepted && nextChunkIndex == other.nextChunkIndex
+
+        override fun hashCode() = nextChunkIndex
+
+        override fun toString() = "Accepted(nextChunkIndex=$nextChunkIndex)"
+    }
 
     data class Complete(val manifest: CrewMediaManifest, val file: java.io.File) :
         CrewMediaReceiveResult
@@ -39,6 +48,12 @@ sealed interface CrewMediaReceiveResult {
 
     data class Rejected(val reason: String) : CrewMediaReceiveResult
 }
+
+data class CrewMediaReceiveProgress(
+    val manifest: CrewMediaManifest,
+    val file: java.io.File,
+    val contiguousBytes: Long,
+)
 
 /**
  * Bounded receiver: out-of-window media requests retry; protocol corruption is rejected locally.
@@ -50,7 +65,6 @@ class CrewMediaReceiver(
 ) {
     private val assemblies = linkedMapOf<CrewMediaTransferRef, Assembly>()
     private var reservedBytes = 0L
-    private var bufferedBytes = 0L
 
     @Synchronized
     fun accept(manifest: CrewMediaManifest): CrewMediaReceiveResult {
@@ -58,7 +72,10 @@ class CrewMediaReceiver(
             return CrewMediaReceiveResult.Rejected("wrong session")
         assemblies[manifest.transfer]?.let { existing ->
             return if (existing.manifest == manifest) {
-                CrewMediaReceiveResult.Accepted
+                CrewMediaReceiveResult.Accepted(
+                    existing.writer.nextMissingIndex,
+                    existing.writer.progress(),
+                )
             } else {
                 CrewMediaReceiveResult.Rejected("conflicting manifest")
             }
@@ -69,9 +86,14 @@ class CrewMediaReceiver(
         ) {
             return CrewMediaReceiveResult.Retry("receiver window full")
         }
-        assemblies[manifest.transfer] = Assembly(manifest)
+        val writer =
+            runCatching { cache.openAssembly(manifest) }
+                .getOrElse {
+                    return CrewMediaReceiveResult.Retry("temporary cache unavailable")
+                }
+        assemblies[manifest.transfer] = Assembly(manifest, writer)
         reservedBytes += manifest.objectSizeBytes
-        return CrewMediaReceiveResult.Accepted
+        return CrewMediaReceiveResult.Accepted(writer.nextMissingIndex, writer.progress())
     }
 
     @Synchronized
@@ -89,25 +111,26 @@ class CrewMediaReceiver(
         val payload = chunk.copyPayload()
         if (
             payload.size != descriptor.sizeBytes ||
-                CrewMediaDigest.sha256(payload) != descriptor.integrity
+                CrewMediaDigest.sha256(payload) != chunk.chunkIntegrity
         ) {
             return CrewMediaReceiveResult.Rejected("chunk integrity mismatch")
         }
-        if (!assembly.chunks.containsKey(chunk.index)) {
-            if (bufferedBytes + payload.size > policy.maxBufferedBytes) {
-                return CrewMediaReceiveResult.Retry("receiver window full")
+        if (!assembly.writer.isComplete) {
+            val appended = runCatching { assembly.writer.append(chunk.index, payload) }
+            if (appended.isFailure) {
+                return CrewMediaReceiveResult.Retry("temporary cache unavailable")
             }
-            assembly.chunks[chunk.index] = payload
-            bufferedBytes += payload.size
         }
-        if (assembly.chunks.size != assembly.manifest.chunks.size)
-            return CrewMediaReceiveResult.Accepted
-        val orderedChunks =
-            assembly.manifest.chunks.indices.map { index -> assembly.chunks.getValue(index) }
-        return runCatching { cache.put(assembly.manifest, orderedChunks) }
+        if (!assembly.writer.isComplete)
+            return CrewMediaReceiveResult.Accepted(
+                assembly.writer.nextMissingIndex,
+                assembly.writer.progress(),
+            )
+        return runCatching { assembly.writer.commit() }
             .fold(
                 onSuccess = { file ->
-                    cancel(chunk.transfer)
+                    assemblies.remove(chunk.transfer)
+                    reservedBytes -= assembly.manifest.objectSizeBytes
                     CrewMediaReceiveResult.Complete(assembly.manifest, file)
                 },
                 onFailure = {
@@ -122,11 +145,12 @@ class CrewMediaReceiver(
     fun cancel(transfer: CrewMediaTransferRef): Boolean {
         val assembly = assemblies.remove(transfer) ?: return false
         reservedBytes -= assembly.manifest.objectSizeBytes
-        bufferedBytes -= assembly.chunks.values.sumOf(ByteArray::size)
+        assembly.writer.abort()
         return true
     }
 
-    private class Assembly(val manifest: CrewMediaManifest) {
-        val chunks = mutableMapOf<Int, ByteArray>()
-    }
+    private class Assembly(val manifest: CrewMediaManifest, val writer: CrewTemporaryMediaAssembly)
+
+    private fun CrewTemporaryMediaAssembly.progress() =
+        CrewMediaReceiveProgress(manifest, partialFile, contiguousVerifiedBytes)
 }

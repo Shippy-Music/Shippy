@@ -60,6 +60,9 @@ interface PlaybackStateHolder {
      */
     fun playing(playing: Boolean)
 
+    /** Applies a short-lived local synchronization rate without authoring a playback command. */
+    fun playbackSpeed(speed: Float)
+
     /**
      * Seek to a position in the current song.
      *
@@ -199,6 +202,9 @@ sealed interface StateAck {
      * @see PlaybackStateHolder.seekTo
      */
     data object ProgressionChanged : StateAck
+
+    /** The local decoder reached the end of its projected queue. This is telemetry, not intent. */
+    data object PlaybackEnded : StateAck
 
     /** @see PlaybackStateHolder.repeatMode */
     data object RepeatModeChanged : StateAck

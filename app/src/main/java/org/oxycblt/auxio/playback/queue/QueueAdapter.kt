@@ -26,6 +26,7 @@ import androidx.core.view.isInvisible
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.R as MR
 import com.google.android.material.shape.MaterialShapeDrawable
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemEditableSongBinding
 import org.oxycblt.auxio.list.EditClickListListener
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
@@ -180,6 +181,15 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
             binding.songAlbumCover.bindArtwork(track.artwork, track.album ?: track.title)
             binding.songName.text = track.title
             binding.songInfo.text = track.artists.joinToString(", ")
+        }
+        item.contributorDisplayName?.let { contributor ->
+            val source = binding.songInfo.text?.takeIf { it.isNotBlank() }
+            binding.songInfo.text =
+                listOfNotNull(
+                        source,
+                        binding.context.getString(R.string.lbl_added_by_crew_member, contributor),
+                    )
+                    .joinToString(" · ")
         }
         // Not swiping this ViewHolder if it's being re-bound, ensure that the background is
         // not visible. See QueueDragCallback for why this is done.

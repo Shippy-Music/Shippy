@@ -20,7 +20,12 @@ package org.oxycblt.auxio.shippy.crew.core
 import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.domain.QueueItemId
 
-data class CrewMember(val id: CrewMemberId, val displayName: String) {
+data class CrewMember(
+    val id: CrewMemberId,
+    val displayName: String,
+    val profileId: CrewProfileId = CrewProfileId.fromMember(id),
+    val avatar: CrewAvatarDescriptor = CrewAvatarDescriptor.generated(profileId),
+) {
     init {
         require(displayName.isNotBlank()) { "Crew member displayName cannot be blank" }
     }

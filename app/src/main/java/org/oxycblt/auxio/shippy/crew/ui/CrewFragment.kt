@@ -19,6 +19,8 @@ package org.oxycblt.auxio.shippy.crew.ui
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.text.InputType
@@ -50,11 +52,13 @@ import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentCrewBinding
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.invite.CrewInviteDecodeResult
 import org.oxycblt.auxio.shippy.crew.lan.CrewLanSignalConnectFailure
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewActivity
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewMode
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewPresentation
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeFailure
@@ -128,6 +132,11 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 model.peerMediaBlocked.collect(::renderPeerMediaBlocked)
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                model.activity.collect(::renderActivity)
             }
         }
     }
@@ -319,21 +328,8 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
             removeAllViews()
             members.forEach { member ->
                 addView(
-                    TextView(context).apply {
-                        text =
-                            if (member.id == presentation.localMemberId) {
-                                getString(R.string.lbl_crew_member_local, member.displayName)
-                            } else {
-                                member.displayName
-                            }
-                        setCompoundDrawablesRelativeWithIntrinsicBounds(
-                            R.drawable.ic_person_24,
-                            0,
-                            0,
-                            0,
-                        )
-                        compoundDrawablePadding =
-                            resources.getDimensionPixelSize(R.dimen.spacing_small)
+                    LinearLayout(context).apply {
+                        gravity = Gravity.CENTER_VERTICAL
                         layoutParams =
                             LinearLayout.LayoutParams(
                                     LinearLayout.LayoutParams.MATCH_PARENT,
@@ -343,9 +339,56 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
                                     topMargin =
                                         resources.getDimensionPixelSize(R.dimen.spacing_small)
                                 }
+                        addView(crewAvatarView(member))
+                        addView(
+                            TextView(context).apply {
+                                text =
+                                    if (member.id == presentation.localMemberId) {
+                                        getString(
+                                            R.string.lbl_crew_member_local,
+                                            member.displayName,
+                                        )
+                                    } else {
+                                        member.displayName
+                                    }
+                                layoutParams =
+                                    LinearLayout.LayoutParams(
+                                            0,
+                                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                                            1f,
+                                        )
+                                        .apply {
+                                            marginStart =
+                                                resources.getDimensionPixelSize(
+                                                    R.dimen.spacing_small
+                                                )
+                                        }
+                            }
+                        )
                     }
                 )
             }
+        }
+    }
+
+    private fun crewAvatarView(member: CrewMember): TextView {
+        val size = (36 * resources.displayMetrics.density).toInt()
+        val descriptor = member.avatar.value
+        val red = descriptor.substring(0, 2).toInt(16)
+        val green = descriptor.substring(2, 4).toInt(16)
+        val blue = descriptor.substring(4, 6).toInt(16)
+        val backgroundColor = Color.rgb((red + 255) / 2, (green + 255) / 2, (blue + 255) / 2)
+        return TextView(requireContext()).apply {
+            text = member.displayName.trim().take(1).uppercase()
+            gravity = Gravity.CENTER
+            setTextColor(Color.BLACK)
+            background =
+                GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(backgroundColor)
+                }
+            layoutParams = LinearLayout.LayoutParams(size, size)
+            contentDescription = member.displayName
         }
     }
 
@@ -398,6 +441,58 @@ class CrewFragment : ViewBindingFragment<FragmentCrewBinding>() {
 
     private fun renderPeerMediaBlocked(blocked: Boolean) {
         binding?.crewPushPullPrompt?.isVisible = blocked && !crewSettings.pushPullEnabled
+    }
+
+    private fun renderActivity(activity: List<ActiveCrewActivity>) {
+        val binding = binding ?: return
+        val presentation =
+            (model.state.value as? ActiveCrewRuntimeState.Active)?.presentation
+                ?: (model.state.value as? ActiveCrewRuntimeState.Ending)?.presentation
+        val visible = activity.isNotEmpty() && presentation != null
+        binding.crewActivityTitle.isVisible = visible
+        binding.crewActivity.isVisible = visible
+        if (!visible || presentation == null) {
+            binding.crewActivity.text = ""
+            return
+        }
+        val crewState = presentation.crewState
+        binding.crewActivity.text =
+            activity.joinToString("\n") { item ->
+                val actor =
+                    crewState.members.firstOrNull { it.id == item.issuingMemberId }?.displayName
+                        ?: getString(R.string.lbl_crew_member_unknown)
+                when (val action = item.action) {
+                    is CrewAction.Play -> getString(R.string.lbl_crew_activity_play, actor)
+                    is CrewAction.Pause -> getString(R.string.lbl_crew_activity_pause, actor)
+                    is CrewAction.CurrentItemChanged ->
+                        getString(
+                            R.string.lbl_crew_activity_track,
+                            actor,
+                            crewState.queue.firstOrNull { it.id == action.itemId }?.track?.title
+                                ?: getString(R.string.lbl_no_track_playing),
+                        )
+                    is CrewAction.QueueItemInserted ->
+                        getString(R.string.lbl_crew_activity_add, actor, action.item.track.title)
+                    is CrewAction.QueueItemRemoved ->
+                        getString(R.string.lbl_crew_activity_remove, actor)
+                    is CrewAction.QueueItemMoved ->
+                        getString(R.string.lbl_crew_activity_move, actor)
+                    is CrewAction.QueueReplaced ->
+                        getString(R.string.lbl_crew_activity_queue, actor)
+                    is CrewAction.ShuffleChanged ->
+                        getString(R.string.lbl_crew_activity_shuffle, actor)
+                    is CrewAction.RepeatChanged ->
+                        getString(R.string.lbl_crew_activity_repeat, actor)
+                    is CrewAction.MemberJoined ->
+                        getString(R.string.lbl_crew_activity_join, action.member.displayName)
+                    is CrewAction.MemberLeft -> getString(R.string.lbl_crew_activity_leave, actor)
+                    is CrewAction.CoordinatorTransferred ->
+                        getString(R.string.lbl_crew_activity_coordinator, actor)
+                    CrewAction.SessionEnded -> getString(R.string.lbl_crew_activity_end, actor)
+                    is CrewAction.MemberUpdated,
+                    is CrewAction.Seek -> ""
+                }
+            }
     }
 
     private fun showReactionPicker() {

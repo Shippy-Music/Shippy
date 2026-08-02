@@ -177,6 +177,13 @@ internal constructor(
                         manifest.transfer.supplierMemberId == supplyingMemberId &&
                         temporaryIndex.complete(manifest, file)
 
+                override fun onTemporaryMediaProgress(progress: CrewMediaReceiveProgress): Boolean =
+                    temporaryIndex.progress(
+                        progress.manifest,
+                        progress.file,
+                        progress.contiguousBytes,
+                    )
+
                 override fun onTransferRetryLater(
                     transfer: CrewMediaTransferRef,
                     peerMemberId: CrewMemberId,
@@ -334,9 +341,8 @@ internal constructor(
         mutablePeerMediaBlocked.value = false
         runCatching { policy.deactivate(sessionId) }
         runCatching { router.close() }
-        runCatching { temporaryIndex.endSession(sessionId) }
         runCatching { privateSources.endSession(sessionId) }
-        runCatching { cache.endSession(sessionId) }
+        runCatching { temporaryIndex.endSession(sessionId) { cache.endSession(sessionId) } }
         runCatching { scope.cancel() }
     }
 
@@ -623,13 +629,13 @@ internal object CrewActiveMediaSelector {
                 item.contributorId == localMemberId.value &&
                 original.kind == CandidateKind.LOCAL &&
                 original.availability == CandidateAvailability.AVAILABLE &&
-                validLength(localMedia?.contentLength) &&
+                validOrUnknownLength(localMedia?.contentLength) &&
                 isContentUri(original.locator)
         ) {
             return Selection.Content(
                 original.locator!!,
-                localMedia!!.contentLength!!,
-                localMedia.mimeType,
+                localMedia?.contentLength ?: CrewAuthorizedMediaSource.UNKNOWN_LENGTH,
+                localMedia?.mimeType,
             )
         }
         val downloaded = downloads[DownloadKey(item.track.id, original.id)] ?: return null
@@ -638,6 +644,9 @@ internal object CrewActiveMediaSelector {
 
     private fun validLength(length: Long?) =
         length != null && length in 1..CREW_MEDIA_MAX_OBJECT_BYTES
+
+    private fun validOrUnknownLength(length: Long?) =
+        length == null || length in 1..CREW_MEDIA_MAX_OBJECT_BYTES
 
     /** Deliberately pure so authorization selection remains a JVM-testable policy. */
     private fun isContentUri(value: String?) =

@@ -23,6 +23,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewActivity
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewReactionSendResult
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRequestResult
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
@@ -33,6 +34,7 @@ import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 class CrewViewModel @Inject constructor(private val runtime: ActiveCrewRuntime) : ViewModel() {
     val state: StateFlow<ActiveCrewRuntimeState> = runtime.state
     val reactions: SharedFlow<ActiveCrewReaction> = runtime.reactions
+    val activity: StateFlow<List<ActiveCrewActivity>> = runtime.activity
     val peerMediaBlocked: StateFlow<Boolean> = runtime.peerMediaBlocked
 
     val allowedReactions: List<String>

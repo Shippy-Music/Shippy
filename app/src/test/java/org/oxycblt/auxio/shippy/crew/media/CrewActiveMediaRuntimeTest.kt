@@ -340,7 +340,7 @@ class CrewActiveMediaRuntimeTest {
                 "audio/test",
                 7,
                 digest,
-                listOf(CrewMediaChunkDescriptor(0, 7, digest)),
+                listOf(CrewMediaChunkDescriptor(0, 7)),
             )
         }
     }

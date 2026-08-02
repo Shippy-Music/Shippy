@@ -103,6 +103,15 @@ interface PlaybackStateManager {
     fun removeListener(listener: Listener)
 
     /**
+     * Adds an interceptor for explicit playback mutations. Interceptors run before the local player
+     * is mutated and may consume the command. Crew uses this boundary so user intent is sequenced
+     * by the collaborative state machine instead of being inferred from delayed player callbacks.
+     */
+    fun addMutationInterceptor(interceptor: PlaybackMutationInterceptor)
+
+    fun removeMutationInterceptor(interceptor: PlaybackMutationInterceptor)
+
+    /**
      * Register an [PlaybackStateHolder] for this instance. This instance will handle translating
      * the current playback state into audio playback. There can be only one [PlaybackStateHolder]
      * at a time. Will invoke [PlaybackStateHolder] methods to initialize the instance with the
@@ -240,6 +249,9 @@ interface PlaybackStateManager {
      */
     fun playing(isPlaying: Boolean)
 
+    /** Applies a bounded local playback rate for synchronization without authoring user intent. */
+    fun playbackSpeed(speed: Float)
+
     /**
      * Update the current [RepeatMode].
      *
@@ -352,6 +364,9 @@ interface PlaybackStateManager {
          */
         fun onProgressionChanged(progression: Progression) {}
 
+        /** The local player reached its projected queue end. */
+        fun onPlaybackEnded() {}
+
         /**
          * Called when the [RepeatMode] changes.
          *
@@ -405,6 +420,7 @@ constructor(
     )
 
     private val listeners = mutableListOf<Listener>()
+    private val mutationInterceptors = mutableListOf<PlaybackMutationInterceptor>()
 
     @Volatile
     private var stateMirror =
@@ -487,6 +503,19 @@ constructor(
     }
 
     @Synchronized
+    override fun addMutationInterceptor(interceptor: PlaybackMutationInterceptor) {
+        if (!mutationInterceptors.contains(interceptor)) mutationInterceptors.add(interceptor)
+    }
+
+    @Synchronized
+    override fun removeMutationInterceptor(interceptor: PlaybackMutationInterceptor) {
+        mutationInterceptors.remove(interceptor)
+    }
+
+    private fun intercepted(mutation: PlaybackMutation): Boolean =
+        mutationInterceptors.any { it.intercept(mutation) }
+
+    @Synchronized
     override fun registerStateHolder(stateHolder: PlaybackStateHolder) {
         if (this.stateHolder != null) {
             L.w("Internal player is already registered")
@@ -522,6 +551,7 @@ constructor(
 
     @Synchronized
     override fun play(command: PlaybackCommand) {
+        if (intercepted(PlaybackMutation.Start(command))) return
         val stateHolder = stateHolder ?: return
         L.d("Playing $command")
         // Played something, so we are initialized now
@@ -533,6 +563,7 @@ constructor(
 
     @Synchronized
     override fun next() {
+        if (intercepted(PlaybackMutation.Next)) return
         val stateHolder = stateHolder ?: return
         L.d("Going to next song")
         stateHolder.next()
@@ -540,6 +571,7 @@ constructor(
 
     @Synchronized
     override fun prev() {
+        if (intercepted(PlaybackMutation.Previous)) return
         val stateHolder = stateHolder ?: return
         L.d("Going to previous song")
         stateHolder.prev()
@@ -547,6 +579,8 @@ constructor(
 
     @Synchronized
     override fun goto(index: Int) {
+        val targetItemId = stateMirror.queue.getOrNull(index)?.item?.id ?: return
+        if (intercepted(PlaybackMutation.GoTo(targetItemId))) return
         val stateHolder = stateHolder ?: return
         L.d("Going to index $index")
         stateHolder.goto(index)
@@ -565,6 +599,7 @@ constructor(
     @Synchronized
     override fun playNextResolved(items: List<ResolvedQueueItem>) {
         if (items.isEmpty()) return
+        if (intercepted(PlaybackMutation.PlayNext(items))) return
         if (currentQueueItem == null) {
             L.d("Nothing playing, short-circuiting to new playback")
             play(
@@ -585,6 +620,7 @@ constructor(
     @Synchronized
     override fun addResolvedToQueue(items: List<ResolvedQueueItem>) {
         if (items.isEmpty()) return
+        if (intercepted(PlaybackMutation.AddToQueue(items))) return
         if (currentQueueItem == null) {
             L.d("Nothing playing, short-circuiting to new playback")
             play(
@@ -604,6 +640,23 @@ constructor(
 
     @Synchronized
     override fun moveQueueItem(src: Int, dst: Int) {
+        val item = stateMirror.queue.getOrNull(src)?.item ?: return
+        val reordered = stateMirror.queue.map { it.item }.toMutableList()
+        val moved = reordered.removeAt(src)
+        reordered.add(dst.coerceIn(0, reordered.size), moved)
+        val movedIndex = reordered.indexOfFirst { it.id == item.id }
+        val beforeId = reordered.getOrNull(movedIndex + 1)?.id
+        val afterId = reordered.getOrNull(movedIndex - 1)?.id
+        if (
+            intercepted(
+                PlaybackMutation.MoveQueueItem(
+                    itemId = item.id,
+                    beforeId = beforeId,
+                    afterId = afterId,
+                )
+            )
+        )
+            return
         val stateHolder = stateHolder ?: return
         L.d("Moving item $src to position $dst")
         stateHolder.move(src, dst, StateAck.Move(src, dst))
@@ -611,6 +664,8 @@ constructor(
 
     @Synchronized
     override fun removeQueueItem(at: Int) {
+        val itemId = stateMirror.queue.getOrNull(at)?.item?.id ?: return
+        if (intercepted(PlaybackMutation.RemoveQueueItem(itemId))) return
         val stateHolder = stateHolder ?: return
         L.d("Removing item at $at")
         stateHolder.remove(at, StateAck.Remove(at))
@@ -618,6 +673,7 @@ constructor(
 
     @Synchronized
     override fun shuffled(shuffled: Boolean) {
+        if (intercepted(PlaybackMutation.SetShuffled(shuffled))) return
         val stateHolder = stateHolder ?: return
         L.d("Reordering queue [shuffled=$shuffled]")
         stateHolder.shuffled(shuffled)
@@ -649,13 +705,21 @@ constructor(
 
     @Synchronized
     override fun playing(isPlaying: Boolean) {
+        if (intercepted(PlaybackMutation.SetPlaying(isPlaying))) return
         val stateHolder = stateHolder ?: return
         L.d("Updating playing state to $isPlaying")
         stateHolder.playing(isPlaying)
     }
 
+    /** Local Crew projection helper; deliberately bypasses user-command interception. */
+    @Synchronized
+    override fun playbackSpeed(speed: Float) {
+        stateHolder?.playbackSpeed(speed)
+    }
+
     @Synchronized
     override fun repeatMode(repeatMode: RepeatMode) {
+        if (intercepted(PlaybackMutation.SetRepeatMode(repeatMode))) return
         val stateHolder = stateHolder ?: return
         L.d("Updating repeat mode to $repeatMode")
         stateHolder.repeatMode(repeatMode)
@@ -663,6 +727,7 @@ constructor(
 
     @Synchronized
     override fun seekTo(positionMs: Long) {
+        if (intercepted(PlaybackMutation.SeekTo(positionMs.coerceAtLeast(0)))) return
         val stateHolder = stateHolder ?: return
         L.d("Seeking to ${positionMs}ms")
         stateHolder.seekTo(positionMs)
@@ -802,6 +867,7 @@ constructor(
                 stateMirror = stateMirror.copy(progression = stateHolder.progression)
                 listeners.forEach { it.onProgressionChanged(stateMirror.progression) }
             }
+            StateAck.PlaybackEnded -> listeners.forEach { it.onPlaybackEnded() }
             is StateAck.RepeatModeChanged -> {
                 stateMirror = stateMirror.copy(repeatMode = stateHolder.repeatMode)
                 listeners.forEach { it.onRepeatModeChanged(stateMirror.repeatMode) }

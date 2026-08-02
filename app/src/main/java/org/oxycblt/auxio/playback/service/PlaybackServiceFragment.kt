@@ -35,6 +35,8 @@ import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.shippy.crew.playback.CrewPlaybackBridge
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 import org.oxycblt.auxio.shippy.history.RecentListeningTracker
 import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleTracker
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
@@ -57,6 +59,7 @@ private constructor(
     private val recentListeningTracker: RecentListeningTracker,
     private val sleepTimerController: SleepTimerController,
     private val crewPlaybackBridge: CrewPlaybackBridge,
+    private val activeCrewRuntime: ActiveCrewRuntime,
 ) : PlaybackStateManager.Listener {
     class Factory
     @Inject
@@ -71,6 +74,7 @@ private constructor(
         private val recentListeningTracker: RecentListeningTracker,
         private val sleepTimerController: SleepTimerController,
         private val crewPlaybackBridge: CrewPlaybackBridge,
+        private val activeCrewRuntime: ActiveCrewRuntime,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
             PlaybackServiceFragment(
@@ -86,6 +90,7 @@ private constructor(
                 recentListeningTracker,
                 sleepTimerController,
                 crewPlaybackBridge,
+                activeCrewRuntime,
             )
     }
 
@@ -144,7 +149,14 @@ private constructor(
     }
 
     fun handleTaskRemoved() {
-        if (!playbackManager.progression.isPlaying || playbackSettings.exitOnTaskRemoval) {
+        val hasActiveCrew = activeCrewRuntime.state.value is ActiveCrewRuntimeState.Active
+        if (
+            !ServiceRetentionPolicy.shouldRetainAfterTaskRemoval(
+                isPlaying = playbackManager.progression.isPlaying,
+                exitOnTaskRemoval = playbackSettings.exitOnTaskRemoval,
+                hasActiveCrew = hasActiveCrew,
+            )
+        ) {
             playbackManager.endSession()
         }
     }

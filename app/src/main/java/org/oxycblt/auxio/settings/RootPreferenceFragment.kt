@@ -47,6 +47,7 @@ import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.settings.ui.WrappedDialogPreference
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHealth
 import org.oxycblt.auxio.shippy.crew.relay.CrewRelayHealthProbe
+import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
 import org.oxycblt.auxio.shippy.crew.settings.CrewRelayLocatorSettingInput
 import org.oxycblt.auxio.shippy.crew.settings.CrewRelayLocatorSettingResult
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
@@ -55,6 +56,7 @@ import org.oxycblt.auxio.shippy.download.DownloadDestinationReconciler
 import org.oxycblt.auxio.shippy.download.DownloadDestinationState
 import org.oxycblt.auxio.shippy.download.SafDownloadStorage
 import org.oxycblt.auxio.shippy.download.StorageResult
+import org.oxycblt.auxio.shippy.media.cache.PlaybackCacheManager
 import org.oxycblt.auxio.shippy.provider.ProviderHealth
 import org.oxycblt.auxio.util.navigateSafe
 import org.oxycblt.auxio.util.showToast
@@ -72,8 +74,10 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
     private val providerSettingsModel: ProviderSettingsViewModel by viewModels()
     @Inject lateinit var downloadStorage: SafDownloadStorage
     @Inject lateinit var downloadDestinationReconciler: DownloadDestinationReconciler
+    @Inject lateinit var crewProfileSettings: CrewProfileSettings
     @Inject lateinit var crewSettings: CrewSettings
     @Inject lateinit var crewRelayHealthProbe: CrewRelayHealthProbe
+    @Inject lateinit var playbackCache: PlaybackCacheManager
     private var crewRelayHealthGeneration = 0L
     private var crewRelayHealthJob: Job? = null
     private val downloadDestinationLauncher =
@@ -102,6 +106,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         super.onResume()
         providerSettingsModel.refresh(force = false)
         viewLifecycleOwner.lifecycleScope.launch { refreshDownloadDestinationSafely() }
+        renderCrewProfile()
         probeCrewRelayHealth()
     }
 
@@ -160,11 +165,22 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
             getString(R.string.set_key_download_destination_picker) -> {
                 downloadDestinationLauncher.launch(null)
             }
+            getString(R.string.set_key_clear_playback_cache) -> {
+                viewLifecycleOwner.lifecycleScope.launch {
+                    playbackCache.clear()
+                    requireContext().showToast(R.string.msg_playback_cache_cleared)
+                }
+            }
             getString(R.string.set_key_lastfm) -> {
                 when (lastFmModel.state.value) {
                     is LastFmSettingsState.Connected -> showLastFmConnectedActions()
                     else -> lastFmModel.onPreferenceClicked()
                 }
+            }
+            getString(R.string.set_key_crew_display_name) -> showCrewProfileDialog()
+            getString(R.string.set_key_crew_avatar) -> {
+                crewProfileSettings.regenerateAvatar()
+                renderCrewProfile()
             }
             getString(R.string.set_key_crew_relay_locator) -> showCrewRelayDialog()
             getString(R.string.set_key_provider_refresh) -> providerSettingsModel.refresh()
@@ -237,6 +253,52 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                     }
                 }
             }
+    }
+
+    private fun renderCrewProfile() {
+        findPreference<Preference>(getString(R.string.set_key_crew_display_name))?.summary =
+            crewProfileSettings.displayName
+        findPreference<Preference>(getString(R.string.set_key_crew_avatar))?.summary =
+            getString(R.string.set_crew_avatar_desc, crewProfileSettings.avatar.value.take(6))
+    }
+
+    private fun showCrewProfileDialog() {
+        val input =
+            TextInputEditText(requireContext()).apply {
+                setText(crewProfileSettings.displayName)
+                setSelection(length())
+                maxLines = 1
+            }
+        val container =
+            TextInputLayout(requireContext()).apply {
+                hint = getString(R.string.set_crew_display_name)
+                addView(input)
+            }
+        val dialog =
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.set_crew_display_name)
+                .setView(container)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok, null)
+                .create()
+        dialog.setOnShowListener {
+            dialog
+                .getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener {
+                    container.error = null
+                    runCatching {
+                            crewProfileSettings.displayName = input.text?.toString().orEmpty()
+                        }
+                        .onSuccess {
+                            renderCrewProfile()
+                            dialog.dismiss()
+                        }
+                        .onFailure {
+                            container.error = getString(R.string.set_crew_display_name_invalid)
+                        }
+                }
+        }
+        dialog.show()
     }
 
     private fun renderLastFm(state: LastFmSettingsState) {

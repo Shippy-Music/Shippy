@@ -44,7 +44,15 @@ sealed interface CrewMediaWireFrame {
             get() = value.transfer
     }
 
-    data class ManifestAccepted(override val transfer: CrewMediaTransferRef) : CrewMediaWireFrame
+    /** Cumulative range acknowledgement: every chunk below [nextChunkIndex] is verified. */
+    data class ManifestAccepted(
+        override val transfer: CrewMediaTransferRef,
+        val nextChunkIndex: Int = 0,
+    ) : CrewMediaWireFrame {
+        init {
+            require(nextChunkIndex in 0..CREW_MEDIA_MAX_CHUNKS)
+        }
+    }
 
     data class RetryLater(override val transfer: CrewMediaTransferRef) : CrewMediaWireFrame
 
@@ -55,7 +63,7 @@ sealed interface CrewMediaWireFrame {
 
 /** Strict bounded binary framing. It carries no filesystem locator, provider URL, or credential. */
 object CrewMediaWireCodec {
-    private const val VERSION = 3
+    private const val VERSION = 4
     private const val MANIFEST = 1
     private const val CHUNK = 2
     private const val REQUEST = 3
@@ -80,7 +88,10 @@ object CrewMediaWireCodec {
                     }
                     is CrewMediaWireFrame.Request -> simple(out, REQUEST, frame.transfer)
                     is CrewMediaWireFrame.Cancel -> simple(out, CANCEL, frame.transfer)
-                    is CrewMediaWireFrame.ManifestAccepted -> simple(out, ACCEPTED, frame.transfer)
+                    is CrewMediaWireFrame.ManifestAccepted -> {
+                        simple(out, ACCEPTED, frame.transfer)
+                        out.writeInt(frame.nextChunkIndex)
+                    }
                     is CrewMediaWireFrame.RetryLater -> simple(out, RETRY, frame.transfer)
                     is CrewMediaWireFrame.Rejected -> simple(out, REJECTED, frame.transfer)
                     is CrewMediaWireFrame.ObjectComplete -> simple(out, COMPLETE, frame.transfer)
@@ -103,7 +114,8 @@ object CrewMediaWireCodec {
                     CHUNK -> CrewMediaWireFrame.Chunk(input.readChunk())
                     REQUEST -> CrewMediaWireFrame.Request(input.readTransfer())
                     CANCEL -> CrewMediaWireFrame.Cancel(input.readTransfer())
-                    ACCEPTED -> CrewMediaWireFrame.ManifestAccepted(input.readTransfer())
+                    ACCEPTED ->
+                        CrewMediaWireFrame.ManifestAccepted(input.readTransfer(), input.readInt())
                     RETRY -> CrewMediaWireFrame.RetryLater(input.readTransfer())
                     REJECTED -> CrewMediaWireFrame.Rejected(input.readTransfer())
                     COMPLETE -> CrewMediaWireFrame.ObjectComplete(input.readTransfer())
@@ -128,7 +140,6 @@ object CrewMediaWireCodec {
         chunks.forEach {
             out.writeInt(it.index)
             out.writeInt(it.sizeBytes)
-            out.write(it.integrity.copyBytes())
         }
     }
 
@@ -137,6 +148,7 @@ object CrewMediaWireCodec {
         out.write(objectIntegrity.copyBytes())
         out.writeInt(index)
         out.writeInt(sizeBytes)
+        out.write(chunkIntegrity.copyBytes())
         out.write(copyPayload())
     }
 
@@ -146,14 +158,7 @@ object CrewMediaWireCodec {
         val size = readLong()
         val integrity = CrewMediaDigest(readExact(CREW_MEDIA_DIGEST_BYTES))
         val count = readUnsignedShort().also { require(it in 1..CREW_MEDIA_MAX_CHUNKS) }
-        val chunks =
-            List(count) {
-                CrewMediaChunkDescriptor(
-                    readInt(),
-                    readInt(),
-                    CrewMediaDigest(readExact(CREW_MEDIA_DIGEST_BYTES)),
-                )
-            }
+        val chunks = List(count) { CrewMediaChunkDescriptor(readInt(), readInt()) }
         return CrewMediaManifest(transfer, mime, size, integrity, chunks)
     }
 
@@ -162,7 +167,8 @@ object CrewMediaWireCodec {
         val integrity = CrewMediaDigest(readExact(CREW_MEDIA_DIGEST_BYTES))
         val index = readInt()
         val size = readInt().also { require(it in 1..CREW_MEDIA_MAX_CHUNK_BYTES) }
-        return CrewMediaChunk(transfer, integrity, index, readExact(size))
+        val chunkIntegrity = CrewMediaDigest(readExact(CREW_MEDIA_DIGEST_BYTES))
+        return CrewMediaChunk(transfer, integrity, index, readExact(size), chunkIntegrity)
     }
 
     private fun DataOutputStream.writeTransfer(v: CrewMediaTransferRef) {

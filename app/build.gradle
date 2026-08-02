@@ -15,9 +15,11 @@ android {
     namespace "org.oxycblt.auxio"
 
     defaultConfig {
-        applicationId namespace
-        versionName "0.1.0-alpha.1-r14"
-        versionCode 82
+        // Public Shippy identity is deliberately separate from the retained Auxio source
+        // namespace. This must remain stable before beta users accumulate app data and links.
+        applicationId "org.shippymusic.shippy"
+        versionName "0.1.0-alpha.1-r15"
+        versionCode 83
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in
@@ -211,4 +213,6 @@ dependencies {
     testImplementation "junit:junit:4.13.2"
     // Android supplies only stubs for org.json to local JVM tests. Providers parse real JSON there.
     testImplementation "org.json:json:20250517"
+    androidTestImplementation "androidx.test:runner:1.6.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
 }

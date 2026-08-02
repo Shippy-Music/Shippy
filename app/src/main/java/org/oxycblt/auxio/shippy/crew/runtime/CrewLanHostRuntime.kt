@@ -38,7 +38,6 @@ import okhttp3.OkHttpClient
 import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerConnection
 import org.oxycblt.auxio.shippy.crew.connection.CrewDirectPeerRole
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
-import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
@@ -66,14 +65,18 @@ import org.oxycblt.auxio.shippy.crew.relay.CrewRelayInviteCandidate
 import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
+import org.oxycblt.auxio.shippy.crew.session.CrewSessionNotice
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
+import org.oxycblt.auxio.shippy.crew.sync.CrewClockEstimate
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewWebRtcRuntime
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
 import org.oxycblt.auxio.shippy.persistence.crew.CrewRejoinLeaseStore
 
-private const val CREW_PROTOCOL_V1 = 1
+// V3 retains wall-clock playback epochs and adds the bounded active-Crew profile snapshot.
+// V1/V2 invitations are rejected rather than being decoded with a mismatched member wire shape.
+private const val CREW_PROTOCOL_V3 = 3
 private const val DEFAULT_ADVERTISEMENT_TIMEOUT_MS = 10_000L
 private const val CREW_TERMINAL_EVENT_WAIT_MS = 1_500L
 private const val CREW_REJOIN_CREDENTIAL_LIFETIME_MS = 4 * 60 * 60 * 1000L
@@ -134,6 +137,8 @@ internal constructor(
     private var ended = false
 
     val state: StateFlow<CrewState> = engine.state
+    val clockEstimate: StateFlow<CrewClockEstimate?> = engine.clockEstimate
+    val notices: SharedFlow<CrewSessionNotice> = engine.notices
     val reactions: SharedFlow<ActiveCrewReaction> = engine.reactions
     val peerMediaBlocked: StateFlow<Boolean> = mediaRuntime.peerMediaBlocked
     val allowedReactions: List<String> = engine.allowedReactions
@@ -147,6 +152,7 @@ internal constructor(
                 issuingMemberId = localMemberId,
                 clientMonotonicTimestampMs = (System.nanoTime() / 1_000_000L).coerceAtLeast(0L),
                 action = action,
+                baseSequence = state.value.lastSequence,
             )
         )
 
@@ -228,14 +234,14 @@ constructor(
             return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.AdvertisementTimedOut)
         }
 
-        val protocol = ProtocolVersion(CREW_PROTOCOL_V1)
+        val protocol = ProtocolVersion(CREW_PROTOCOL_V3)
         val localMemberId =
-            runCatching { profileSettings.memberId(protocol) }
+            runCatching { CrewMemberId(UUID.randomUUID().toString(), protocol) }
                 .getOrElse {
                     return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
                 }
         val localMember =
-            runCatching { CrewMember(localMemberId, profileSettings.displayName) }
+            runCatching { profileSettings.member(protocol).copy(id = localMemberId) }
                 .getOrElse {
                     return CrewLanHostLaunchResult.Failed(CrewLanHostLaunchFailure.Initialization)
                 }

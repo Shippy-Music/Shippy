@@ -58,7 +58,9 @@ class CrewTemporaryMediaIndexTest {
             1,
             augmented.track.candidates.count { it.kind == CandidateKind.CREW_TEMPORARY },
         )
-        assertTrue(augmented.track.candidates.last().locator!!.startsWith("file:"))
+        assertTrue(
+            augmented.track.candidates.last().locator!!.startsWith("$CREW_TEMPORARY_SCHEME://")
+        )
         assertFalse(item.track.candidates.any { it.kind == CandidateKind.CREW_TEMPORARY })
         assertNull(index.augment(session("other"), item))
         index.endSession(session)
@@ -104,6 +106,44 @@ class CrewTemporaryMediaIndexTest {
         assertNull(index.augment(session, item))
     }
 
+    @Test
+    fun `verified progress becomes playable before completion without exposing a file path`() {
+        val session = session("progress")
+        val item = queueItem("queue-progress")
+        val manifest = manifest(session, item.id, CandidateId("provider"))
+        val file = temporaryFile()
+        val index = CrewTemporaryMediaIndex()
+
+        index.beginSession(session)
+        assertTrue(index.progress(manifest, file, contiguousBytes = 1))
+        val locator = requireNotNull(index.augment(session, item)).track.candidates.last().locator!!
+        assertFalse(locator.contains(file.absolutePath))
+        val lease = requireNotNull(index.acquire(locator))
+        val target = ByteArray(1)
+        assertEquals(1, lease.read(0, target, 0, 1))
+        assertEquals(1, target.single().toInt())
+        lease.close()
+    }
+
+    @Test
+    fun `session cleanup waits until active playback reader releases its lease`() {
+        val session = session("lease")
+        val item = queueItem("queue-lease")
+        val index = CrewTemporaryMediaIndex()
+        val file = temporaryFile()
+        val manifest = manifest(session, item.id, CandidateId("provider"))
+        var cleaned = false
+
+        index.beginSession(session)
+        assertTrue(index.complete(manifest, file))
+        val locator = requireNotNull(index.augment(session, item)).track.candidates.last().locator!!
+        val lease = requireNotNull(index.acquire(locator))
+        index.endSession(session) { cleaned = true }
+        assertFalse(cleaned)
+        lease.close()
+        assertTrue(cleaned)
+    }
+
     private fun manifest(
         session: CrewSessionId,
         queueItemId: QueueItemId,
@@ -123,7 +163,7 @@ class CrewTemporaryMediaIndexTest {
             "audio/test",
             1,
             digest,
-            listOf(CrewMediaChunkDescriptor(0, 1, digest)),
+            listOf(CrewMediaChunkDescriptor(0, 1)),
         )
     }
 

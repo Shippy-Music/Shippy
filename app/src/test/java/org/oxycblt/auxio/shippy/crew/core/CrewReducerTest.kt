@@ -66,6 +66,48 @@ class CrewReducerTest {
     }
 
     @Test
+    fun `queue anchors preserve intent when earlier concurrent edits shift indices`() {
+        var state = state(queue = listOf(queueItem("one"), queueItem("two"), queueItem("three")))
+
+        state =
+            apply(
+                state,
+                event(state, 1, CrewAction.QueueItemInserted(queueItem("other"), index = 0)),
+            )
+        state =
+            apply(
+                state,
+                event(
+                    state,
+                    2,
+                    CrewAction.QueueItemMoved(
+                        itemId = QueueItemId("three"),
+                        newIndex = 1,
+                        beforeItemId = QueueItemId("two"),
+                    ),
+                ),
+            )
+        state =
+            apply(
+                state,
+                event(
+                    state,
+                    3,
+                    CrewAction.QueueItemInserted(
+                        item = queueItem("anchored"),
+                        index = 1,
+                        afterItemId = QueueItemId("three"),
+                    ),
+                ),
+            )
+
+        assertEquals(
+            listOf("other", "one", "three", "anchored", "two"),
+            state.queue.map { it.id.value },
+        )
+    }
+
+    @Test
     fun `non-coordinator can play pause and seek`() {
         var state = state(queue = listOf(queueItem("one")))
 

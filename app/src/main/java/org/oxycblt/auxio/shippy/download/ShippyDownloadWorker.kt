@@ -40,6 +40,8 @@ import org.oxycblt.auxio.shippy.domain.PlaybackResolutionCoordinator
 import org.oxycblt.auxio.shippy.domain.QueueItemFactory
 import org.oxycblt.auxio.shippy.domain.ResolutionPolicy
 import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
+import org.oxycblt.auxio.shippy.media.MediaObjectKey
+import org.oxycblt.auxio.shippy.media.cache.PlaybackCacheManager
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
@@ -66,6 +68,7 @@ constructor(
     private val providerSettings: ProviderSettings,
     private val relationships: LibraryRelationshipRepository,
     private val publicationGate: DownloadPublicationGate,
+    private val playbackCache: PlaybackCacheManager,
 ) : CoroutineWorker(appContext, workerParams) {
     override suspend fun doWork(): Result {
         val jobId =
@@ -133,6 +136,18 @@ constructor(
         if (stored.job.state == DownloadState.REQUESTED) {
             jobs.apply(jobId, DownloadEvent.Resolve, now())
             stored = jobs.get(jobId) ?: return Result.failure()
+        }
+
+        val requestedCandidate =
+            stored.track.candidates.firstOrNull { it.id == stored.job.candidateId }
+                ?: return failMissingRequestedCandidate(jobId)
+        val cachedObjectKey = MediaObjectKey.from(requestedCandidate)
+
+        if (
+            stored.job.state == DownloadState.RESOLVING &&
+                playbackCache.hasComplete(cachedObjectKey, requestedCandidate.media?.contentLength)
+        ) {
+            return completeFromPlaybackCache(stored, cachedObjectKey)
         }
 
         val resolved =
@@ -235,6 +250,62 @@ constructor(
                 forDownload = true,
             ),
         )
+    }
+
+    private suspend fun completeFromPlaybackCache(
+        stored: PersistedDownload,
+        key: MediaObjectKey,
+    ): Result {
+        val expected =
+            stored.track.candidates.first { it.id == stored.job.candidateId }.media?.contentLength
+        if (
+            jobs.apply(stored.job.id, DownloadEvent.Enqueued(expected), now())
+                !is DownloadTransition.Applied
+        ) {
+            return Result.failure()
+        }
+        if (
+            jobs.apply(stored.job.id, DownloadEvent.TransferStarted, now())
+                !is DownloadTransition.Applied
+        ) {
+            return Result.failure()
+        }
+        setForeground(createForegroundInfo(stored.track.title, 0, expected))
+        val output =
+            try {
+                transferStaging.openOutput(stored.job.id)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                fail(
+                    stored.job.id,
+                    DownloadFailure("private_staging_unavailable"),
+                    retryable = true,
+                )
+                return Result.retry()
+            }
+        val copied = output.use { playbackCache.copyCompleteTo(key, expected, it) }
+        if (copied == null) {
+            transferStaging.cleanup(stored.job.id)
+            // A concurrent eviction or corruption is not terminal; re-enter the normal resolver.
+            fail(stored.job.id, DownloadFailure("playback_cache_changed"), retryable = true)
+            return Result.retry()
+        }
+        jobs.apply(stored.job.id, DownloadEvent.Progress(copied, copied), now())
+        jobs.apply(stored.job.id, DownloadEvent.TransferCompleted, now())
+        return finishPending(jobs.get(stored.job.id) ?: return Result.failure())
+    }
+
+    private suspend fun failMissingRequestedCandidate(jobId: DownloadJobId): Result {
+        fail(
+            jobId,
+            DownloadFailure(
+                "requested_source_unavailable",
+                "The requested download source is unavailable",
+            ),
+            retryable = false,
+        )
+        return Result.failure()
     }
 
     private suspend fun transfer(

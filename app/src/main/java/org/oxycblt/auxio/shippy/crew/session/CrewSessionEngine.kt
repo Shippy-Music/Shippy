@@ -18,6 +18,7 @@
 package org.oxycblt.auxio.shippy.crew.session
 
 import java.io.Closeable
+import java.util.ArrayDeque
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
@@ -77,9 +78,15 @@ import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionReducer
 import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionResult
 import org.oxycblt.auxio.shippy.crew.reaction.CrewReactionState
 import org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
+import org.oxycblt.auxio.shippy.crew.sync.CrewClockCodec
+import org.oxycblt.auxio.shippy.crew.sync.CrewClockEstimate
+import org.oxycblt.auxio.shippy.crew.sync.CrewClockEstimator
+import org.oxycblt.auxio.shippy.crew.sync.CrewClockFrame
+import org.oxycblt.auxio.shippy.crew.sync.CrewClockProbe
 import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportChannel
+import org.oxycblt.auxio.shippy.crew.transport.CrewTransportFrame
 import org.oxycblt.auxio.shippy.crew.transport.CrewTransportState
 import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
@@ -91,6 +98,10 @@ private const val OUTBOUND_CONTROL_CAPACITY = 32
 private const val CONTROL_SEND_TIMEOUT_MS = 10_000L
 private const val CONTROL_RETRY_DELAY_MS = 20L
 private const val LIVENESS_RECONCILE_INTERVAL_MS = 1_000L
+private const val CLOCK_PROBE_INTERVAL_MS = 2_000L
+private const val CLOCK_SAMPLE_WINDOW = 8
+private const val PLAYBACK_READINESS_WAIT_MS = 2_500L
+private const val PLAYBACK_READY_LEAD_MS = 350L
 val CREW_ALLOWED_REACTIONS: List<String> = listOf("❤️", "🔥", "😂", "😢", "✨", "👍")
 
 sealed interface CrewReactionSendResult {
@@ -209,7 +220,18 @@ class CrewSessionEngine(
     private val mediaLifecycle: CrewAuthenticatedMediaLifecycle? = null,
     private val rejoinCredentialReceiver: CrewRejoinCredentialReceiver =
         CrewRejoinCredentialReceiver {},
+    private val playbackReadinessWaitMs: Long = PLAYBACK_READINESS_WAIT_MS,
+    private val playbackReadyLeadMs: Long = PLAYBACK_READY_LEAD_MS,
 ) : Closeable {
+    init {
+        require(playbackReadinessWaitMs in 1..30_000L) {
+            "Playback readiness wait must be positive and bounded"
+        }
+        require(playbackReadyLeadMs in 0..5_000L) {
+            "Playback readiness lead must be non-negative and bounded"
+        }
+    }
+
     private data class PeerSession(
         val transport: CrewPeerTransport,
         val reassembler: CrewControlReassembler,
@@ -228,6 +250,9 @@ class CrewSessionEngine(
     private var pendingElectionSnapshot: Pair<CrewMemberId, CrewControlMessage.SnapshotInstalled>? =
         null
     private var livenessJob: Job? = null
+    private var clockJob: Job? = null
+    private var readinessJob: Job? = null
+    private var pendingReadinessPlay: CrewActionRequest? = null
     private var sequencer: CrewCoordinatorSequencer? =
         if (initialState.coordinatorMemberId == localMemberId) {
             CrewCoordinatorSequencer(initialState, localMemberId, reducer)
@@ -241,6 +266,19 @@ class CrewSessionEngine(
         MutableStateFlow<Map<QueueItemId, QueueItemAvailabilitySummary>>(emptyMap())
     private val mutablePeerStates =
         MutableStateFlow<Map<CrewMemberId, CrewTransportState>>(emptyMap())
+    private val clockLock = Any()
+    private var clockCoordinatorMemberId = initialState.coordinatorMemberId
+    private var nextClockProbeId = 0L
+    private val pendingClockProbes = linkedMapOf<Long, Long>()
+    private val clockProbes = ArrayDeque<CrewClockProbe>()
+    private val mutableClockEstimate =
+        MutableStateFlow<CrewClockEstimate?>(
+            if (initialState.coordinatorMemberId == localMemberId) {
+                CrewClockEstimate(0.0, 0, 1)
+            } else {
+                null
+            }
+        )
     private val mutableNotices =
         MutableSharedFlow<CrewSessionNotice>(
             extraBufferCapacity = 64,
@@ -261,6 +299,8 @@ class CrewSessionEngine(
         mutableAvailability.asStateFlow()
     val peerStates: StateFlow<Map<CrewMemberId, CrewTransportState>> =
         mutablePeerStates.asStateFlow()
+    /** Coordinator clock minus this device's clock, estimated over the lossy CLOCK channel. */
+    val clockEstimate: StateFlow<CrewClockEstimate?> = mutableClockEstimate.asStateFlow()
     val notices: SharedFlow<CrewSessionNotice> = mutableNotices.asSharedFlow()
     val reactions: SharedFlow<ActiveCrewReaction> = mutableReactions.asSharedFlow()
     val allowedReactions: List<String> = CREW_ALLOWED_REACTIONS
@@ -284,6 +324,15 @@ class CrewSessionEngine(
                     while (!closed.get()) {
                         delay(LIVENESS_RECONCILE_INTERVAL_MS)
                         reconcileLiveness()
+                    }
+                }
+        }
+        if (clockJob == null) {
+            clockJob =
+                scope.launch {
+                    while (!closed.get()) {
+                        sendClockProbe()
+                        delay(CLOCK_PROBE_INTERVAL_MS)
                     }
                 }
         }
@@ -334,6 +383,7 @@ class CrewSessionEngine(
         liveness.connected(transport.remoteMemberId, nowMonotonicMs())
         publishPeerStates()
         emit(CrewSessionNotice.PeerAttached(transport.remoteMemberId))
+        sendClockProbe()
     }
 
     suspend fun submit(
@@ -615,6 +665,7 @@ class CrewSessionEngine(
             rebuildAvailabilityLocked()
             if (current.coordinatorMemberId == localMemberId) {
                 broadcastAvailabilityLocked(announcement)
+                publishPendingReadinessPlayLocked(force = false)
                 true
             } else {
                 enqueueLocked(
@@ -653,6 +704,12 @@ class CrewSessionEngine(
                         is CrewMediaFrameResult.Rejected -> {
                             protocolViolation(peer, "Crew media frame rejected: ${result.reason}")
                         }
+                    }
+                    return@collect
+                }
+                if (frame.channel == CrewTransportChannel.CLOCK) {
+                    if (!handleClockFrame(peer.transport, frame.copyPayload())) {
+                        protocolViolation(peer, "Crew clock frame rejected")
                     }
                     return@collect
                 }
@@ -805,11 +862,7 @@ class CrewSessionEngine(
             protocolRejected(authenticatedMemberId, "Received action request on non-coordinator")
             return
         }
-        publishSequenceResultLocked(
-            currentSequencer.sequence(request, authenticatedMemberId),
-            request = request,
-            requester = authenticatedMemberId,
-        )
+        sequenceOrDeferLocked(currentSequencer, request, authenticatedMemberId)
     }
 
     private suspend fun handleEventLocked(
@@ -912,7 +965,7 @@ class CrewSessionEngine(
         }
     }
 
-    private fun handleAvailabilityLocked(
+    private suspend fun handleAvailabilityLocked(
         authenticatedMemberId: CrewMemberId,
         announcement: CrewAvailabilityAnnouncement,
     ) {
@@ -944,6 +997,7 @@ class CrewSessionEngine(
             remoteAvailability[authenticatedMemberId] = announcement
             rebuildAvailabilityLocked()
             broadcastAvailabilityLocked(announcement, exceptMemberId = authenticatedMemberId)
+            publishPendingReadinessPlayLocked(force = false)
             return
         }
         if (authenticatedMemberId != current.coordinatorMemberId) {
@@ -1167,13 +1221,7 @@ class CrewSessionEngine(
         val current = mutableState.value
         return if (current.coordinatorMemberId == localMemberId) {
             val currentSequencer = checkNotNull(sequencer) { "Local coordinator has no sequencer" }
-            val result = currentSequencer.sequence(request, localMemberId)
-            publishSequenceResultLocked(result, request = request, requester = localMemberId)
-            if (result is CrewSequenceResult.Rejected) {
-                CrewRouteResult.COORDINATOR_REJECTED
-            } else {
-                CrewRouteResult.ROUTED
-            }
+            sequenceOrDeferLocked(currentSequencer, request, localMemberId)
         } else {
             if (enqueueLocked(current.coordinatorMemberId, CrewControlMessage.Request(request))) {
                 CrewRouteResult.ROUTED
@@ -1368,6 +1416,177 @@ class CrewSessionEngine(
             peers.entries.associate { (memberId, peer) -> memberId to peer.transport.state.value }
     }
 
+    private fun sendClockProbe() {
+        val current = mutableState.value
+        if (current.coordinatorMemberId == localMemberId) {
+            resetClockCoordinator(current.coordinatorMemberId, coordinatorIsLocal = true)
+            return
+        }
+        resetClockCoordinator(current.coordinatorMemberId, coordinatorIsLocal = false)
+        val peer = peers[current.coordinatorMemberId] ?: return
+        val sentAt = nowEpochMs().coerceAtLeast(0)
+        val probeId =
+            synchronized(clockLock) {
+                val id = nextClockProbeId++
+                pendingClockProbes[id] = sentAt
+                while (pendingClockProbes.size > CLOCK_SAMPLE_WINDOW) {
+                    pendingClockProbes.remove(pendingClockProbes.keys.first())
+                }
+                id
+            }
+        val result =
+            runCatching {
+                    peer.transport.trySend(
+                        CrewTransportFrame(
+                            CrewTransportChannel.CLOCK,
+                            CrewClockCodec.encode(CrewClockFrame.Request(probeId, sentAt)),
+                        )
+                    )
+                }
+                .getOrNull()
+        if (result !is CrewSendResult.Sent) {
+            synchronized(clockLock) { pendingClockProbes.remove(probeId) }
+        }
+    }
+
+    /**
+     * The coordinator owns the common-start barrier. Pause and other later playback commands cancel
+     * an uncommitted Play, while a Play waits briefly for every active member to report the
+     * selected occurrence locally playable. After the bound, ready devices start and late devices
+     * catch up from the canonical clock when their media becomes available.
+     */
+    private suspend fun sequenceOrDeferLocked(
+        currentSequencer: CrewCoordinatorSequencer,
+        request: CrewActionRequest,
+        requester: CrewMemberId,
+    ): CrewRouteResult {
+        if (request.action !is CrewAction.Play) {
+            rejectPendingReadinessPlayLocked()
+        }
+        if (request.action is CrewAction.Play && !currentItemReadyForEveryMemberLocked()) {
+            pendingReadinessPlay
+                ?.takeIf { it.id != request.id }
+                ?.let { rejectPendingReadinessPlayLocked() }
+            pendingReadinessPlay = request
+            if (readinessJob?.isActive != true) {
+                readinessJob =
+                    scope.launch {
+                        delay(playbackReadinessWaitMs)
+                        stateMutex.withLock { publishPendingReadinessPlayLocked(force = true) }
+                    }
+            }
+            return CrewRouteResult.ROUTED
+        }
+        val readyRequest = request.withFreshPlaybackStartIfNeeded()
+        val result = currentSequencer.sequence(readyRequest, requester)
+        publishSequenceResultLocked(result, request = readyRequest, requester = requester)
+        return if (result is CrewSequenceResult.Rejected) {
+            CrewRouteResult.COORDINATOR_REJECTED
+        } else {
+            CrewRouteResult.ROUTED
+        }
+    }
+
+    private fun currentItemReadyForEveryMemberLocked(): Boolean {
+        val current = mutableState.value
+        val itemId = current.playback.currentQueueItemId ?: return true
+        val summary = mutableAvailability.value[itemId] ?: return false
+        val byMember = summary.members.associateBy { it.memberId }
+        return current.members.all { member ->
+            byMember[member.id]?.availability?.isPlayableWithoutPeer == true
+        }
+    }
+
+    private suspend fun publishPendingReadinessPlayLocked(force: Boolean) {
+        val request = pendingReadinessPlay ?: return
+        if (!force && !currentItemReadyForEveryMemberLocked()) return
+        pendingReadinessPlay = null
+        readinessJob = null
+        val currentSequencer = sequencer ?: return
+        val readyRequest = request.withFreshPlaybackStartIfNeeded()
+        publishSequenceResultLocked(
+            currentSequencer.sequence(readyRequest, readyRequest.issuingMemberId),
+            request = readyRequest,
+            requester = readyRequest.issuingMemberId,
+        )
+    }
+
+    private suspend fun rejectPendingReadinessPlayLocked() {
+        val request = pendingReadinessPlay ?: return
+        pendingReadinessPlay = null
+        readinessJob?.cancel()
+        readinessJob = null
+        publishSequenceResultLocked(
+            CrewSequenceResult.Rejected(CrewSequenceRejection.ACTION_REJECTED, mutableState.value),
+            request = request,
+            requester = request.issuingMemberId,
+        )
+    }
+
+    private fun CrewActionRequest.withFreshPlaybackStartIfNeeded(): CrewActionRequest {
+        val play = action as? CrewAction.Play ?: return this
+        val earliest = nowEpochMs().coerceAtLeast(0) + playbackReadyLeadMs
+        return copy(action = play.copy(sessionEpochMs = maxOf(play.sessionEpochMs, earliest)))
+    }
+
+    private fun resetClockCoordinator(memberId: CrewMemberId, coordinatorIsLocal: Boolean) {
+        synchronized(clockLock) {
+            if (clockCoordinatorMemberId != memberId) {
+                clockCoordinatorMemberId = memberId
+                pendingClockProbes.clear()
+                clockProbes.clear()
+                mutableClockEstimate.value = null
+            }
+            if (coordinatorIsLocal) mutableClockEstimate.value = CrewClockEstimate(0.0, 0, 1)
+        }
+    }
+
+    private fun handleClockFrame(transport: CrewPeerTransport, payload: ByteArray): Boolean {
+        val frame = runCatching { CrewClockCodec.decode(payload) }.getOrNull() ?: return false
+        val current = mutableState.value
+        return when (frame) {
+            is CrewClockFrame.Request -> {
+                if (current.coordinatorMemberId != localMemberId) return false
+                val receivedAt = nowEpochMs().coerceAtLeast(0)
+                val sentAt = nowEpochMs().coerceAtLeast(receivedAt)
+                val response =
+                    CrewClockFrame.Response(frame.probeId, frame.clientSentMs, receivedAt, sentAt)
+                runCatching {
+                        transport.trySend(
+                            CrewTransportFrame(
+                                CrewTransportChannel.CLOCK,
+                                CrewClockCodec.encode(response),
+                            )
+                        )
+                    }
+                    .getOrNull() is CrewSendResult.Sent
+            }
+            is CrewClockFrame.Response -> {
+                if (transport.remoteMemberId != current.coordinatorMemberId) return false
+                val receivedAt = nowEpochMs().coerceAtLeast(0)
+                synchronized(clockLock) {
+                    val expectedSentAt = pendingClockProbes.remove(frame.probeId) ?: return false
+                    if (expectedSentAt != frame.clientSentMs) return false
+                    val probe =
+                        runCatching {
+                                CrewClockProbe(
+                                    frame.clientSentMs,
+                                    frame.coordinatorReceivedMs,
+                                    frame.coordinatorSentMs,
+                                    receivedAt,
+                                )
+                            }
+                            .getOrNull() ?: return false
+                    if (probe.sample() == null) return false
+                    clockProbes.addLast(probe)
+                    while (clockProbes.size > CLOCK_SAMPLE_WINDOW) clockProbes.removeFirst()
+                    mutableClockEstimate.value = CrewClockEstimator.estimate(clockProbes.toList())
+                }
+                true
+            }
+        }
+    }
+
     private fun emit(notice: CrewSessionNotice) {
         mutableNotices.tryEmit(notice)
     }
@@ -1389,8 +1608,12 @@ class CrewSessionEngine(
             emit(CrewSessionNotice.OptimisticRejected(it))
         }
         pendingElectionSnapshot = null
+        pendingReadinessPlay = null
+        readinessJob?.cancel()
+        readinessJob = null
         electionVotes.reset()
         livenessJob = null
+        clockJob = null
         scope.cancel()
     }
 

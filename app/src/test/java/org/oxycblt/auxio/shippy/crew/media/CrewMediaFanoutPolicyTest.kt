@@ -80,8 +80,13 @@ class CrewMediaFanoutPolicyTest {
     }
 
     @Test
-    fun `temporary media contract is eight mebibytes`() {
-        assertEquals(8L * 1024L * 1024L, CREW_MEDIA_MAX_OBJECT_BYTES)
+    fun `temporary media supports a full song while remaining protocol bounded`() {
+        assertEquals(
+            CREW_MEDIA_MAX_CHUNK_BYTES.toLong() * CREW_MEDIA_MAX_CHUNKS,
+            CREW_MEDIA_MAX_OBJECT_BYTES,
+        )
+        assertEquals(true, CREW_MEDIA_MAX_OBJECT_BYTES >= 100L * 1024L * 1024L)
+        assertEquals(true, CREW_MEDIA_SESSION_CACHE_BYTES > CREW_MEDIA_MAX_OBJECT_BYTES)
     }
 
     private fun transfer(request: String, target: String) =

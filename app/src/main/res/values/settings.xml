@@ -61,7 +61,9 @@
     <string name="set_key_download_destination_picker" translatable="false">shippy_download_destination_picker</string>
     <string name="set_key_musixmatch_broker_endpoint" translatable="false">shippy_musixmatch_broker_endpoint</string>
     <string name="set_key_crew_member_id" translatable="false">shippy_crew_member_id</string>
+    <string name="set_key_crew_profile_id" translatable="false">shippy_crew_profile_id</string>
     <string name="set_key_crew_display_name" translatable="false">shippy_crew_display_name</string>
+    <string name="set_key_crew_avatar" translatable="false">shippy_crew_avatar</string>
 
     <string name="set_key_task_exit" translatable="false">auxio_task_exit</string>
 

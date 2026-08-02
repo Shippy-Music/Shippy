@@ -73,6 +73,7 @@ import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.shippy.persistence.playback.CanonicalPlaybackCheckpoint
 import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointRepository
 import org.oxycblt.auxio.shippy.playback.CanonicalPlaybackRestoreCoordinator
+import org.oxycblt.auxio.shippy.playback.ProviderPlaybackLifecycle
 import org.oxycblt.musikr.MusicParent
 import timber.log.Timber as L
 
@@ -93,6 +94,7 @@ class ExoPlaybackStateHolder(
     private val imageSettings: ImageSettings,
     private val playbackRequestHeaders: PlaybackRequestHeaders,
     private val transitionGuard: PlaybackTransitionGuard,
+    private val providerPlaybackLifecycle: ProviderPlaybackLifecycle,
 ) :
     PlaybackStateHolder,
     Player.Listener,
@@ -102,6 +104,8 @@ class ExoPlaybackStateHolder(
     private val saveJob = Job()
     private val saveScope = CoroutineScope(Dispatchers.IO + saveJob)
     private val restoreScope = CoroutineScope(Dispatchers.IO + saveJob)
+    private val locatorLifecycleJob = Job()
+    private val locatorLifecycleScope = CoroutineScope(Dispatchers.IO + locatorLifecycleJob)
     private var currentSaveJob: Job? = null
     private var openAudioEffectSession = false
     private var crossfadeJob: Job? = null
@@ -128,6 +132,7 @@ class ExoPlaybackStateHolder(
     fun release() {
         cancelCrossfade()
         saveJob.cancel()
+        locatorLifecycleJob.cancel()
         playbackRequestHeaders.replace(emptyList())
         playbackManager.unregisterStateHolder(this)
         musicRepository.removeUpdateListener(this)
@@ -263,6 +268,11 @@ class ExoPlaybackStateHolder(
     override fun playing(playing: Boolean) {
         if (!playing) cancelCrossfade()
         player.playWhenReady = playing
+    }
+
+    override fun playbackSpeed(speed: Float) {
+        require(speed in 0.95f..1.05f) { "Playback synchronization speed is outside bounds" }
+        player.setPlaybackSpeed(speed)
     }
 
     override fun seekTo(positionMs: Long) {
@@ -539,6 +549,12 @@ class ExoPlaybackStateHolder(
         super.onPlaybackStateChanged(playbackState)
 
         if (playbackState == Player.STATE_ENDED && player.repeatMode == Player.REPEAT_MODE_OFF) {
+            if (transitionGuard.crewActive) {
+                // End-of-media is device telemetry in Crew. The canonical coordinator decides
+                // the shared wrap/pause policy; this device must not independently rewrite state.
+                playbackManager.ack(this, StateAck.PlaybackEnded)
+                return
+            }
             goto(0)
             player.pause()
         }
@@ -555,6 +571,7 @@ class ExoPlaybackStateHolder(
             playbackManager.ack(this, StateAck.IndexMoved)
             deferSave()
         }
+        refreshProviderLocatorsNearPlayback()
     }
 
     override fun onEvents(player: Player, events: Player.Events) {
@@ -589,6 +606,13 @@ class ExoPlaybackStateHolder(
             retriedCurrentError = false
         }
         L.e(error, "Player error on $mediaId")
+        if (
+            !transitionGuard.crewActive &&
+                providerPlaybackLifecycle.requiresProviderRefresh(mediaId)
+        ) {
+            refreshFailedProviderLocator(mediaId, error)
+            return
+        }
         if (error.errorCode in 2000..2999 && !retriedCurrentError) {
             retriedCurrentError = true
             player.prepare()
@@ -602,6 +626,72 @@ class ExoPlaybackStateHolder(
             playbackManager.ack(this, StateAck.ProgressionChanged)
             return
         }
+        if (transitionGuard.crewActive) {
+            // A device-local resolver/decoder failure is not collaborative intent. Keep the
+            // canonical Crew item selected and wait for provider retry or Push & Pull completion;
+            // never turn this failure into a group-wide Next command.
+            player.pause()
+            playbackManager.ack(this, StateAck.ProgressionChanged)
+            return
+        }
+        player.prepare()
+        playbackManager.next()
+    }
+
+    /**
+     * Explicit ordinary-playback hook: resolved provider URLs are device-private and may expire, so
+     * refresh them near the cursor instead of rebuilding or shrinking the logical queue.
+     */
+    private fun refreshProviderLocatorsNearPlayback() {
+        if (transitionGuard.crewActive) return
+        val current = player.currentMediaItem?.resolvedQueueItem ?: return
+        val order = resolveQueue().heap.map { it.item.id }
+        locatorLifecycleScope.launch {
+            val updates = providerPlaybackLifecycle.resolveNearPlayback(current.item.id, order)
+            applyProviderLocatorUpdates(updates)
+        }
+    }
+
+    private fun refreshFailedProviderLocator(mediaId: String, error: PlaybackException) {
+        locatorLifecycleScope.launch {
+            val refreshed = providerPlaybackLifecycle.refreshCurrent(mediaId)
+            if (refreshed != null) {
+                withContext(Dispatchers.Main.immediate) {
+                    replaceResolvedMediaItem(refreshed)
+                    player.prepare()
+                    player.play()
+                }
+            } else {
+                withContext(Dispatchers.Main.immediate) {
+                    failCurrentAfterLocatorRefresh(error, mediaId)
+                }
+            }
+        }
+    }
+
+    private suspend fun applyProviderLocatorUpdates(updates: List<ResolvedQueueItem>) {
+        if (updates.isEmpty()) return
+        withContext(Dispatchers.Main.immediate) { updates.forEach(::replaceResolvedMediaItem) }
+    }
+
+    private fun replaceResolvedMediaItem(update: ResolvedQueueItem) {
+        val index =
+            (0 until player.mediaItemCount).firstOrNull {
+                player.getMediaItemAt(it).mediaId == update.item.id.value
+            } ?: return
+        player.replaceMediaItem(index, update.buildMediaItem())
+        playbackRequestHeaders.replace(resolveQueue().heap)
+    }
+
+    private fun failCurrentAfterLocatorRefresh(error: PlaybackException, mediaId: String) {
+        failedMediaIds += mediaId
+        Toast.makeText(context, R.string.err_track_playback, Toast.LENGTH_SHORT).show()
+        if (failedMediaIds.size >= player.mediaItemCount.coerceAtLeast(1)) {
+            player.pause()
+            playbackManager.ack(this, StateAck.ProgressionChanged)
+            return
+        }
+        L.w(error, "Unable to refresh provider locator for $mediaId")
         player.prepare()
         playbackManager.next()
     }
@@ -916,7 +1006,7 @@ class ExoPlaybackStateHolder(
             .setMediaId(item.id.value)
             .setUri(playback.uri)
             .setMimeType(playback.mimeType)
-            .setCustomCacheKey(item.id.value)
+            .setCustomCacheKey(playback.mediaObjectKey.value.takeIf { playback.cacheEligible })
             .setMediaMetadata(metadata)
             .setTag(this)
             .build()
@@ -986,6 +1076,7 @@ class ExoPlaybackStateHolder(
         private val imageSettings: ImageSettings,
         private val playbackRequestHeaders: PlaybackRequestHeaders,
         private val transitionGuard: PlaybackTransitionGuard,
+        private val providerPlaybackLifecycle: ProviderPlaybackLifecycle,
     ) {
         fun create(): ExoPlaybackStateHolder {
             val activeProcessor = replayGainProcessorProvider.get()
@@ -1009,6 +1100,7 @@ class ExoPlaybackStateHolder(
                 imageSettings,
                 playbackRequestHeaders,
                 transitionGuard,
+                providerPlaybackLifecycle,
             )
         }
 

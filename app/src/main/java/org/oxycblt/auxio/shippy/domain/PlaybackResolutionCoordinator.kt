@@ -21,6 +21,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaIndex
 import org.oxycblt.auxio.shippy.download.withVerifiedDownloadCandidate
+import org.oxycblt.auxio.shippy.media.MediaObjectKey
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.download.PersistedDownload
 import org.oxycblt.auxio.shippy.provider.ProviderFailureKind
@@ -149,6 +150,15 @@ private constructor(
                                     bitrateBps = result.value.bitrateBps,
                                     contentLength = result.value.contentLength,
                                     expiresAtEpochMs = result.value.expiresAtEpochMs,
+                                    mediaObjectKey =
+                                        MediaObjectKey.from(
+                                            candidate,
+                                            mimeType = result.value.mimeType,
+                                            bitrateBps =
+                                                result.value.bitrateBps
+                                                    ?: constraints.preferredBitrateBps,
+                                        ),
+                                    cacheEligible = true,
                                 ),
                         )
                     )
@@ -192,6 +202,7 @@ private constructor(
                         mimeType = candidate.media?.mimeType,
                         bitrateBps = candidate.media?.bitrateBps,
                         contentLength = candidate.media?.contentLength,
+                        mediaObjectKey = MediaObjectKey.from(candidate),
                     ),
             )
         )

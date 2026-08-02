@@ -74,7 +74,10 @@ class CrewDirectPeerConnectionTest {
                     fixture.responderMemberId,
                 )
             val rtc = FakeRtcLink()
-            val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+            // Two independent peers must be able to make progress even when the full JVM suite
+            // temporarily occupies one worker. A single shared worker made this integration test
+            // timing-dependent under load while hiding no production serialization invariant.
+            val dispatcher = Executors.newFixedThreadPool(2).asCoroutineDispatcher()
             val initiator =
                 CrewDirectPeerConnection(
                     rtc.factory(FakeSide.INITIATOR),

@@ -19,16 +19,10 @@ package org.oxycblt.auxio.shippy.playback
 
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.playback.state.PlaybackCommandFactoryImpl
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.shippy.domain.PlaybackPreparation
-import org.oxycblt.auxio.shippy.domain.PlaybackResolutionCoordinator
 import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.domain.QueueItemFactory
 import org.oxycblt.auxio.shippy.domain.QueueItemId
@@ -56,10 +50,10 @@ class ShippyPlaybackController
 @Inject
 constructor(
     private val queueItemFactory: QueueItemFactory,
-    private val resolutionCoordinator: PlaybackResolutionCoordinator,
     private val providerRegistry: ProviderRegistry,
     private val providerSettings: ProviderSettings,
     private val playbackManager: PlaybackStateManager,
+    private val providerPlaybackLifecycle: ProviderPlaybackLifecycle,
 ) {
     suspend fun play(
         track: Track,
@@ -135,22 +129,28 @@ constructor(
         pushPullEnabled: Boolean,
         mutation: (List<ResolvedQueueItem>) -> Unit,
     ): PlaybackStartResult {
-        val prepared =
-            when (
-                val result =
-                    prepareQueue(
-                        tracks,
-                        selectedIndex = 0,
-                        contextId = contextId,
-                        contributorId = contributorId,
-                        pushPullEnabled = pushPullEnabled,
-                    )
-            ) {
-                is PreparedPlaybackQueue.Ready -> result
-                is PreparedPlaybackQueue.Failed -> return PlaybackStartResult.Failed(result.failure)
-            }
-        mutation(prepared.items)
-        return PlaybackStartResult.Started(prepared.plan.selectedItemId)
+        if (playbackManager.currentQueueItem == null) {
+            return playQueue(
+                tracks = tracks,
+                selectedIndex = 0,
+                contextId = contextId,
+                contributorId = contributorId,
+                pushPullEnabled = pushPullEnabled,
+            )
+        }
+        val plan = queuePlaybackPlan(queueItemFactory, tracks, 0, contextId, contributorId)
+        val policy = resolutionPolicy(pushPullEnabled)
+        val constraints =
+            StreamConstraints(preferredBitrateBps = providerSettings.streamingBitrateBps())
+        val prepared = providerPlaybackLifecycle.prepareAdditional(plan.items, policy, constraints)
+        mutation(prepared)
+        providerPlaybackLifecycle.updateQueue(
+            items = playbackManager.queueItems,
+            policy = policy,
+            constraints = constraints,
+            updates = playbackManager.resolvedQueue + prepared,
+        )
+        return PlaybackStartResult.Started(plan.selectedItemId)
     }
 
     private suspend fun prepareQueue(
@@ -162,60 +162,37 @@ constructor(
     ): PreparedPlaybackQueue {
         val plan =
             queuePlaybackPlan(queueItemFactory, tracks, selectedIndex, contextId, contributorId)
-        val policy =
-            ResolutionPolicy(
-                providerPriority =
-                    providerSettings
-                        .selection(
-                            providerRegistry.supporting(ProviderCapability.STREAM).map {
-                                it.descriptor.id
-                            }
-                        )
-                        .priority,
-                pushPullEnabled = pushPullEnabled,
-            )
+        val policy = resolutionPolicy(pushPullEnabled)
         val constraints =
             StreamConstraints(preferredBitrateBps = providerSettings.streamingBitrateBps())
-        val selected =
-            when (
-                val preparation =
-                    resolutionCoordinator.prepare(plan.items[selectedIndex], policy, constraints)
-            ) {
-                is PlaybackPreparation.Ready -> preparation.value
-                is PlaybackPreparation.Failed -> return PreparedPlaybackQueue.Failed(preparation)
-            }
-        val remaining = coroutineScope {
-            val permits = Semaphore(MAX_PARALLEL_QUEUE_RESOLUTIONS)
-            plan.items
-                .mapIndexedNotNull { index, item ->
-                    if (index == selectedIndex) null
-                    else
-                        async {
-                            permits.withPermit {
-                                when (
-                                    val preparation =
-                                        resolutionCoordinator.prepare(item, policy, constraints)
-                                ) {
-                                    is PlaybackPreparation.Ready -> index to preparation.value
-                                    is PlaybackPreparation.Failed -> null
-                                }
-                            }
-                        }
-                }
-                .awaitAll()
-                .filterNotNull()
+        return when (
+            val prepared =
+                providerPlaybackLifecycle.prepareInitial(
+                    plan.items,
+                    selectedIndex,
+                    policy,
+                    constraints,
+                )
+        ) {
+            is ProviderPlaybackLifecycle.InitialPreparation.Ready ->
+                PreparedPlaybackQueue.Ready(plan, prepared.items)
+            is ProviderPlaybackLifecycle.InitialPreparation.Failed ->
+                PreparedPlaybackQueue.Failed(prepared.failure)
         }
-        val items =
-            (remaining + (selectedIndex to selected)).sortedBy { it.first }.map { it.second }
-        if (items.isEmpty()) {
-            error("Selected playback item disappeared during queue preparation")
-        }
-        return PreparedPlaybackQueue.Ready(plan, items)
     }
 
-    private companion object {
-        const val MAX_PARALLEL_QUEUE_RESOLUTIONS = 4
-    }
+    private fun resolutionPolicy(pushPullEnabled: Boolean) =
+        ResolutionPolicy(
+            providerPriority =
+                providerSettings
+                    .selection(
+                        providerRegistry.supporting(ProviderCapability.STREAM).map {
+                            it.descriptor.id
+                        }
+                    )
+                    .priority,
+            pushPullEnabled = pushPullEnabled,
+        )
 }
 
 private sealed interface PreparedPlaybackQueue {

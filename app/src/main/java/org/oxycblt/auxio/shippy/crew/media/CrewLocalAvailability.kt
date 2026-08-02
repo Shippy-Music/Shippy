@@ -93,7 +93,7 @@ internal object CrewLocalAvailabilityEvaluator {
         candidate.kind == CandidateKind.LOCAL &&
             candidate.availability == CandidateAvailability.AVAILABLE &&
             candidate.locator?.startsWith("content:", ignoreCase = true) == true &&
-            candidate.media?.contentLength?.let { it in 1..CREW_MEDIA_MAX_OBJECT_BYTES } == true
+            candidate.media?.contentLength?.let { it in 1..CREW_MEDIA_MAX_OBJECT_BYTES } != false
 }
 
 /** Removes suppliers that this runtime cannot currently reach without changing shared truth. */

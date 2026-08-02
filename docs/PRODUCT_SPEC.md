@@ -2,13 +2,16 @@
 
 **Status:** Canonical product source of truth  
 **Owner:** Shippy team  
-**Last updated:** 2026-07-25  
+**Last updated:** 2026-08-02  
 **Foundation:** Auxio, native Android/Kotlin  
 **Platform:** Android only for the foreseeable future
 
 Read this document before making product or architecture decisions. When another
 document conflicts with it, this document wins unless the owner explicitly
 changes the decision and this file is updated in the same change.
+
+Implementation evidence for the 2026-08-02 beta-readiness audit is tracked in
+`BETA_READINESS_IMPLEMENTATION.md`; live verification truth is in `STATUS.md`.
 
 ## 1. Mission
 

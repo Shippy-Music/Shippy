@@ -20,6 +20,9 @@ package org.oxycblt.auxio.shippy.crew.playback
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.playback.state.PlaybackCommandFactoryImpl
+import org.oxycblt.auxio.playback.state.PlaybackMutation
+import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
@@ -35,8 +38,11 @@ import org.oxycblt.auxio.shippy.crew.media.publicizeCrewQueueItem
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
+import org.oxycblt.auxio.shippy.domain.ProviderId
 import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.domain.QueueItemId
+import org.oxycblt.auxio.shippy.domain.ResolvedPlayback
+import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.shippy.domain.Track
 import org.oxycblt.auxio.shippy.domain.TrackCandidate
 import org.oxycblt.auxio.shippy.domain.TrackId
@@ -51,6 +57,17 @@ class CrewPlaybackBridgeTest {
         val stamped = stampCrewContributor(listOf(localItem, remoteItem), local)
         assertEquals("local", stamped[0].contributorId)
         assertEquals("remote-member", stamped[1].contributorId)
+    }
+
+    @Test
+    fun `provider item receives contributor attribution when introduced locally`() {
+        val local = CrewMemberId("local", ProtocolVersion(1))
+        val providerItem = item("provider", CandidateKind.PROVIDER)
+
+        assertEquals(
+            "local",
+            stampCrewContributor(listOf(providerItem), local).single().contributorId,
+        )
     }
 
     @Test
@@ -215,6 +232,107 @@ class CrewPlaybackBridgeTest {
         assertTrue(crewDiff(crew, player).isEmpty())
     }
 
+    @Test
+    fun `explicit pause becomes one canonical Crew action without a player diff`() {
+        val item = item("one")
+        val crew =
+            state(listOf(item), CrewPlaybackState(item.id, CrewPlaybackMode.PLAYING, 1_000, 10_000))
+
+        assertEquals(
+            listOf(CrewAction.Pause(1_250, 10_250)),
+            actionsForMutation(
+                crew,
+                PlaybackMutation.SetPlaying(false),
+                CrewMemberId("member", ProtocolVersion(1)),
+                10_250,
+            ),
+        )
+    }
+
+    @Test
+    fun `queue additions stay granular and preserve order`() {
+        val current = item("current")
+        val first = item("first")
+        val second = item("second")
+        val crew =
+            state(listOf(current), CrewPlaybackState(current.id, CrewPlaybackMode.PAUSED, 0, 0))
+
+        assertEquals(
+            listOf(
+                CrewAction.QueueItemInserted(first, 1, afterItemId = current.id),
+                CrewAction.QueueItemInserted(second, 2, afterItemId = first.id),
+            ),
+            actionsForMutation(
+                crew,
+                PlaybackMutation.AddToQueue(listOf(resolved(first), resolved(second))),
+                null,
+                100,
+            ),
+        )
+    }
+
+    @Test
+    fun `adding to an empty Crew starts the first inserted item`() {
+        val first = item("first")
+        val second = item("second")
+        val crew = state(emptyList(), CrewPlaybackState())
+
+        assertEquals(
+            listOf(
+                CrewAction.QueueItemInserted(first, 0),
+                CrewAction.QueueItemInserted(second, 1, afterItemId = first.id),
+                CrewAction.Play(0, 400),
+            ),
+            actionsForMutation(
+                crew,
+                PlaybackMutation.AddToQueue(listOf(resolved(first), resolved(second))),
+                null,
+                100,
+            ),
+        )
+    }
+
+    @Test
+    fun `starting playback publishes queue selection mode and play in order`() {
+        val old = item("old")
+        val selected = item("selected")
+        val other = item("other")
+        val crew = state(listOf(old), CrewPlaybackState(old.id, CrewPlaybackMode.PAUSED, 0, 0))
+        val command =
+            PlaybackCommandFactoryImpl.PlaybackCommandImpl(
+                selectedItemId = selected.id,
+                queue = listOf(resolved(selected), resolved(other)),
+                parent = null,
+                shuffled = true,
+            )
+
+        assertEquals(
+            listOf(
+                CrewAction.QueueReplaced(listOf(selected, other)),
+                CrewAction.CurrentItemChanged(selected.id),
+                CrewAction.ShuffleChanged(true),
+                CrewAction.Play(0, 800),
+            ),
+            actionsForMutation(crew, PlaybackMutation.Start(command), null, 500),
+        )
+    }
+
+    @Test
+    fun `repeat mutation maps directly without touching playback`() {
+        val item = item("one")
+        val crew = state(listOf(item), CrewPlaybackState(item.id, CrewPlaybackMode.PAUSED, 0, 0))
+
+        assertEquals(
+            listOf(CrewAction.RepeatChanged(CrewRepeatMode.ONE)),
+            actionsForMutation(
+                crew,
+                PlaybackMutation.SetRepeatMode(RepeatMode.TRACK),
+                CrewMemberId("member", ProtocolVersion(1)),
+                0,
+            ),
+        )
+    }
+
     private fun state(
         queue: List<QueueItem>,
         playback: CrewPlaybackState,
@@ -256,11 +374,30 @@ class CrewPlaybackBridgeTest {
                             kind,
                             "source",
                             "$id-$index",
-                            CandidateAvailability.AVAILABLE,
-                            locator = "content://$id/$index",
+                            if (kind == CandidateKind.PROVIDER) {
+                                CandidateAvailability.RESOLVABLE
+                            } else {
+                                CandidateAvailability.AVAILABLE
+                            },
+                            locator =
+                                if (kind == CandidateKind.PROVIDER) {
+                                    "https://example.invalid/$id/$index"
+                                } else {
+                                    "content://$id/$index"
+                                },
+                            providerId =
+                                if (kind == CandidateKind.PROVIDER) ProviderId("provider") else null,
                         )
                     },
             ),
+        )
+    }
+
+    private fun resolved(item: QueueItem): ResolvedQueueItem {
+        val candidate = item.track.candidates.first()
+        return ResolvedQueueItem(
+            item,
+            ResolvedPlayback(item.id, candidate.id, "https://example.invalid/${item.id.value}"),
         )
     }
 }

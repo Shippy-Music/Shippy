@@ -17,6 +17,8 @@
  */
 package org.oxycblt.auxio.shippy.domain
 
+import org.oxycblt.auxio.shippy.media.MediaObjectKey
+
 data class ResolvedPlayback(
     val queueItemId: QueueItemId,
     val candidateId: CandidateId,
@@ -26,6 +28,10 @@ data class ResolvedPlayback(
     val bitrateBps: Int? = null,
     val contentLength: Long? = null,
     val expiresAtEpochMs: Long? = null,
+    val mediaObjectKey: MediaObjectKey = MediaObjectKey.fromCandidateId(candidateId),
+    val cacheEligible: Boolean = false,
+    /** True only for an ordinary-queue occurrence waiting for a provider retry. */
+    val deferred: Boolean = false,
 ) {
     init {
         require(uri.isNotBlank()) { "Resolved playback URI cannot be blank" }

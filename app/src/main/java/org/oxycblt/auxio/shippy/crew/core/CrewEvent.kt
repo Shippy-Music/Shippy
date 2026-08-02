@@ -48,9 +48,34 @@ sealed interface CrewAction {
 
     data class QueueReplaced(val items: List<QueueItem>) : CrewAction
 
-    data class QueueItemInserted(val item: QueueItem, val index: Int) : CrewAction
+    data class QueueItemInserted(
+        val item: QueueItem,
+        val index: Int,
+        val beforeItemId: QueueItemId? = null,
+        val afterItemId: QueueItemId? = null,
+    ) : CrewAction {
+        init {
+            require(beforeItemId == null || afterItemId == null) {
+                "Queue insertion cannot specify both anchors"
+            }
+        }
+    }
 
-    data class QueueItemMoved(val itemId: QueueItemId, val newIndex: Int) : CrewAction
+    data class QueueItemMoved(
+        val itemId: QueueItemId,
+        val newIndex: Int,
+        val beforeItemId: QueueItemId? = null,
+        val afterItemId: QueueItemId? = null,
+    ) : CrewAction {
+        init {
+            require(beforeItemId == null || afterItemId == null) {
+                "Queue move cannot specify both anchors"
+            }
+            require(beforeItemId != itemId && afterItemId != itemId) {
+                "Queue item cannot anchor itself"
+            }
+        }
+    }
 
     data class QueueItemRemoved(val itemId: QueueItemId) : CrewAction
 

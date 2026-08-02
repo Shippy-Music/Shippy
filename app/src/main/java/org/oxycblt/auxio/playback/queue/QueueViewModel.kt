@@ -27,6 +27,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
@@ -34,6 +35,11 @@ import org.oxycblt.auxio.playback.PlaybackDisplayItem
 import org.oxycblt.auxio.playback.PlaybackDisplayMapper
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.QueueChange
+import org.oxycblt.auxio.shippy.crew.core.CrewAction
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
+import org.oxycblt.auxio.shippy.crew.playback.CREW_START_LEAD_MS
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
+import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.domain.ResolvedQueueItem
 import org.oxycblt.auxio.util.Event
@@ -52,6 +58,7 @@ class QueueViewModel
 constructor(
     private val playbackManager: PlaybackStateManager,
     private val playbackDisplayMapper: PlaybackDisplayMapper,
+    private val activeCrewRuntime: ActiveCrewRuntime,
 ) : ViewModel(), PlaybackStateManager.Listener {
     private var queueMappingJob: Job? = null
 
@@ -73,6 +80,27 @@ constructor(
 
     init {
         playbackManager.addListener(this)
+        viewModelScope.launch {
+            activeCrewRuntime.state.collect { runtime ->
+                val active = runtime as? ActiveCrewRuntimeState.Active
+                if (active == null) {
+                    updateQueueAsync(
+                        playbackManager.resolvedQueue,
+                        playbackManager.index,
+                        UpdateInstructions.Replace(0),
+                    )
+                } else {
+                    val state = active.presentation.crewState
+                    val index =
+                        state.queue.indexOfFirst { it.id == state.playback.currentQueueItemId }
+                    updateCrewQueueAsync(
+                        state.queue,
+                        index,
+                        state.members.associate { it.id.value to it.displayName },
+                    )
+                }
+            }
+        }
     }
 
     override fun onIndexMoved(index: Int) {
@@ -86,6 +114,7 @@ constructor(
         index: Int,
         change: QueueChange,
     ) {
+        if (activeCrew() != null) return
         // Queue changed trivially due to item mo -> Diff queue, stay at current index.
         L.d("Updating queue display")
         updateQueueAsync(queue, index, change.instructions)
@@ -101,6 +130,7 @@ constructor(
         index: Int,
         isShuffled: Boolean,
     ) {
+        if (activeCrew() != null) return
         // Queue changed completely -> Replace queue, update index
         L.d("Queue changed completely, replacing queue and position")
         _scrollTo.put(index)
@@ -114,6 +144,7 @@ constructor(
         index: Int,
         isShuffled: Boolean,
     ) {
+        if (activeCrew() != null) return
         // Entirely new queue -> Replace queue, update index
         L.d("New playback, replacing queue and position")
         _scrollTo.put(index)
@@ -138,6 +169,32 @@ constructor(
             }
     }
 
+    private fun updateCrewQueueAsync(
+        queue: List<org.oxycblt.auxio.shippy.domain.QueueItem>,
+        index: Int,
+        memberNames: Map<String, String>,
+    ) {
+        queueMappingJob?.cancel()
+        queueMappingJob =
+            viewModelScope.launch {
+                val displayQueue =
+                    withContext(Dispatchers.Default) {
+                        queue.map { item ->
+                            playbackDisplayMapper
+                                .map(item)
+                                .copy(
+                                    contributorDisplayName =
+                                        item.contributorId?.let(memberNames::get)
+                                )
+                        }
+                    }
+                currentCoroutineContext().ensureActive()
+                _queueInstructions.put(UpdateInstructions.Replace(0))
+                _queue.value = displayQueue
+                _index.value = index
+            }
+    }
+
     override fun onCleared() {
         super.onCleared()
         playbackManager.removeListener(this)
@@ -150,6 +207,24 @@ constructor(
      *   range.
      */
     fun goto(itemId: QueueItemId) {
+        activeCrew()?.let { active ->
+            val state = active.presentation.crewState
+            if (state.queue.none { it.id == itemId }) return
+            viewModelScope.launch {
+                activeCrewRuntime.submit(CrewAction.CurrentItemChanged(itemId))
+                val localNow = System.currentTimeMillis().coerceAtLeast(0)
+                val now =
+                    active.presentation.clockEstimate.value
+                        ?.clientToCoordinator(localNow)
+                        ?.coerceAtLeast(0) ?: localNow
+                activeCrewRuntime.submit(
+                    if (state.playback.mode == CrewPlaybackMode.PLAYING)
+                        CrewAction.Play(0, now + CREW_START_LEAD_MS)
+                    else CrewAction.Pause(0, now)
+                )
+            }
+            return
+        }
         val currentIndex = playbackManager.queueItems.indexOfFirst { it.id == itemId }
         if (currentIndex < 0) return
         L.d("Going to queue item $itemId at $currentIndex")
@@ -167,6 +242,11 @@ constructor(
      *   range.
      */
     fun removeQueueDataItem(itemId: QueueItemId) {
+        activeCrew()?.let { active ->
+            if (active.presentation.crewState.queue.none { it.id == itemId }) return
+            viewModelScope.launch { activeCrewRuntime.submit(CrewAction.QueueItemRemoved(itemId)) }
+            return
+        }
         val currentIndex = playbackManager.queueItems.indexOfFirst { it.id == itemId }
         if (currentIndex < 0) return
         L.d("Removing queue item $itemId at $currentIndex")
@@ -185,6 +265,28 @@ constructor(
         beforeId: QueueItemId?,
         afterId: QueueItemId?,
     ): Boolean {
+        activeCrew()?.let { active ->
+            val current = active.presentation.crewState.queue
+            val withoutMoved = current.filterNot { it.id == itemId }
+            if (withoutMoved.size == current.size) return false
+            val destination =
+                beforeId?.let { id -> withoutMoved.indexOfFirst { it.id == id }.takeIf { it >= 0 } }
+                    ?: afterId?.let { id ->
+                        withoutMoved.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.plus(1)
+                    }
+                    ?: return false
+            viewModelScope.launch {
+                activeCrewRuntime.submit(
+                    CrewAction.QueueItemMoved(
+                        itemId = itemId,
+                        newIndex = destination,
+                        beforeItemId = beforeId,
+                        afterItemId = if (beforeId == null) afterId else null,
+                    )
+                )
+            }
+            return true
+        }
         val current = playbackManager.queueItems
         val from = current.indexOfFirst { it.id == itemId }
         if (from < 0) return false
@@ -201,4 +303,7 @@ constructor(
         playbackManager.moveQueueItem(from, to)
         return true
     }
+
+    private fun activeCrew(): ActiveCrewRuntimeState.Active? =
+        activeCrewRuntime.state.value as? ActiveCrewRuntimeState.Active
 }

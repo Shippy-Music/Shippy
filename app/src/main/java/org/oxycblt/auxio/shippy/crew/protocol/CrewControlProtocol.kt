@@ -28,12 +28,14 @@ import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
+import org.oxycblt.auxio.shippy.crew.core.CrewAvatarDescriptor
 import org.oxycblt.auxio.shippy.crew.core.CrewElectionCheckpoint
 import org.oxycblt.auxio.shippy.crew.core.CrewElectionVote
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackState
+import org.oxycblt.auxio.shippy.crew.core.CrewProfileId
 import org.oxycblt.auxio.shippy.crew.core.CrewRepeatMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
@@ -78,6 +80,7 @@ private const val FRAME_HEADER_BYTES =
 private const val MAX_STRING_BYTES = 16 * 1024
 private const val MAX_ID_BYTES = 128
 private const val MAX_DISPLAY_NAME_BYTES = 512
+private const val MAX_AVATAR_DESCRIPTOR_BYTES = 16
 private const val MAX_LOCATOR_BYTES = 64 * 1024
 private const val MAX_ARTISTS = 64
 private const val MAX_CANDIDATES = 32
@@ -528,6 +531,7 @@ private fun DataOutputStream.writeActionRequest(request: CrewActionRequest) {
     writeMemberId(request.issuingMemberId)
     writeLong(request.clientMonotonicTimestampMs)
     writeAction(request.action)
+    writeNullableLong(request.baseSequence?.value)
 }
 
 private fun DataInputStream.readActionRequest() =
@@ -536,6 +540,7 @@ private fun DataInputStream.readActionRequest() =
         issuingMemberId = readMemberId(),
         clientMonotonicTimestampMs = readLong(),
         action = readAction(),
+        baseSequence = readNullableLong()?.let(::EventSequence),
     )
 
 private fun DataOutputStream.writeDurableEvent(event: DurableCrewEvent) {
@@ -698,11 +703,15 @@ private fun DataOutputStream.writeAction(action: CrewAction) {
             writeByte(5)
             writeQueueItem(action.item)
             writeInt(action.index)
+            writeNullableString(action.beforeItemId?.value, MAX_ID_BYTES)
+            writeNullableString(action.afterItemId?.value, MAX_ID_BYTES)
         }
         is CrewAction.QueueItemMoved -> {
             writeByte(6)
             writeSizedString(action.itemId.value, MAX_ID_BYTES)
             writeInt(action.newIndex)
+            writeNullableString(action.beforeItemId?.value, MAX_ID_BYTES)
+            writeNullableString(action.afterItemId?.value, MAX_ID_BYTES)
         }
         is CrewAction.QueueItemRemoved -> {
             writeByte(7)
@@ -789,8 +798,20 @@ private fun DataInputStream.readAction(): CrewAction =
         2 -> CrewAction.MemberUpdated(readMember())
         3 -> CrewAction.MemberLeft(readMemberId())
         4 -> CrewAction.QueueReplaced(readQueue())
-        5 -> CrewAction.QueueItemInserted(readQueueItem(), readInt())
-        6 -> CrewAction.QueueItemMoved(QueueItemId(readSizedString(MAX_ID_BYTES)), readInt())
+        5 ->
+            CrewAction.QueueItemInserted(
+                readQueueItem(),
+                readInt(),
+                readNullableString(MAX_ID_BYTES)?.let(::QueueItemId),
+                readNullableString(MAX_ID_BYTES)?.let(::QueueItemId),
+            )
+        6 ->
+            CrewAction.QueueItemMoved(
+                QueueItemId(readSizedString(MAX_ID_BYTES)),
+                readInt(),
+                readNullableString(MAX_ID_BYTES)?.let(::QueueItemId),
+                readNullableString(MAX_ID_BYTES)?.let(::QueueItemId),
+            )
         7 -> CrewAction.QueueItemRemoved(QueueItemId(readSizedString(MAX_ID_BYTES)))
         8 -> CrewAction.CurrentItemChanged(QueueItemId(readSizedString(MAX_ID_BYTES)))
         9 -> CrewAction.Play(readLong(), readLong())
@@ -936,10 +957,17 @@ private fun DataInputStream.readPlayback() =
 private fun DataOutputStream.writeMember(member: CrewMember) {
     writeMemberId(member.id)
     writeSizedString(member.displayName, MAX_DISPLAY_NAME_BYTES)
+    writeSizedString(member.profileId.value, MAX_ID_BYTES)
+    writeSizedString(member.avatar.value, MAX_AVATAR_DESCRIPTOR_BYTES)
 }
 
 private fun DataInputStream.readMember() =
-    CrewMember(readMemberId(), readSizedString(MAX_DISPLAY_NAME_BYTES))
+    CrewMember(
+        id = readMemberId(),
+        displayName = readSizedString(MAX_DISPLAY_NAME_BYTES),
+        profileId = CrewProfileId(readSizedString(MAX_ID_BYTES)),
+        avatar = CrewAvatarDescriptor(readSizedString(MAX_AVATAR_DESCRIPTOR_BYTES)),
+    )
 
 private fun DataOutputStream.writeSessionId(id: CrewSessionId) {
     writeSizedString(id.value, MAX_ID_BYTES)
@@ -1152,6 +1180,7 @@ private fun CrewSequenceRejection.wireCode() =
         CrewSequenceRejection.PROTOCOL_MISMATCH -> 4
         CrewSequenceRejection.DUPLICATE_RECEIPT_UNAVAILABLE -> 5
         CrewSequenceRejection.ACTION_REJECTED -> 6
+        CrewSequenceRejection.STALE_BASE_REVISION -> 7
     }
 
 private fun ByteArray.sha256(): ByteArray = MessageDigest.getInstance("SHA-256").digest(this)

@@ -79,6 +79,9 @@ data class CrewClockEstimate(
 
     fun coordinatorToClient(coordinatorMonotonicMs: Long): Long =
         (coordinatorMonotonicMs - coordinatorMinusClientMs).roundToLong()
+
+    fun clientToCoordinator(clientClockMs: Long): Long =
+        (clientClockMs + coordinatorMinusClientMs).roundToLong()
 }
 
 /**

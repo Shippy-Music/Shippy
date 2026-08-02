@@ -41,6 +41,9 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaDataSourceFactory
+import org.oxycblt.auxio.shippy.crew.cache.CrewTemporaryMediaIndex
+import org.oxycblt.auxio.shippy.media.cache.PlaybackCacheManager
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -56,6 +59,8 @@ class SystemModule {
     fun dataSourceFactory(
         @ApplicationContext context: Context,
         playbackRequestHeaders: PlaybackRequestHeaders,
+        playbackCache: PlaybackCacheManager,
+        crewTemporaryMediaIndex: CrewTemporaryMediaIndex,
     ): DataSource.Factory {
         val httpFactory =
             DefaultHttpDataSource.Factory()
@@ -63,7 +68,11 @@ class SystemModule {
                 .setReadTimeoutMs(10_000)
                 .setAllowCrossProtocolRedirects(false)
         val routingFactory = DefaultDataSource.Factory(context, httpFactory)
-        return ResolvingDataSource.Factory(routingFactory, playbackRequestHeaders::resolve)
+        val resolvingFactory =
+            ResolvingDataSource.Factory(routingFactory, playbackRequestHeaders::resolve)
+        val crewFactory =
+            CrewTemporaryMediaDataSourceFactory(crewTemporaryMediaIndex, resolvingFactory)
+        return playbackCache.dataSourceFactory(crewFactory)
     }
 
     @Provides

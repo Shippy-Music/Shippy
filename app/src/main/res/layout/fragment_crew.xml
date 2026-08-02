@@ -236,6 +236,25 @@
                     android:layout_marginTop="@dimen/spacing_small"
                     android:text="@string/lbl_open_queue" />
 
+                <TextView
+                    android:id="@+id/crew_activity_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_large"
+                    android:text="@string/lbl_crew_recent_activity"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/crew_activity"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/spacing_small"
+                    android:maxLines="5"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:visibility="gone" />
+
                 <LinearLayout
                     android:id="@+id/crew_push_pull_prompt"
                     android:layout_width="match_parent"

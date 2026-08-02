@@ -158,10 +158,11 @@ sealed interface PlayerDownloadPresentation {
 
 internal fun downloadPresentation(
     track: Track,
-    resolvedCandidateId: CandidateId,
+    resolvedCandidateId: CandidateId?,
     download: PersistedDownload?,
     downloadableProviderIds: Set<ProviderId>,
 ): PlayerDownloadPresentation {
+    if (resolvedCandidateId == null) return PlayerDownloadPresentation.Hidden
     val candidate =
         track.candidates.firstOrNull {
             it.id == resolvedCandidateId &&

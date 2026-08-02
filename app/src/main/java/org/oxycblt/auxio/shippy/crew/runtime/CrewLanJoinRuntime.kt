@@ -70,13 +70,16 @@ import org.oxycblt.auxio.shippy.crew.session.CrewActionRequest
 import org.oxycblt.auxio.shippy.crew.session.CrewReactionSendResult
 import org.oxycblt.auxio.shippy.crew.session.CrewRejoinCredentialReceiver
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
+import org.oxycblt.auxio.shippy.crew.session.CrewSessionNotice
 import org.oxycblt.auxio.shippy.crew.session.CrewSubmitResult
 import org.oxycblt.auxio.shippy.crew.settings.CrewProfileSettings
+import org.oxycblt.auxio.shippy.crew.sync.CrewClockEstimate
 import org.oxycblt.auxio.shippy.crew.transport.webrtc.CrewWebRtcRuntime
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
 import org.oxycblt.auxio.shippy.persistence.crew.CrewRejoinLeaseStore
 
-private const val CREW_JOIN_PROTOCOL_V1 = 1
+// Keep join compatibility aligned with the host's wall-clock/profile protocol.
+private const val CREW_JOIN_PROTOCOL_V3 = 3
 private const val CREW_LAN_DISCOVERY_TIMEOUT_MS = 20_000L
 private const val CREW_NEARBY_HEAD_START_MS = 6_000L
 private const val CREW_RECONNECT_DIAL_TIMEOUT_MS = 15_000L
@@ -135,6 +138,8 @@ internal constructor(
     private var left = false
 
     val state: StateFlow<CrewState> = engine.state
+    val clockEstimate: StateFlow<CrewClockEstimate?> = engine.clockEstimate
+    val notices: SharedFlow<CrewSessionNotice> = engine.notices
     val reactions: SharedFlow<ActiveCrewReaction> = engine.reactions
     val reconnectState: StateFlow<CrewJoinReconnectState> = reconnectController.state
     val peerMediaBlocked: StateFlow<Boolean> = mediaRuntime.peerMediaBlocked
@@ -149,6 +154,7 @@ internal constructor(
                 issuingMemberId = localMemberId,
                 clientMonotonicTimestampMs = (System.nanoTime() / 1_000_000L).coerceAtLeast(0L),
                 action = action,
+                baseSequence = state.value.lastSequence,
             )
         )
 
@@ -225,8 +231,30 @@ constructor(
     private val discoveryTimeoutMs = CREW_LAN_DISCOVERY_TIMEOUT_MS
     private val nowEpochMs: () -> Long = System::currentTimeMillis
 
-    suspend fun join(inviteLink: String): CrewLanJoinLaunchResult {
-        val protocol = ProtocolVersion(CREW_JOIN_PROTOCOL_V1)
+    suspend fun join(inviteLink: String): CrewLanJoinLaunchResult =
+        join(inviteLink, preserveRecoveryArtifactsOnFailure = false, recoveredMembershipId = null)
+
+    /**
+     * Re-enters through the ordinary authenticated join path without deleting a retryable lease.
+     */
+    suspend fun rejoin(
+        lease: org.oxycblt.auxio.shippy.crew.rejoin.CrewRejoinLease
+    ): CrewLanJoinLaunchResult {
+        val invite = CrewRejoinInviteFactory.fromLease(lease)
+        val link = CrewInviteCodec(setOf(invite.protocolVersion)).encode(invite)
+        return join(
+            link,
+            preserveRecoveryArtifactsOnFailure = true,
+            recoveredMembershipId = lease.memberId,
+        )
+    }
+
+    private suspend fun join(
+        inviteLink: String,
+        preserveRecoveryArtifactsOnFailure: Boolean,
+        recoveredMembershipId: CrewMemberId?,
+    ): CrewLanJoinLaunchResult {
+        val protocol = ProtocolVersion(CREW_JOIN_PROTOCOL_V3)
         val invite =
             when (val decoded = CrewInviteCodec(setOf(protocol)).decode(inviteLink, nowEpochMs())) {
                 is CrewInviteDecodeResult.Accepted -> decoded.invite
@@ -236,18 +264,21 @@ constructor(
                     )
             }
         val localMemberId =
-            runCatching { profileSettings.memberId(protocol) }
+            runCatching {
+                    recoveredMembershipId?.takeIf { it.protocolVersion == protocol }
+                        ?: CrewMemberId(UUID.randomUUID().toString(), protocol)
+                }
                 .getOrElse {
                     return CrewLanJoinLaunchResult.Failed(CrewLanJoinLaunchFailure.Initialization)
                 }
         val localMember =
-            runCatching { CrewMember(localMemberId, profileSettings.displayName) }
+            runCatching { profileSettings.member(protocol).copy(id = localMemberId) }
                 .getOrElse {
                     return CrewLanJoinLaunchResult.Failed(CrewLanJoinLaunchFailure.Initialization)
                 }
         val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull()
         val selected =
-            selectSignalingPeer(discovery, invite, localMemberId, localMember.displayName)
+            selectSignalingPeer(discovery, invite, localMember)
                 ?: return CrewLanJoinLaunchResult.Failed(
                     if (invite.relayLocator == null) CrewLanJoinLaunchFailure.DiscoveryTimedOut
                     else CrewLanJoinLaunchFailure.RemoteSignalingFailed
@@ -270,8 +301,10 @@ constructor(
             runCatching { signalPeer.close() }
             runCatching { mediaRuntime?.close() }
             runCatching { webRtc?.close() }
-            runCatching { checkpoints.clear(sessionId) }
-            runCatching { leases.clear(sessionId) }
+            if (!preserveRecoveryArtifactsOnFailure) {
+                runCatching { checkpoints.clear(sessionId) }
+                runCatching { leases.clear(sessionId) }
+            }
             return CrewLanJoinLaunchResult.Failed(reason)
         }
 
@@ -540,22 +573,17 @@ constructor(
         localMember: CrewMember,
     ): SignalingSelection? {
         val discovery = runCatching { lanDiscovery.discover(invite) }.getOrNull()
-        return selectSignalingPeer(discovery, invite, localMember.id, localMember.displayName)
+        return selectSignalingPeer(discovery, invite, localMember)
     }
 
     private suspend fun selectSignalingPeer(
         discovery: CrewLanDiscoverySession?,
         invite: CrewInvite,
-        localMemberId: CrewMemberId,
-        localDisplayName: String,
+        localMember: CrewMember,
     ): SignalingSelection? {
         val nearby =
             try {
-                nearbyConnections.connect(
-                    invite,
-                    CrewMember(localMemberId, localDisplayName),
-                    CREW_NEARBY_HEAD_START_MS,
-                )
+                nearbyConnections.connect(invite, localMember, CREW_NEARBY_HEAD_START_MS)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
@@ -588,8 +616,8 @@ constructor(
                                         CrewLanSignalingClient.connect(
                                             it.rendezvous,
                                             invite,
-                                            localMemberId,
-                                            localDisplayName,
+                                            localMember.id,
+                                            localMember.displayName,
                                             nowEpochMs(),
                                         )
                                     }
@@ -618,8 +646,8 @@ constructor(
                                     CrewHostedRelayJoin.connect(
                                         relayClient,
                                         invite,
-                                        localMemberId,
-                                        localDisplayName,
+                                        localMember.id,
+                                        localMember.displayName,
                                         nowEpochMs,
                                     )
                                 (result as? CrewHostedRelayJoinResult.Connected)?.peer?.let {

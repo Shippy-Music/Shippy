@@ -27,8 +27,9 @@ import org.oxycblt.musikr.Song
 
 data class PlaybackDisplayItem(
     val queueItem: QueueItem,
-    val resolvedCandidateId: CandidateId,
+    val resolvedCandidateId: CandidateId?,
     val localSong: Song?,
+    val contributorDisplayName: String? = null,
 )
 
 class PlaybackDisplayMapper
@@ -53,4 +54,8 @@ constructor(private val localCandidateResolver: LocalCandidateResolver) {
             localSong = localSong,
         )
     }
+
+    /** Maps canonical Crew intent even when this device has not resolved a playable source yet. */
+    fun map(queueItem: QueueItem): PlaybackDisplayItem =
+        PlaybackDisplayItem(queueItem = queueItem, resolvedCandidateId = null, localSong = null)
 }

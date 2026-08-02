@@ -18,9 +18,16 @@
 package org.oxycblt.auxio.shippy.crew.settings
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.fail
 import org.junit.Test
+import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
+import org.oxycblt.auxio.shippy.crew.core.CrewAction
+import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
+import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
+import org.oxycblt.auxio.shippy.crew.core.CrewState
+import org.oxycblt.auxio.shippy.crew.core.EventSequence
 import org.oxycblt.auxio.shippy.crew.core.ProtocolVersion
 
 class CrewProfileSettingsTest {
@@ -54,6 +61,27 @@ class CrewProfileSettingsTest {
             crewMemberId(value, ProtocolVersion(1)),
         )
         assertEquals(value, crewMemberId(value, ProtocolVersion(2)).value)
+    }
+
+    @Test
+    fun `active profile change updates only the local member and skips duplicates`() {
+        val version = ProtocolVersion(2)
+        val local = CrewMemberId("local", version)
+        val other = CrewMemberId("other", version)
+        val state =
+            CrewState(
+                sessionId = CrewSessionId("session", version),
+                protocolVersion = version,
+                term = CoordinatorTerm(1),
+                lastSequence = EventSequence(0),
+                coordinatorMemberId = local,
+                members = listOf(CrewMember(local, "Old"), CrewMember(other, "Other")),
+            )
+
+        val updated = CrewMember(local, "New")
+        assertEquals(CrewAction.MemberUpdated(updated), profileUpdateAction(state, local, updated))
+        assertNull(profileUpdateAction(state, local, CrewMember(local, "Old")))
+        assertNull(profileUpdateAction(state, CrewMemberId("absent", version), updated))
     }
 
     private fun assertInvalid(value: String) {

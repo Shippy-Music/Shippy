@@ -72,8 +72,11 @@ class CrewMediaTest {
         cache.beginSession(manifest.transfer.sessionId)
         val receiver = CrewMediaReceiver(manifest.transfer.sessionId, cache)
 
-        assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(manifest))
-        assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(chunk(manifest, 1, second)))
+        assertEquals(CrewMediaReceiveResult.Accepted(0), receiver.accept(manifest))
+        assertEquals(
+            CrewMediaReceiveResult.Accepted(0),
+            receiver.accept(chunk(manifest, 1, second)),
+        )
         val complete = receiver.accept(chunk(manifest, 0, first)) as CrewMediaReceiveResult.Complete
         assertEquals(manifest, complete.manifest)
         assertTrue(complete.file.isFile)
@@ -84,22 +87,19 @@ class CrewMediaTest {
     }
 
     @Test
-    fun `receiver retains a complete bounded assembly when cache publication must retry`() {
+    fun `receiver rejects a manifest before transfer when cache capacity is unavailable`() {
         val bytes = byteArrayOf(1, 2)
         val manifest = manifest(bytes)
         val cache = CrewTemporaryMediaCache(tempDirectory(), maxBytes = 1)
         cache.beginSession(manifest.transfer.sessionId)
         val receiver = CrewMediaReceiver(manifest.transfer.sessionId, cache)
-        val finalChunk = chunk(manifest, 0, bytes)
-
-        assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(manifest))
         assertEquals(
             CrewMediaReceiveResult.Retry("temporary cache unavailable"),
-            receiver.accept(finalChunk),
+            receiver.accept(manifest),
         )
         assertEquals(
             CrewMediaReceiveResult.Retry("temporary cache unavailable"),
-            receiver.accept(finalChunk),
+            receiver.accept(manifest),
         )
     }
 
@@ -115,10 +115,9 @@ class CrewMediaTest {
                 CrewMediaReceiverPolicy(maxAssemblies = 1, maxBufferedBytes = 5),
             )
 
-        assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(manifest))
+        assertEquals(CrewMediaReceiveResult.Accepted(0), receiver.accept(manifest))
         assertTrue(
-            receiver.accept(chunk(manifest, 0, byteArrayOf(9, 9)))
-                is CrewMediaReceiveResult.Rejected
+            receiver.accept(chunk(manifest, 0, byteArrayOf(9))) is CrewMediaReceiveResult.Rejected
         )
         assertTrue(
             receiver.accept(manifest.copy(objectIntegrity = CrewMediaDigest.sha256(byteArrayOf(9))))
@@ -143,10 +142,10 @@ class CrewMediaTest {
                 CrewMediaReceiverPolicy(maxAssemblies = 2, maxBufferedBytes = 3),
             )
 
-        assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(first))
+        assertEquals(CrewMediaReceiveResult.Accepted(0), receiver.accept(first))
         assertTrue(receiver.accept(second) is CrewMediaReceiveResult.Retry)
         assertTrue(receiver.cancel(first.transfer))
-        assertEquals(CrewMediaReceiveResult.Accepted, receiver.accept(second))
+        assertEquals(CrewMediaReceiveResult.Accepted(0), receiver.accept(second))
     }
 
     @Test
@@ -235,6 +234,75 @@ class CrewMediaTest {
     }
 
     @Test
+    fun `producer safely discovers an initially unknown repeatable content length`() {
+        val bytes = ByteArray(CREW_MEDIA_MAX_CHUNK_BYTES + 7) { (it % 251).toByte() }
+        val source =
+            object : CrewAuthorizedMediaSource {
+                override val lengthBytes = CrewAuthorizedMediaSource.UNKNOWN_LENGTH
+                override val mimeType = "audio/test"
+
+                override fun open() = ByteArrayInputStream(bytes)
+            }
+
+        val (described, chunks) =
+            CrewMediaProducer.produce(manifest(byteArrayOf(1)).transfer, source)
+
+        assertEquals(bytes.size.toLong(), described.objectSizeBytes)
+        assertEquals(2, chunks.size)
+        assertArrayEquals(bytes, chunks.flatMap { it.copyPayload().asIterable() }.toByteArray())
+    }
+
+    @Test
+    fun `verified ranges resume after session cache recreation`() {
+        val first = byteArrayOf(1, 2)
+        val second = byteArrayOf(3, 4, 5)
+        val manifest = manifest(first, second)
+        val root = tempDirectory()
+        val initialCache = CrewTemporaryMediaCache(root)
+        initialCache.beginSession(manifest.transfer.sessionId)
+        val initialReceiver = CrewMediaReceiver(manifest.transfer.sessionId, initialCache)
+        initialReceiver.accept(manifest)
+        assertEquals(
+            CrewMediaReceiveResult.Accepted(1),
+            initialReceiver.accept(chunk(manifest, 0, first)),
+        )
+        initialCache.suspendSessionForRecovery(manifest.transfer.sessionId)
+
+        val restoredCache = CrewTemporaryMediaCache(root)
+        restoredCache.beginSession(manifest.transfer.sessionId)
+        val restoredReceiver = CrewMediaReceiver(manifest.transfer.sessionId, restoredCache)
+        assertEquals(CrewMediaReceiveResult.Accepted(1), restoredReceiver.accept(manifest))
+        val complete =
+            restoredReceiver.accept(chunk(manifest, 1, second)) as CrewMediaReceiveResult.Complete
+        assertArrayEquals(first + second, complete.file.readBytes())
+    }
+
+    @Test
+    fun `one hundred mebibyte manifest stays within one bounded media frame`() {
+        val objectSize = 100L * 1024L * 1024L
+        val chunks = buildList {
+            var remaining = objectSize
+            var index = 0
+            while (remaining > 0) {
+                val size = minOf(remaining, CREW_MEDIA_MAX_CHUNK_BYTES.toLong()).toInt()
+                add(CrewMediaChunkDescriptor(index++, size))
+                remaining -= size
+            }
+        }
+        val template = manifest(byteArrayOf(1))
+        val large =
+            template.copy(
+                objectSizeBytes = objectSize,
+                objectIntegrity = CrewMediaDigest(ByteArray(CREW_MEDIA_DIGEST_BYTES)),
+                chunks = chunks,
+            )
+
+        val encoded = CrewMediaWireCodec.encode(CrewMediaWireFrame.Manifest(large))
+        assertTrue(encoded.size <= CREW_MEDIA_MAX_FRAME_BYTES)
+        assertEquals(CrewMediaWireFrame.Manifest(large), CrewMediaWireCodec.decode(encoded))
+    }
+
+    @Test
     fun `any member can supply while wrong member and disabled policy are rejected`() {
         val transfer = manifest(byteArrayOf(1)).transfer
         val policy = ActiveCrewPushPullPolicy().also { it.activate(transfer.sessionId, true) }
@@ -264,6 +332,45 @@ class CrewMediaTest {
         )
     }
 
+    @Test
+    fun `supplier uses a bounded sliding window and resumes from cumulative acknowledgement`() {
+        val template = manifest(byteArrayOf(1))
+        val transfer = template.transfer
+        val bytes = ByteArray(CREW_MEDIA_MAX_CHUNK_BYTES * 6) { (it % 251).toByte() }
+        val source =
+            object : CrewAuthorizedMediaSource {
+                override val lengthBytes = bytes.size.toLong()
+                override val mimeType = "audio/test"
+
+                override fun open() = ByteArrayInputStream(bytes)
+            }
+        val policy = ActiveCrewPushPullPolicy().also { it.activate(transfer.sessionId, true) }
+        val peer = FakePeer(transfer.targetMemberId)
+        val controller =
+            CrewMediaTransferController(
+                transfer.sessionId,
+                transfer.supplierMemberId,
+                peer,
+                CrewMediaTransport(transfer.sessionId, policy, peer),
+                policy,
+            )
+        controller.receive(CrewMediaWireFrame.Request(transfer))
+        assertTrue(controller.offer(transfer, source) is CrewSendResult.Sent)
+        assertEquals(1, peer.frames.filterIsInstance<CrewMediaWireFrame.Manifest>().size)
+
+        controller.receive(CrewMediaWireFrame.ManifestAccepted(transfer, 0))
+        controller.resume(transfer)
+        assertEquals(4, peer.frames.filterIsInstance<CrewMediaWireFrame.Chunk>().size)
+
+        controller.receive(CrewMediaWireFrame.ManifestAccepted(transfer, 2))
+        controller.resume(transfer)
+        assertEquals(6, peer.frames.filterIsInstance<CrewMediaWireFrame.Chunk>().size)
+        assertEquals(
+            (0 until 6).toList(),
+            peer.frames.filterIsInstance<CrewMediaWireFrame.Chunk>().map { it.value.index },
+        )
+    }
+
     private fun manifest(vararg chunks: ByteArray): CrewMediaManifest {
         val bytes = chunks.fold(byteArrayOf()) { all, next -> all + next }
         return CrewMediaManifest(
@@ -278,9 +385,7 @@ class CrewMediaTest {
             "audio/test",
             bytes.size.toLong(),
             CrewMediaDigest.sha256(bytes),
-            chunks.mapIndexed { index, payload ->
-                CrewMediaChunkDescriptor(index, payload.size, CrewMediaDigest.sha256(payload))
-            },
+            chunks.mapIndexed { index, payload -> CrewMediaChunkDescriptor(index, payload.size) },
         )
     }
 
@@ -291,11 +396,17 @@ class CrewMediaTest {
         File.createTempFile("crew-media", "").also { require(it.delete() && it.mkdirs()) }
 
     private class FakePeer(override val remoteMemberId: CrewMemberId) : CrewPeerTransport {
+        val frames = mutableListOf<CrewMediaWireFrame>()
         override val state = MutableStateFlow(CrewTransportState.CONNECTED)
         override val incoming = emptyFlow<CrewTransportFrame>()
         override val drops = emptyFlow<org.oxycblt.auxio.shippy.crew.transport.CrewTransportDrop>()
 
-        override fun trySend(frame: CrewTransportFrame) = CrewSendResult.Sent(0)
+        override fun trySend(frame: CrewTransportFrame): CrewSendResult {
+            if (frame.channel == CrewTransportChannel.MEDIA) {
+                frames += CrewMediaWireCodec.decode(frame.copyPayload())
+            }
+            return CrewSendResult.Sent(0)
+        }
 
         override fun bufferedBytes(channel: CrewTransportChannel) = 0L
 

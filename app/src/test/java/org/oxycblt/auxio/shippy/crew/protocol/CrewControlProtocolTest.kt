@@ -24,11 +24,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.oxycblt.auxio.shippy.crew.core.CoordinatorTerm
 import org.oxycblt.auxio.shippy.crew.core.CrewAction
+import org.oxycblt.auxio.shippy.crew.core.CrewAvatarDescriptor
 import org.oxycblt.auxio.shippy.crew.core.CrewElectionVote
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackState
+import org.oxycblt.auxio.shippy.crew.core.CrewProfileId
 import org.oxycblt.auxio.shippy.crew.core.CrewRepeatMode
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.DurableCrewEvent
@@ -59,7 +61,7 @@ import org.oxycblt.auxio.shippy.domain.TrackRealm
 import org.oxycblt.auxio.shippy.domain.TrackVersion
 
 class CrewControlProtocolTest {
-    private val protocol = ProtocolVersion(1)
+    private val protocol = ProtocolVersion(3)
     private val sessionId = CrewSessionId("session", protocol)
     private val coordinatorId = CrewMemberId("coordinator", protocol)
     private val memberId = CrewMemberId("member", protocol)
@@ -73,8 +75,8 @@ class CrewControlProtocolTest {
                 CrewAction.MemberUpdated(CrewMember(memberId, "Renamed")),
                 CrewAction.MemberLeft(memberId),
                 CrewAction.QueueReplaced(listOf(item, queueItem("two"))),
-                CrewAction.QueueItemInserted(item, 1),
-                CrewAction.QueueItemMoved(item.id, 2),
+                CrewAction.QueueItemInserted(item, 1, beforeItemId = QueueItemId("two")),
+                CrewAction.QueueItemMoved(item.id, 2, afterItemId = QueueItemId("two")),
                 CrewAction.QueueItemRemoved(item.id),
                 CrewAction.CurrentItemChanged(item.id),
                 CrewAction.Play(200, 1_000),
@@ -110,6 +112,28 @@ class CrewControlProtocolTest {
                 )
             assertRoundTrip(CrewControlMessage.Event(event))
         }
+    }
+
+    @Test
+    fun `member updates round trip their bounded active crew profile`() {
+        val member =
+            CrewMember(
+                id = memberId,
+                displayName = "Member",
+                profileId = CrewProfileId("01234567-89ab-cdef-0123-456789abcdef"),
+                avatar = CrewAvatarDescriptor("0123456789abcdef"),
+            )
+
+        assertRoundTrip(
+            CrewControlMessage.Request(
+                CrewActionRequest(
+                    id = DurableEventId("profile-update"),
+                    issuingMemberId = memberId,
+                    clientMonotonicTimestampMs = 0,
+                    action = CrewAction.MemberUpdated(member),
+                )
+            )
+        )
     }
 
     @Test

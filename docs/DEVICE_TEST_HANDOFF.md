@@ -45,13 +45,14 @@ Drive: gdrive:Shippy Builds/Shippy-debug-4.1.3-20260727-r10.apk
 Size: 66,885,204 bytes
 SHA-256: 7264BD1B21DC627361836F001E20AC75E6F6760B2D145EC428B2974D79262162
 MD5: AD36C7FD31FBED9B023DDD1B14F3DEED
-Package: org.oxycblt.auxio.debug
+Package: org.oxycblt.auxio.debug (historical r10 package)
 Label: Shippy Debug
 Minimum Android: API 24
 ```
 
 The public replacement is `Shippy-Alpha-Release-1.apk`, version
-`0.1.0-alpha.1` (version code 74), package `org.oxycblt.auxio.debug`, label
+`0.1.0-alpha.1` (version code 74), historical package
+`org.oxycblt.auxio.debug`, label
 `Shippy Alpha`.
 
 ```text
@@ -186,3 +187,26 @@ Record:
   renewable rejoin, and temporary-media throughput
 - Accessibility release pass: TalkBack, large text, focus order, contrast,
   reduced motion, and accessible queue/Crew alternatives
+
+## 8. Current Beta-Readiness Build Identity
+
+The current source uses application ID `org.shippymusic.shippy`; debug builds
+use `org.shippymusic.shippy.debug`. R14 predates this migration. Before testing
+an APK from the current source, record its commit, version, signer, checksum,
+and whether it is a clean install or an explicitly tested migration.
+
+## 9. Required Beta Matrix
+
+Do not replace these rows with a general "worked on my phones" result.
+
+| Gate | Required coverage | Evidence |
+|---|---|---|
+| Android compatibility | API 24, 29, 31, 35, and current API | model/version, install/launch/result |
+| Playback authority | rapid play/pause/seek/skip, focus loss, route loss | event trace and final canonical state |
+| Queue convergence | duplicate tracks plus concurrent insert/move/remove | occurrence IDs and final order on every member |
+| Clock/readiness | asymmetric delay, late member, buffering member | measured offsets/drift and correction behavior |
+| Push & Pull | 7/9/30/100 MiB, loss at 10/50/90%, resume | peak memory, verified ranges, final hash |
+| Supplier topology | non-coordinator owns source in three-member Crew | source/relay/receiver trace |
+| Lifecycle | background, task removal, process kill, network transition | same session/membership restored or explicit terminal reason |
+| Storage | cache clear, download remove, local delete consent | bytes and relationships changed only in chosen domain |
+| Release | minified signed install/upgrade and API 35 instrumentation | CI run and artifact metadata |

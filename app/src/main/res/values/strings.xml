@@ -111,6 +111,15 @@
     <string name="set_download_destination_unselected">Choose where Shippy saves downloaded music</string>
     <string name="set_download_destination_selected">Saving to %1$s</string>
     <string name="msg_download_destination_failed">Shippy could not use that folder</string>
+    <string name="msg_download_remove_failed">Could not remove this downloaded copy. Check folder access and try again.</string>
+    <string name="lbl_delete_from_device">Delete from device</string>
+    <string name="msg_delete_local_confirm">Permanently delete “%1$s” from this device? This cannot be undone.</string>
+    <string name="msg_delete_local_complete">Deleted from device</string>
+    <string name="msg_delete_local_failed">Could not delete this local file</string>
+    <string name="set_key_clear_playback_cache" translatable="false">clear_playback_cache</string>
+    <string name="set_clear_playback_cache">Clear streaming cache</string>
+    <string name="set_clear_playback_cache_desc">Remove reusable streamed copies only. Downloads and local music stay untouched.</string>
+    <string name="msg_playback_cache_cleared">Streaming cache cleared</string>
     <string name="download_channel_name">Downloads</string>
     <string name="download_notification_title">Downloading %1$s</string>
     <string name="lbl_home">Home</string>
@@ -305,6 +314,21 @@
     <string name="err_crew_qr_scan">Couldn’t scan this Crew code</string>
     <string name="ttl_react_to_crew">React to Crew</string>
     <string name="lbl_open_queue">Open queue</string>
+    <string name="lbl_crew_recent_activity">Recent activity</string>
+    <string name="lbl_crew_activity_play">%1$s started playback</string>
+    <string name="lbl_crew_activity_pause">%1$s paused playback</string>
+    <string name="lbl_crew_activity_track">%1$s played %2$s</string>
+    <string name="lbl_crew_activity_add">%1$s added %2$s</string>
+    <string name="lbl_crew_activity_remove">%1$s removed a track</string>
+    <string name="lbl_crew_activity_move">%1$s reordered the queue</string>
+    <string name="lbl_crew_activity_queue">%1$s changed the queue</string>
+    <string name="lbl_crew_activity_shuffle">%1$s changed shuffle</string>
+    <string name="lbl_crew_activity_repeat">%1$s changed repeat</string>
+    <string name="lbl_crew_activity_join">%1$s joined</string>
+    <string name="lbl_crew_activity_leave">%1$s left</string>
+    <string name="lbl_crew_activity_coordinator">%1$s transferred coordinator</string>
+    <string name="lbl_crew_activity_end">%1$s ended the Crew</string>
+    <string name="lbl_crew_member_unknown">A member</string>
     <string name="lbl_react_to_crew">React</string>
     <string name="lbl_now_playing">Now playing</string>
     <string name="lbl_no_track_playing">Nothing playing</string>
@@ -380,6 +404,8 @@
     <string name="set_root_title">Settings</string>
 
     <string name="set_streaming_providers">Streaming providers</string>
+    <string name="set_connections">Connections &amp; providers</string>
+    <string name="set_library_and_files">Library &amp; files</string>
     <string name="set_provider_preferred">Preferred provider</string>
     <string name="set_provider_fallback">Fallback provider</string>
     <string name="set_provider_refresh">Refresh provider status</string>
@@ -414,6 +440,12 @@
     <string name="set_lastfm_storage_error">Shippy could not safely save Last.fm credentials. Try again.</string>
     <string name="set_crew_push_pull_enabled">Crew Push &amp; Pull</string>
     <string name="set_crew_push_pull_enabled_desc">Temporarily share missing media only with authenticated members of your active Crew. Never with discovered devices or as a download.</string>
+    <string name="set_crew_display_name">Crew profile name</string>
+    <string name="set_crew_display_name_desc">Shown to people in your active Crew</string>
+    <string name="set_crew_display_name_invalid">Enter a name of 80 bytes or fewer.</string>
+    <string name="set_crew_avatar">Crew avatar</string>
+    <string name="set_crew_avatar_desc_default">Tap to generate a new private avatar color</string>
+    <string name="set_crew_avatar_desc">Generated avatar %1$s · tap to change</string>
     <string name="set_key_crew_push_pull_enabled">crew_push_pull_enabled</string>
     <string name="set_crew_relay">Hosted Crew relay</string>
     <string name="set_key_crew_relay_locator">crew_relay_locator</string>

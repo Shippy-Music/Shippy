@@ -4,6 +4,35 @@
 **Baseline:** Auxio `dev` at `b8c3cacd6430fc3ec009979eca2eda6424a4ac15`  
 **Build constraint:** no heavy local Gradle/Android build during this pass
 
+> Current beta-readiness authority: `PRODUCT_SPEC.md`, `CREW.md`,
+> `BETA_READINESS_IMPLEMENTATION.md`, then `STATUS.md`. This document preserves
+> the original architecture baseline; the following addendum supersedes any
+> older local-only playback or Crew assumptions.
+
+## 0. Beta-Readiness Addendum (2026-08-02)
+
+- `PlaybackStateManager` remains the ordinary local player authority, but typed
+  `PlaybackMutation` origins prevent system/player callbacks from becoming Crew
+  user intent.
+- While Crew is active, `CrewState` is the canonical shared queue/playback
+  authority. The local Media3 queue is a playable projection and may omit no
+  canonical occurrence from UI even when resolution is unavailable.
+- Crew protocol v3 uses ordered CONTROL, dedicated CLOCK probes, readiness,
+  availability, MEDIA transfer, and ephemeral reactions. Coordinator terms and
+  event sequences are the durable ordering boundary.
+- Provider URLs are short-lived playback resolutions. Stable `MediaObjectKey`
+  identifies reusable bytes across queue occurrences. Provider cache,
+  permanent downloads, local files, and Crew temporary media are separate
+  storage/ownership domains.
+- Push & Pull is bounded, resumable, disk-backed, active-Crew-only temporary
+  media. Verified progressive ranges are exposed to Media3 through reader
+  leases; explicit Download is the only promotion to permanent ownership.
+- `ActiveCrewRuntime` is the process-wide owner of route, admission, rejoin,
+  diagnostics, media routing, and session lifecycle. UI fragments never own
+  session survival.
+- Public package identity is `org.shippymusic.shippy`; Kotlin package migration
+  is deliberately deferred because it is mechanical and not a product boundary.
+
 ## 1. Decision
 
 Shippy extends the actual Auxio Android project. It does not rewrite Auxio in

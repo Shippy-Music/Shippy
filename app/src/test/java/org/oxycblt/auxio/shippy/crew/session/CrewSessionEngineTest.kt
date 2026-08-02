@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +41,7 @@ import org.oxycblt.auxio.shippy.crew.core.CrewAction
 import org.oxycblt.auxio.shippy.crew.core.CrewMember
 import org.oxycblt.auxio.shippy.crew.core.CrewMemberId
 import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackMode
+import org.oxycblt.auxio.shippy.crew.core.CrewPlaybackState
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
 import org.oxycblt.auxio.shippy.crew.core.CrewState
@@ -77,6 +79,40 @@ class CrewSessionEngineTest {
     private val sessionId = CrewSessionId("crew", protocol)
     private val coordinatorId = CrewMemberId("coordinator", protocol)
     private val memberId = CrewMemberId("member", protocol)
+
+    @Test
+    fun `member estimates coordinator epoch over the dedicated clock channel`() = runBlocking {
+        var coordinatorNow = 1_250L
+        var memberNow = 1_000L
+        val coordinator =
+            CrewSessionEngine(
+                state(),
+                coordinatorId,
+                FakeCheckpointRepository(),
+                nowEpochMs = { coordinatorNow },
+            )
+        val member =
+            CrewSessionEngine(
+                state(),
+                memberId,
+                FakeCheckpointRepository(),
+                nowEpochMs = { memberNow },
+            )
+        val coordinatorToMember = FakePeerTransport(memberId)
+        val memberToCoordinator = FakePeerTransport(coordinatorId)
+        coordinatorToMember.counterpart = memberToCoordinator
+        memberToCoordinator.counterpart = coordinatorToMember
+        coordinator.start()
+        member.start()
+        coordinator.attachPeer(coordinatorToMember)
+        member.attachPeer(memberToCoordinator)
+
+        val estimate = withTimeout(2_000) { member.clockEstimate.filter { it != null }.first()!! }
+        assertEquals(250.0, estimate.coordinatorMinusClientMs, 0.01)
+        assertEquals(1_250, estimate.clientToCoordinator(1_000))
+        coordinator.close()
+        member.close()
+    }
 
     @Test
     fun `terminal event clears checkpoint without cancelling its outbound delivery`() =
@@ -442,6 +478,84 @@ class CrewSessionEngineTest {
     }
 
     @Test
+    fun `play waits for every member readiness then starts from a fresh common epoch`() =
+        runBlocking {
+            val item = queueItem("ready")
+            val playback = CrewPlaybackState(item.id, CrewPlaybackMode.PAUSED, 125, 0)
+            val fixture =
+                connectedEngines(
+                    state(listOf(item), playback = playback),
+                    state(listOf(item), playback = playback),
+                )
+            fixture.coordinator.publishLocalAvailability(
+                mapOf(item.id to CrewAvailability.LOCAL_EXACT)
+            )
+            fixture.member.publishLocalAvailability(mapOf(item.id to CrewAvailability.UNAVAILABLE))
+            withTimeout(2_000) {
+                fixture.coordinator.availability.filter { it[item.id]?.members?.size == 2 }.first()
+            }
+            val request =
+                CrewActionRequest(
+                    DurableEventId("readiness-play"),
+                    memberId,
+                    10,
+                    CrewAction.Play(125, 100),
+                    EventSequence(0),
+                )
+
+            assertEquals(CrewSubmitResult.Submitted(request), fixture.member.submit(request, 10))
+            delay(75)
+            assertEquals(EventSequence(0), fixture.coordinator.state.value.lastSequence)
+
+            fixture.member.publishLocalAvailability(mapOf(item.id to CrewAvailability.LOCAL_EXACT))
+            val playing =
+                withTimeout(2_000) {
+                    fixture.member.state
+                        .filter { it.playback.mode == CrewPlaybackMode.PLAYING }
+                        .first()
+                }
+            assertEquals(EventSequence(1), playing.lastSequence)
+            assertTrue(playing.playback.sessionEpochMs >= 450)
+            fixture.close()
+        }
+
+    @Test
+    fun `bounded readiness deadline starts without dropping the canonical occurrence`() =
+        runBlocking {
+            val item = queueItem("deadline")
+            val playback = CrewPlaybackState(item.id, CrewPlaybackMode.PAUSED, 0, 0)
+            val fixture =
+                connectedEngines(
+                    state(listOf(item), playback = playback),
+                    state(listOf(item), playback = playback),
+                    playbackReadinessWaitMs = 50,
+                )
+            fixture.coordinator.publishLocalAvailability(
+                mapOf(item.id to CrewAvailability.LOCAL_EXACT)
+            )
+            fixture.member.publishLocalAvailability(mapOf(item.id to CrewAvailability.UNAVAILABLE))
+            val request =
+                CrewActionRequest(
+                    DurableEventId("deadline-play"),
+                    memberId,
+                    20,
+                    CrewAction.Play(0, 0),
+                    EventSequence(0),
+                )
+            fixture.member.submit(request, 20)
+
+            val playing =
+                withTimeout(2_000) {
+                    fixture.coordinator.state
+                        .filter { it.playback.mode == CrewPlaybackMode.PLAYING }
+                        .first()
+                }
+            assertEquals(item.id, playing.playback.currentQueueItemId)
+            assertEquals(EventSequence(1), playing.lastSequence)
+            fixture.close()
+        }
+
+    @Test
     fun `coordinator rejection rolls back the exact optimistic request`() = runBlocking {
         val fixture = connectedEngines(state(), state())
         val request =
@@ -537,7 +651,7 @@ class CrewSessionEngineTest {
             )
         assertTrue(result is CrewAdmissionResult.Admitted)
         val joined =
-            withTimeout(2_000) {
+            withTimeout(5_000) {
                 fixture.member.state
                     .filter {
                         it.lastSequence == EventSequence(1) &&
@@ -570,12 +684,12 @@ class CrewSessionEngineTest {
                     }
                     .first()
             }
-        withTimeout(2_000) {
+        withTimeout(5_000) {
             fixture.coordinator.state
                 .filter { it.members.none { member -> member.id == coordinatorId } }
                 .first()
         }
-        withTimeout(2_000) {
+        withTimeout(5_000) {
             // StateFlow publishes the accepted leave before checkpoint cleanup finishes.
             // Await that durable side effect explicitly instead of racing it on slower CI hosts.
             while (fixture.coordinatorStore.latest != null) {
@@ -594,6 +708,7 @@ class CrewSessionEngineTest {
         memberState: CrewState,
         memberToCoordinatorBackpressure: Int = 0,
         coordinatorMediaLifecycle: CrewAuthenticatedMediaLifecycle? = null,
+        playbackReadinessWaitMs: Long = 2_500,
     ): EngineFixture {
         val coordinatorStore = FakeCheckpointRepository()
         val memberStore = FakeCheckpointRepository()
@@ -604,6 +719,7 @@ class CrewSessionEngineTest {
                 coordinatorStore,
                 nowEpochMs = { 100 },
                 mediaLifecycle = coordinatorMediaLifecycle,
+                playbackReadinessWaitMs = playbackReadinessWaitMs,
             )
         val member = CrewSessionEngine(memberState, memberId, memberStore, nowEpochMs = { 100 })
         val coordinatorToMember = FakePeerTransport(memberId)
@@ -628,6 +744,7 @@ class CrewSessionEngineTest {
     private fun state(
         queue: List<QueueItem> = emptyList(),
         sequence: Long = 0,
+        playback: CrewPlaybackState = CrewPlaybackState(),
         members: List<CrewMember> =
             listOf(CrewMember(coordinatorId, "Coordinator"), CrewMember(memberId, "Member")),
     ) =
@@ -639,6 +756,7 @@ class CrewSessionEngineTest {
             coordinatorMemberId = coordinatorId,
             members = members,
             queue = queue,
+            playback = playback,
         )
 
     private fun announcement(

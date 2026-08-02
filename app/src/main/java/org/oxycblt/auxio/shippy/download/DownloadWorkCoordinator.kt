@@ -39,8 +39,22 @@ import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.shippy.domain.CandidateId
 import org.oxycblt.auxio.shippy.domain.CandidateKind
 import org.oxycblt.auxio.shippy.domain.Track
+import org.oxycblt.auxio.shippy.media.MediaObjectKey
+import org.oxycblt.auxio.shippy.media.cache.PlaybackCacheManager
 import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.auxio.shippy.persistence.library.LibraryRelationshipRepository
+
+/** The exact outcome of a user request to remove a durable Shippy download. */
+sealed interface DownloadRemovalResult {
+    data object Removed : DownloadRemovalResult
+
+    data object NotFound : DownloadRemovalResult
+
+    data object NotRemovable : DownloadRemovalResult
+
+    /** The backing SAF document could not be deleted; the download remains available. */
+    data object StorageDeleteFailed : DownloadRemovalResult
+}
 
 @Singleton
 class DownloadWorkCoordinator
@@ -53,6 +67,7 @@ constructor(
     private val crewTemporaryStaging: CrewTemporaryDownloadStaging,
     private val relationships: LibraryRelationshipRepository,
     private val publicationGate: DownloadPublicationGate,
+    private val playbackCache: PlaybackCacheManager,
 ) {
     private val workManager = WorkManager.getInstance(context)
     private val requestMutex = Mutex()
@@ -150,19 +165,34 @@ constructor(
         crewTemporaryStaging.cleanup(jobId)
     }
 
+    /**
+     * Removes a Shippy-managed download only after its durable artifact has actually been deleted.
+     * A failed SAF delete must leave the download visible instead of falsely claiming its bytes are
+     * gone.
+     */
     suspend fun remove(
         jobId: DownloadJobId,
         nowEpochMs: Long = System.currentTimeMillis(),
-    ): Boolean =
+    ): DownloadRemovalResult =
         publicationGate.run {
-            val stored = jobs.get(jobId) ?: return@run false
-            val artifact = stored.job.artifact ?: return@run false
+            val stored = jobs.get(jobId) ?: return@run DownloadRemovalResult.NotFound
+            val artifact = stored.job.artifact ?: return@run DownloadRemovalResult.NotRemovable
+            if (
+                DownloadReducer().apply(stored.job, DownloadEvent.Remove)
+                    !is DownloadTransition.Applied
+            ) {
+                return@run DownloadRemovalResult.NotRemovable
+            }
+            if (!storage.delete(artifact.contentUri)) {
+                return@run DownloadRemovalResult.StorageDeleteFailed
+            }
             val transition = jobs.apply(jobId, DownloadEvent.Remove, nowEpochMs)
-            if (transition !is DownloadTransition.Applied) return@run false
+            if (transition !is DownloadTransition.Applied)
+                return@run DownloadRemovalResult.NotRemovable
             relationships.setDownloaded(stored.track.id, jobs.hasAvailableForTrack(stored.track.id))
             transferStaging.cleanup(jobId)
             crewTemporaryStaging.cleanup(jobId)
-            storage.delete(artifact.contentUri)
+            DownloadRemovalResult.Removed
         }
 
     private fun enqueue(
@@ -171,7 +201,7 @@ constructor(
         candidateId: CandidateId,
         policy: ExistingWorkPolicy,
     ) {
-        val requiresNetwork = downloadRequiresNetwork(track, candidateId)
+        val requiresNetwork = downloadRequiresNetwork(track, candidateId, playbackCache)
         val request =
             OneTimeWorkRequestBuilder<ShippyDownloadWorker>()
                 .setInputData(workDataOf(ShippyDownloadWorker.KEY_JOB_ID to jobId.value))
@@ -196,8 +226,21 @@ constructor(
     }
 }
 
-internal fun downloadRequiresNetwork(track: Track, candidateId: CandidateId): Boolean {
+internal fun downloadRequiresNetwork(
+    track: Track,
+    candidateId: CandidateId,
+    playbackCache: PlaybackCacheManager? = null,
+): Boolean {
     val candidate = track.candidates.firstOrNull { it.id == candidateId } ?: return true
+    if (
+        candidate.kind == CandidateKind.PROVIDER &&
+            playbackCache?.hasComplete(
+                MediaObjectKey.from(candidate),
+                candidate.media?.contentLength,
+            ) == true
+    ) {
+        return false
+    }
     return candidate.kind == CandidateKind.PROVIDER ||
         candidate.locator?.substringBefore(':') !in setOf("content", "file")
 }

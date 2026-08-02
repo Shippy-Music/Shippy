@@ -21,6 +21,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.core.CrewSnapshot
+import org.oxycblt.auxio.shippy.crew.diagnostics.CrewDiagnosticEvent
+import org.oxycblt.auxio.shippy.crew.diagnostics.CrewDiagnosticRecorder
 import org.oxycblt.auxio.shippy.crew.session.CrewSessionEngine
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointLoadResult
 import org.oxycblt.auxio.shippy.persistence.crew.CrewCheckpointRepository
@@ -69,6 +71,7 @@ class CrewSessionOrchestrator(
     private val engines: CrewSessionEngineFactory,
     private val connector: CrewRejoinConnector,
     private val nowEpochMs: () -> Long = System::currentTimeMillis,
+    private val diagnostics: CrewDiagnosticRecorder? = null,
 ) {
     private val mutex = Mutex()
     private var active: Pair<CrewRejoinLease, CrewSessionEngine>? = null
@@ -92,6 +95,12 @@ class CrewSessionOrchestrator(
             }
             val validLease = checkNotNull(lease)
             val validCheckpoint = checkNotNull(checkpoint)
+            diagnostics?.begin(validLease.memberId.value, validCheckpoint.members.size)
+            diagnostics?.update(
+                term = validCheckpoint.term.value,
+                sequence = validCheckpoint.lastSequence.value,
+            )
+            diagnostics?.record(CrewDiagnosticEvent.Kind.RESTORED, "restore_attempt")
             val engine = engines.create(validLease, validCheckpoint)
             engine.start()
             active = validLease to engine
@@ -131,9 +140,16 @@ class CrewSessionOrchestrator(
         engine: CrewSessionEngine,
     ): CrewRestoreResult =
         when (connector.reconnect(lease, engine)) {
-            CrewRejoinConnectResult.Connected -> CrewRestoreResult.RestoredAndConnected
-            CrewRejoinConnectResult.RetryableFailure -> CrewRestoreResult.RestoredAwaitingNetwork
+            CrewRejoinConnectResult.Connected -> {
+                diagnostics?.record(CrewDiagnosticEvent.Kind.RESTORED, "restore_connected")
+                CrewRestoreResult.RestoredAndConnected
+            }
+            CrewRejoinConnectResult.RetryableFailure -> {
+                diagnostics?.record(CrewDiagnosticEvent.Kind.RETRYABLE_FAILURE, "restore_retryable")
+                CrewRestoreResult.RestoredAwaitingNetwork
+            }
             CrewRejoinConnectResult.Revoked -> {
+                diagnostics?.record(CrewDiagnosticEvent.Kind.EXPIRED, "restore_revoked")
                 cleanupLocked(lease.sessionId, lease.sessionId)
                 engine.close()
                 active = null

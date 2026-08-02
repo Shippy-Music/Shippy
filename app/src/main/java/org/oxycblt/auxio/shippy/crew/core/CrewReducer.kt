@@ -18,6 +18,7 @@
 package org.oxycblt.auxio.shippy.crew.core
 
 import org.oxycblt.auxio.shippy.domain.QueueItem
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 
 class CrewReducer {
     /**
@@ -412,11 +413,18 @@ class CrewReducer {
         if (state.queue.any { it.id == action.item.id }) {
             return StateUpdate.Rejected("Queue item ID already exists")
         }
-        if (action.index !in 0..state.queue.size) {
+        val insertionIndex =
+            anchoredIndex(
+                queue = state.queue,
+                fallbackIndex = action.index,
+                beforeItemId = action.beforeItemId,
+                afterItemId = action.afterItemId,
+            )
+        if (insertionIndex == null || insertionIndex !in 0..state.queue.size) {
             return StateUpdate.Rejected("Queue insert index is out of bounds")
         }
 
-        val queue = state.queue.toMutableList().apply { add(action.index, action.item) }
+        val queue = state.queue.toMutableList().apply { add(insertionIndex, action.item) }
         val playback =
             if (state.playback.currentQueueItemId == null) {
                 CrewPlaybackState(
@@ -434,17 +442,34 @@ class CrewReducer {
         if (oldIndex == -1) {
             return StateUpdate.Rejected("Queue item does not exist")
         }
-        if (action.newIndex !in state.queue.indices) {
+        val withoutMoved = state.queue.filterNot { it.id == action.itemId }
+        val destination =
+            anchoredIndex(
+                queue = withoutMoved,
+                fallbackIndex = action.newIndex,
+                beforeItemId = action.beforeItemId,
+                afterItemId = action.afterItemId,
+            )
+        if (destination == null || destination !in 0..withoutMoved.size) {
             return StateUpdate.Rejected("Queue move index is out of bounds")
         }
 
-        val queue =
-            state.queue.toMutableList().apply {
-                val item = removeAt(oldIndex)
-                add(action.newIndex, item)
-            }
+        val item = state.queue[oldIndex]
+        val queue = withoutMoved.toMutableList().apply { add(destination, item) }
         return StateUpdate.Accepted(state.copy(queue = queue))
     }
+
+    private fun anchoredIndex(
+        queue: List<QueueItem>,
+        fallbackIndex: Int,
+        beforeItemId: QueueItemId?,
+        afterItemId: QueueItemId?,
+    ): Int? =
+        beforeItemId?.let { id -> queue.indexOfFirst { it.id == id }.takeIf { it >= 0 } }
+            ?: afterItemId?.let { id ->
+                queue.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.plus(1)
+            }
+            ?: fallbackIndex
 
     private fun removeQueueItem(
         state: CrewState,

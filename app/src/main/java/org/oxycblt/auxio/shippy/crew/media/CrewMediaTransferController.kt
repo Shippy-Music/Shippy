@@ -22,6 +22,8 @@ import org.oxycblt.auxio.shippy.crew.core.CrewSessionId
 import org.oxycblt.auxio.shippy.crew.transport.CrewPeerTransport
 import org.oxycblt.auxio.shippy.crew.transport.CrewSendResult
 
+private const val CREW_MEDIA_SEND_WINDOW_CHUNKS = 4
+
 enum class CrewMediaTransferState {
     REQUESTED,
     MANIFEST_WAIT,
@@ -44,7 +46,7 @@ class CrewMediaTransferController(
     private val policy: ActiveCrewPushPullPolicy,
 ) {
     private val states = mutableMapOf<CrewMediaTransferRef, CrewMediaTransferState>()
-    private val outgoing = mutableMapOf<CrewMediaTransferRef, List<CrewMediaWireFrame>>()
+    private val outgoing = mutableMapOf<CrewMediaTransferRef, Outgoing>()
 
     @Synchronized
     fun request(transfer: CrewMediaTransferRef): CrewSendResult? {
@@ -72,16 +74,15 @@ class CrewMediaTransferController(
         val prior = states[transfer]
         if (prior != null && prior != CrewMediaTransferState.REQUESTED) return null
         states[transfer] = CrewMediaTransferState.MANIFEST_WAIT
-        val (manifest, chunks) = CrewMediaProducer.produce(transfer, source)
-        outgoing[transfer] =
-            listOf(CrewMediaWireFrame.Manifest(manifest)) + chunks.map(CrewMediaWireFrame::Chunk)
+        val manifest = CrewMediaProducer.describe(transfer, source)
+        outgoing[transfer] = Outgoing(manifest, source)
         return resume(transfer)
     }
 
     @Synchronized
     fun cancel(transfer: CrewMediaTransferRef): CrewSendResult? {
         states[transfer] = CrewMediaTransferState.CANCELLED
-        outgoing.remove(transfer)
+        outgoing.remove(transfer)?.close()
         return send(transfer, CrewMediaWireFrame.Cancel(transfer))
     }
 
@@ -89,33 +90,38 @@ class CrewMediaTransferController(
     @Synchronized
     fun forget(transfer: CrewMediaTransferRef) {
         states.remove(transfer)
-        outgoing.remove(transfer)
+        outgoing.remove(transfer)?.close()
     }
 
     /** Local policy/session teardown abandons all protocol work without sending another frame. */
     @Synchronized
     fun clear() {
         states.clear()
+        outgoing.values.forEach(Outgoing::close)
         outgoing.clear()
     }
 
     @Synchronized
     fun resume(transfer: CrewMediaTransferRef): CrewSendResult? {
         if (states[transfer] == CrewMediaTransferState.CANCELLED) return null
-        val next = outgoing[transfer]?.firstOrNull() ?: return null
-        if (
-            next is CrewMediaWireFrame.Chunk &&
-                states[transfer] == CrewMediaTransferState.MANIFEST_WAIT
-        )
-            return null
-        val result = send(transfer, next) ?: return null
-        if (result is CrewSendResult.Sent) {
-            outgoing[transfer] = outgoing.getValue(transfer).drop(1)
+        val outgoingState = outgoing[transfer] ?: return null
+        var lastResult: CrewSendResult? = null
+        while (true) {
+            val next = outgoingState.next(states[transfer] ?: return lastResult) ?: break
+            if (
+                next is CrewMediaWireFrame.Chunk &&
+                    states[transfer] == CrewMediaTransferState.MANIFEST_WAIT
+            )
+                break
+            val result = send(transfer, next) ?: return lastResult
+            lastResult = result
+            if (result !is CrewSendResult.Sent) break
+            outgoingState.sent(next)
             states[transfer] =
                 if (next is CrewMediaWireFrame.Manifest) CrewMediaTransferState.MANIFEST_WAIT
                 else CrewMediaTransferState.CHUNK_PROGRESS
         }
-        return result
+        return lastResult
     }
 
     @Synchronized
@@ -130,6 +136,13 @@ class CrewMediaTransferController(
         // transfer. The router's fan-out permit remains attached to that one transfer.
         if (frame is CrewMediaWireFrame.Request && outgoing.containsKey(t))
             return prior ?: CrewMediaTransferState.REQUESTED
+        if (
+            frame is CrewMediaWireFrame.ManifestAccepted &&
+                outgoing[t]?.acknowledge(frame.nextChunkIndex) == false
+        ) {
+            states[t] = CrewMediaTransferState.REJECTED
+            return CrewMediaTransferState.REJECTED
+        }
         val state =
             when (frame) {
                 is CrewMediaWireFrame.Request -> CrewMediaTransferState.REQUESTED
@@ -159,4 +172,61 @@ class CrewMediaTransferController(
                 localMemberId == t.targetMemberId && peer.remoteMemberId == t.supplierMemberId ||
                     localMemberId == t.supplierMemberId && peer.remoteMemberId == t.targetMemberId
         }
+
+    private class Outgoing(
+        private val manifest: CrewMediaManifest,
+        private val source: CrewAuthorizedMediaSource,
+    ) {
+        private var manifestSent = false
+        private var reader: CrewMediaChunkReader? = null
+        private var pending: CrewMediaWireFrame? = null
+        private val inFlight = linkedMapOf<Int, CrewMediaWireFrame.Chunk>()
+        private var nextProducedIndex = 0
+        private var accepted = false
+
+        fun next(state: CrewMediaTransferState): CrewMediaWireFrame? {
+            pending?.let {
+                return it
+            }
+            if (!manifestSent) {
+                return CrewMediaWireFrame.Manifest(manifest).also { pending = it }
+            }
+            if (!accepted || state == CrewMediaTransferState.MANIFEST_WAIT) return null
+            if (inFlight.size >= CREW_MEDIA_SEND_WINDOW_CHUNKS) return null
+            val chunkReader =
+                reader
+                    ?: CrewMediaProducer.open(manifest, source, nextProducedIndex).also {
+                        reader = it
+                    }
+            return chunkReader.next()?.let(CrewMediaWireFrame::Chunk)?.also { pending = it }
+        }
+
+        fun sent(frame: CrewMediaWireFrame) {
+            check(pending === frame)
+            if (frame is CrewMediaWireFrame.Manifest) manifestSent = true
+            if (frame is CrewMediaWireFrame.Chunk) {
+                inFlight[frame.value.index] = frame
+                nextProducedIndex = frame.value.index + 1
+            }
+            pending = null
+        }
+
+        fun acknowledge(nextChunkIndex: Int): Boolean {
+            if (nextChunkIndex !in 0..manifest.chunks.size) return false
+            if (!accepted) {
+                accepted = true
+                nextProducedIndex = nextChunkIndex
+            } else if (nextChunkIndex > nextProducedIndex) {
+                return false
+            }
+            inFlight.keys.removeAll { it < nextChunkIndex }
+            return true
+        }
+
+        fun close() {
+            reader?.close()
+            reader = null
+            pending = null
+        }
+    }
 }
