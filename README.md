@@ -43,7 +43,7 @@ model.
 Download `Shippy-Alpha-Release-1.apk` from
 [Alpha Release 1](https://github.com/Shippy-Music/Shippy/releases/tag/v0.1.0-alpha.1).
 
-New development builds use the stable Shippy package `org.shippymusic.shippy.debug` and require
+Alpha updates retain the established package `org.oxycblt.auxio.debug` and require
 Android 7.0 (API 24) or newer. Published alpha APKs are signed for testing. Android may ask you to allow installs
 from your browser or file manager.
 

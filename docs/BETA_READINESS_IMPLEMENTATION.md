@@ -36,7 +36,7 @@ row marked **source complete** is not a claim of physical-device acceptance.
 | G-26 | Source complete | Root settings group providers/connections, Crew, cache/storage, and profile coherently. | UX acceptance. |
 | G-27 | Source complete for automation | API 35 instrumentation covers real Media3 playback with generated audio plus Android-private temporary storage/service lifecycle; seeded JVM transport abuse covers protocol/domain convergence. | Run emulator CI and physical matrix. |
 | G-28 | Source complete for CI | Workflow includes lint, JVM tests, release assembly, persistence/auth focus, and API 35 connected tests. | Green CI run and signed owner build. |
-| G-29 | Source complete | Stable public application ID `org.shippymusic.shippy`, debug suffix isolated. | Upgrade/signing migration acceptance. |
+| G-29 | Corrected in R15.2 | Established alpha application ID `org.oxycblt.auxio` retained, debug suffix isolated, and provider authorities derived from the active ID. | R14-to-R15.2 in-place upgrade acceptance. |
 | G-30 | Complete | `STATUS.md` now reports evidence levels and pending device gates without invented completion percentages. | Keep updated per release. |
 
 ## Automated evidence boundary

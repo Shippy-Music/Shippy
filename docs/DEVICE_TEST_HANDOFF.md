@@ -190,10 +190,11 @@ Record:
 
 ## 8. Current Beta-Readiness Build Identity
 
-The current source uses application ID `org.shippymusic.shippy`; debug builds
-use `org.shippymusic.shippy.debug`. R14 predates this migration. Before testing
-an APK from the current source, record its commit, version, signer, checksum,
-and whether it is a clean install or an explicitly tested migration.
+The current source deliberately retains R14's application ID
+`org.oxycblt.auxio`; debug builds use `org.oxycblt.auxio.debug`. R15/R15.1 used
+a different ID and therefore installed separately; they are superseded. Before
+testing, record the commit, version, signer, checksum, and confirm R15.2 updates
+R14 in place without clearing its data.
 
 ## 9. Required Beta Matrix
 

@@ -15,11 +15,10 @@ android {
     namespace "org.oxycblt.auxio"
 
     defaultConfig {
-        // Public Shippy identity is deliberately separate from the retained Auxio source
-        // namespace. This must remain stable before beta users accumulate app data and links.
-        applicationId "org.shippymusic.shippy"
-        versionName "0.1.0-alpha.1-r15.1"
-        versionCode 84
+        // Keep the established package identity so alpha builds update in place and retain data.
+        applicationId namespace
+        versionName "0.1.0-alpha.1-r15.2"
+        versionCode 85
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in

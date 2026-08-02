@@ -30,8 +30,9 @@
 - `ActiveCrewRuntime` is the process-wide owner of route, admission, rejoin,
   diagnostics, media routing, and session lifecycle. UI fragments never own
   session survival.
-- Public package identity is `org.shippymusic.shippy`; Kotlin package migration
-  is deliberately deferred because it is mechanical and not a product boundary.
+- Alpha package identity remains `org.oxycblt.auxio` (`.debug` for owner-test
+  APKs) so upgrades preserve installed data. A branded package migration is a
+  future explicit data-migration release, not a mechanical rename.
 
 ## 1. Decision
 

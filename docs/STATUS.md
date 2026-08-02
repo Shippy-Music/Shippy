@@ -34,9 +34,9 @@ evidence-based: source presence is not counted as verified device behavior.
   MediaStore/Android consent where required. Crew profile name/avatar, live
   member updates, recent activity, grouped settings, and generated private
   avatars are present.
-- Public application ID is `org.shippymusic.shippy`; debug builds use
-  `org.shippymusic.shippy.debug`. Internal Kotlin namespaces remain unchanged to
-  avoid an unrelated mechanical rewrite.
+- Alpha application ID remains `org.oxycblt.auxio`; debug builds use
+  `org.oxycblt.auxio.debug` so R14 updates retain data. Package-scoped provider
+  authorities are derived from the active ID.
 - CI now checks formatting, app JVM tests, Musikr JVM tests, lint, release
   assembly, focused persistence/authentication tests, and API 35 instrumentation.
 
@@ -56,18 +56,20 @@ evidence-based: source presence is not counted as verified device behavior.
 
 ## Release truth
 
-R15.1 is the install hotfix for the beta-readiness owner-test APK:
-`Shippy-Alpha-R15.1-20260802.apk` (61,479,898 bytes; SHA-256
-`FBA2009EB2A07EAAF326314E521883AA586A0E209C042B425FEDF586FD0A8D82`).
-It derives every content-provider authority from the current application ID;
-R15 incorrectly retained R14's fixed cover-provider authority and Android
-rejected side-by-side installation with `INSTALL_FAILED_CONFLICTING_PROVIDER`.
-It is a debug-signed alpha package (`org.shippymusic.shippy.debug`, version code
-84), not a production-signed beta. Do not label it beta-complete until the
-device matrix in `DEVICE_TEST_HANDOFF.md` is recorded and passes.
+R15.2 restores the established R14 package identity so it is an in-place update
+that retains existing app data. It also derives every content-provider authority
+from that application ID. R15 changed the package identity and R15.1 therefore
+installed as a second app instead of updating R14.
+
+The R15.2 artifact is a debug-signed alpha package
+(`org.oxycblt.auxio.debug`, version code 85), not a production-signed beta. Do
+not label it beta-complete until the device matrix in
+`DEVICE_TEST_HANDOFF.md` is recorded and passes. Artifact:
+`Shippy-Alpha-R15.2-20260802.apk` (61,479,890 bytes; SHA-256
+`2C7BDE7C9024A213BC40DEBDEB9B850236123ADC1136C358CA3FF9D6F1D47A66`).
 
 ## Next gate
 
-Install R15.1 and run the physical acceptance matrix. Any device failure reopens
+Install R15.2 and run the physical acceptance matrix. Any device failure reopens
 the relevant gap; percentages are intentionally omitted because they previously
 obscured missing vertical evidence.
