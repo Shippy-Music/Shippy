@@ -56,15 +56,18 @@ evidence-based: source presence is not counted as verified device behavior.
 
 ## Release truth
 
-R15 is the owner-test APK produced from the beta-readiness hardening pass:
-`Shippy-Alpha-R15-20260802.apk` (61,480,362 bytes; SHA-256
-`EE75F07A7C9607869DDBB03462270456BBEDEBEBD34F8553830BAA7EA530E532`).
+R15.1 is the install hotfix for the beta-readiness owner-test APK:
+`Shippy-Alpha-R15.1-20260802.apk` (61,479,898 bytes; SHA-256
+`FBA2009EB2A07EAAF326314E521883AA586A0E209C042B425FEDF586FD0A8D82`).
+It derives every content-provider authority from the current application ID;
+R15 incorrectly retained R14's fixed cover-provider authority and Android
+rejected side-by-side installation with `INSTALL_FAILED_CONFLICTING_PROVIDER`.
 It is a debug-signed alpha package (`org.shippymusic.shippy.debug`, version code
-83), not a production-signed beta. Do not label it beta-complete until the
+84), not a production-signed beta. Do not label it beta-complete until the
 device matrix in `DEVICE_TEST_HANDOFF.md` is recorded and passes.
 
 ## Next gate
 
-Install R15 and run the physical acceptance matrix. Any device failure reopens
+Install R15.1 and run the physical acceptance matrix. Any device failure reopens
 the relevant gap; percentages are intentionally omitted because they previously
 obscured missing vertical evidence.

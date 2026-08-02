@@ -18,8 +18,8 @@ android {
         // Public Shippy identity is deliberately separate from the retained Auxio source
         // namespace. This must remain stable before beta users accumulate app data and links.
         applicationId "org.shippymusic.shippy"
-        versionName "0.1.0-alpha.1-r15"
-        versionCode 83
+        versionName "0.1.0-alpha.1-r15.1"
+        versionCode 84
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in
@@ -215,4 +215,21 @@ dependencies {
     testImplementation "org.json:json:20250517"
     androidTestImplementation "androidx.test:runner:1.6.2"
     androidTestImplementation "androidx.test.ext:junit:1.2.1"
+}
+
+tasks.register("verifyPackageScopedAuthorities") {
+    def manifestFile = layout.projectDirectory.file("src/main/AndroidManifest.xml")
+    inputs.file(manifestFile)
+    doLast {
+        def manifest = manifestFile.asFile.getText("UTF-8")
+        def expected = 'android:authorities="${applicationId}.image.CoverProvider"'
+        if (!manifest.contains(expected)) {
+            throw new GradleException(
+                    "CoverProvider authority must remain scoped to the active applicationId")
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("verifyPackageScopedAuthorities")
 }
