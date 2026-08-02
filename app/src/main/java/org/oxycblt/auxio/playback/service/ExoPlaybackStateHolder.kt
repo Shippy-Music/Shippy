@@ -168,18 +168,21 @@ class ExoPlaybackStateHolder(
         get() = player.audioSessionId
 
     override fun resolveQueue(): RawQueue {
-        val heap = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
+        val canonicalById = playbackManager.resolvedQueue.associateBy { it.item.id.value }
+        val heap =
+            (0 until player.mediaItemCount).map { index ->
+                val mediaItem = player.getMediaItemAt(index)
+                checkNotNull(mediaItem.resolvedQueueItem ?: canonicalById[mediaItem.mediaId]) {
+                    "Playback item ${mediaItem.mediaId} at $index lost its canonical queue identity"
+                }
+            }
         val shuffledMapping =
             if (player.shuffleModeEnabled) {
                 player.unscrambleQueueIndices()
             } else {
                 emptyList()
             }
-        return RawQueue(
-            heap.mapNotNull { it.resolvedQueueItem },
-            shuffledMapping,
-            player.currentMediaItemIndex,
-        )
+        return RawQueue(heap, shuffledMapping, player.currentMediaItemIndex)
     }
 
     override fun handleDeferred(action: DeferredPlayback): Boolean {
@@ -316,6 +319,7 @@ class ExoPlaybackStateHolder(
         player.prepare()
         player.play()
         playbackManager.ack(this, StateAck.NewPlayback)
+        refreshProviderLocatorsNearPlayback()
         deferSave()
     }
 
@@ -329,6 +333,7 @@ class ExoPlaybackStateHolder(
             )
         }
         playbackManager.ack(this, StateAck.QueueReordered)
+        refreshProviderLocatorsNearPlayback()
         deferSave()
     }
 
@@ -353,7 +358,6 @@ class ExoPlaybackStateHolder(
                 player.pause()
             }
         }
-        playbackManager.ack(this, StateAck.IndexMoved)
         deferSave()
     }
 
@@ -369,7 +373,6 @@ class ExoPlaybackStateHolder(
         if (!playbackSettings.rememberPause) {
             player.play()
         }
-        playbackManager.ack(this, StateAck.IndexMoved)
         deferSave()
     }
 
@@ -385,7 +388,6 @@ class ExoPlaybackStateHolder(
         if (!playbackSettings.rememberPause) {
             player.play()
         }
-        playbackManager.ack(this, StateAck.IndexMoved)
         deferSave()
     }
 
@@ -567,7 +569,12 @@ class ExoPlaybackStateHolder(
             retriedCurrentError = false
         }
 
-        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+        // Media3 is the final authority for which media item is actually producing audio. A seek
+        // initiated by Next/Previous/GoTo can be applied asynchronously, so acknowledging from the
+        // command method can publish the old numeric index. Always synchronize from this callback,
+        // after Media3 has committed the transition. This also covers automatic transitions and
+        // playlist replacements without pairing new audio with stale title/artwork/lyrics.
+        if (mediaItem != null) {
             playbackManager.ack(this, StateAck.IndexMoved)
             deferSave()
         }
@@ -645,7 +652,9 @@ class ExoPlaybackStateHolder(
     private fun refreshProviderLocatorsNearPlayback() {
         if (transitionGuard.crewActive) return
         val current = player.currentMediaItem?.resolvedQueueItem ?: return
-        val order = resolveQueue().heap.map { it.item.id }
+        // Resolve the actual playback traversal, not physical Media3 storage order. In shuffle
+        // mode these differ, and preparing heap neighbours leaves the real next item unresolved.
+        val order = resolveQueue().resolveItems().map { it.item.id }
         locatorLifecycleScope.launch {
             val updates = providerPlaybackLifecycle.resolveNearPlayback(current.item.id, order)
             applyProviderLocatorUpdates(updates)

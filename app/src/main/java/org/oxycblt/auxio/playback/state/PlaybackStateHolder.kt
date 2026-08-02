@@ -261,6 +261,27 @@ data class RawQueue(
     }
 }
 
+/** One atomic queue projection taken after Media3 has committed a media-item transition. */
+internal data class IndexTransitionSnapshot(
+    val queue: List<ResolvedQueueItem>,
+    val index: Int,
+    val isShuffled: Boolean,
+    val queueProjectionChanged: Boolean,
+)
+
+internal fun synchronizeIndexTransition(
+    previousQueue: List<ResolvedQueueItem>,
+    rawQueue: RawQueue,
+): IndexTransitionSnapshot {
+    val queue = rawQueue.resolveItems()
+    return IndexTransitionSnapshot(
+        queue = queue,
+        index = rawQueue.resolveIndex(),
+        isShuffled = rawQueue.isShuffled,
+        queueProjectionChanged = previousQueue.map { it.item.id } != queue.map { it.item.id },
+    )
+}
+
 /**
  * Represents the possible changes that can occur during certain queue mutation events.
  *

@@ -39,6 +39,11 @@ evidence-based: source presence is not counted as verified device behavior.
   authorities are derived from the active ID.
 - CI now checks formatting, app JVM tests, Musikr JVM tests, lint, release
   assembly, focused persistence/authentication tests, and API 35 instrumentation.
+- R15.3 fixes the severe shuffled-playback identity split. Next, Previous, GoTo,
+  automatic playback, and Media3 playlist transitions now publish state only
+  after Media3 commits the actual audio item. Queue order and current index are
+  projected atomically, and provider look-ahead follows shuffled traversal rather
+  than physical storage order.
 
 ## Verification state
 
@@ -49,6 +54,10 @@ evidence-based: source presence is not counted as verified device behavior.
   `spotlessCheck`, 497 app JVM tests (496 passed, one intentional opt-in live
   smoke skipped), Musikr JVM tests, Android lint (zero errors), and
   `compileDebugAndroidTestKotlin`.
+- Focused R15.3 playback regressions passed: 15 tests across raw shuffled
+  identity, queue moves, queue reconciliation, and provider look-ahead (zero
+  failures). Physical reproduction
+  of the reported Liked-playlist mismatch remains pending on the user's device.
 - Physical two/three-phone, Android 7-16, route-transition, real provider,
   large-file, process-death, and release-install behavior: not yet verified.
 - Accessibility remains explicitly deferred to the dedicated release-hardening
@@ -56,20 +65,22 @@ evidence-based: source presence is not counted as verified device behavior.
 
 ## Release truth
 
-R15.2 restores the established R14 package identity so it is an in-place update
+R15.3 retains the established R14/R15.2 package identity so it is an in-place update
 that retains existing app data. It also derives every content-provider authority
 from that application ID. R15 changed the package identity and R15.1 therefore
 installed as a second app instead of updating R14.
 
-The R15.2 artifact is a debug-signed alpha package
-(`org.oxycblt.auxio.debug`, version code 85), not a production-signed beta. Do
+The R15.3 artifact is a debug-signed alpha package
+(`org.oxycblt.auxio.debug`, version code 86), not a production-signed beta. Do
 not label it beta-complete until the device matrix in
 `DEVICE_TEST_HANDOFF.md` is recorded and passes. Artifact:
-`Shippy-Alpha-R15.2-20260802.apk` (61,479,890 bytes; SHA-256
-`2C7BDE7C9024A213BC40DEBDEB9B850236123ADC1136C358CA3FF9D6F1D47A66`).
+`Shippy-Alpha-R15.3-20260802.apk` (61,694,637 bytes; SHA-256
+`3063BACDE9EE7E107F3A3BE5FB6CF8709D843D24995CA88E96C9C9314BEA83F4`).
 
 ## Next gate
 
-Install R15.2 and run the physical acceptance matrix. Any device failure reopens
+Install R15.3 and first reproduce the exact Liked/playlist Play, Shuffle, Next,
+Previous, and shuffle-toggle matrix. Then run the wider physical acceptance
+matrix. Any device failure reopens
 the relevant gap; percentages are intentionally omitted because they previously
 obscured missing vertical evidence.

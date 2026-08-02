@@ -750,8 +750,33 @@ constructor(
         when (ack) {
             is StateAck.IndexMoved -> {
                 val rawQueue = stateHolder.resolveQueue()
-                stateMirror = stateMirror.copy(index = rawQueue.resolveIndex(), rawQueue = rawQueue)
-                listeners.forEach { it.onIndexMoved(stateMirror.index) }
+                val transition = synchronizeIndexTransition(stateMirror.queue, rawQueue)
+                stateMirror =
+                    stateMirror.copy(
+                        queue = transition.queue,
+                        index = transition.index,
+                        isShuffled = transition.isShuffled,
+                        rawQueue = rawQueue,
+                    )
+                if (transition.queueProjectionChanged) {
+                    // Media3 may rebuild its shuffle order while provider-backed MediaItems are
+                    // replaced in place. Publish the queue and index from one canonical snapshot;
+                    // otherwise listeners interpret the new index against an older order.
+                    listeners.forEach {
+                        it.onQueueReordered(
+                            transition.queue.localSongsOrEmpty(),
+                            transition.index,
+                            transition.isShuffled,
+                        )
+                        it.onCanonicalQueueReordered(
+                            transition.queue,
+                            transition.index,
+                            transition.isShuffled,
+                        )
+                    }
+                } else {
+                    listeners.forEach { it.onIndexMoved(transition.index) }
+                }
             }
             is StateAck.PlayNext -> {
                 val rawQueue = stateHolder.resolveQueue()
