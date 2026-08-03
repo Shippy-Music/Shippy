@@ -131,6 +131,7 @@ shippy/lyrics
   musixmatch broker boundary
   lrclib
   parser
+  on-device English translator
   Room-backed offline cache
 shippy/lastfm
 shippy/share
@@ -445,6 +446,16 @@ The cache stores provider/source identity, recording metadata used to validate
 the hit, plain/synchronized payloads, instrumental state, and fetch time. A
 TrackId hit is rejected if the cached recording metadata no longer matches the
 request. Lyrics do not require a separate encryption dependency.
+
+English translation is a separate, user-initiated boundary after parsing.
+`LyricsTranslator` detects the dominant language of the combined original text
+and uses ML Kit's on-device translation model. It never receives raw LRC
+timestamps. Repeated nonblank lines are translated once, then reconstructed in
+the original order with every `startMs` preserved exactly. `PlaybackViewModel`
+owns the current-track translation job and presentation state, cancels it on a
+track change, and rejects stale results before publication. The current-track
+result is retained for hide/show without retranslating; generated translations
+do not alter `LyricsRecord` or the Room lyrics cache.
 
 ### Last.fm
 

@@ -58,6 +58,28 @@
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
+    <org.oxycblt.auxio.ui.RippleFixMaterialButton
+        android:id="@+id/lyrics_translate"
+        style="@style/Widget.Auxio.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="@dimen/spacing_small"
+        android:text="@string/lbl_translate_lyrics"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/lyrics_translation_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingStart="@dimen/spacing_medium"
+        android:paddingEnd="@dimen/spacing_medium"
+        android:text="@string/lng_translation_download_disclosure"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?android:attr/textColorSecondary"
+        android:visibility="gone" />
+
     <ScrollView
         android:id="@+id/lyrics_scroll"
         android:layout_width="match_parent"

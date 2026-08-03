@@ -154,6 +154,11 @@ code/test level, ready for later device verification.
 ## Stage 4 — Player Integrations And Android Polish
 
 - [x] Lyrics retrieval, synchronization, caching, and offline use.
+- [x] Add explicitly user-initiated, on-device English lyric translation.
+  - [x] Preserve original text, synchronized timestamps, active-line scrolling,
+        and tap-to-seek while rendering English beneath each source line.
+  - [x] Deduplicate repeated lines, cancel stale track work, retain current-track
+        hide/show state, and disclose the approximately 30 MB model download.
 - [x] Last.fm authentication boundary and scrobbling.
   - [x] Signed API client, encrypted credential repository, durable FIFO
         outbox, listen policy, and playback lifecycle observer.

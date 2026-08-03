@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -46,7 +47,10 @@ import org.oxycblt.auxio.shippy.lyrics.LyricsLookupResult
 import org.oxycblt.auxio.shippy.lyrics.LyricsRecord
 import org.oxycblt.auxio.shippy.lyrics.LyricsRepository
 import org.oxycblt.auxio.shippy.lyrics.LyricsRequest
+import org.oxycblt.auxio.shippy.lyrics.LyricsTranslationResult
+import org.oxycblt.auxio.shippy.lyrics.LyricsTranslator
 import org.oxycblt.auxio.shippy.lyrics.ParsedLyrics
+import org.oxycblt.auxio.shippy.lyrics.TranslatedLyrics
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Album
@@ -74,9 +78,11 @@ constructor(
     private val listSettings: ListSettings,
     private val playbackDisplayMapper: PlaybackDisplayMapper,
     private val lyricsRepository: LyricsRepository,
+    private val lyricsTranslator: LyricsTranslator,
 ) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener {
     private var lastPositionJob: Job? = null
     private var lyricsJob: Job? = null
+    private var lyricsTranslationJob: Job? = null
     private var queueMappingJob: Job? = null
 
     private val _song = MutableStateFlow<Song?>(null)
@@ -93,6 +99,11 @@ constructor(
     /** Lyrics tied to the canonical current item, never to a stale local-only song. */
     val lyrics: StateFlow<PlaybackLyricsState>
         get() = _lyrics
+
+    private val _lyricsTranslation =
+        MutableStateFlow<LyricsTranslationState>(LyricsTranslationState.Hidden)
+    val lyricsTranslation: StateFlow<LyricsTranslationState>
+        get() = _lyricsTranslation
 
     private val _parent = MutableStateFlow<MusicParent?>(null)
     /** The [MusicParent] currently being played. Null if playback is occurring from all songs. */
@@ -306,7 +317,56 @@ constructor(
     }
 
     fun retryLyrics() {
+        lyricsTranslationJob?.cancel()
+        _lyricsTranslation.value = LyricsTranslationState.Hidden
         _displayItem.value?.let { updateLyrics(it, force = true) }
+    }
+
+    fun translateLyricsToEnglish() {
+        val lyricsState = _lyrics.value as? PlaybackLyricsState.Ready ?: return
+        if (lyricsState.lyrics.plainText.isBlank()) return
+        val existing = _lyricsTranslation.value
+        if (existing is LyricsTranslationState.Ready && existing.trackId == lyricsState.trackId) {
+            _lyricsTranslation.value = existing.copy(visible = true)
+            return
+        }
+        lyricsTranslationJob?.cancel()
+        _lyricsTranslation.value = LyricsTranslationState.Loading(lyricsState.trackId)
+        lyricsTranslationJob =
+            viewModelScope.launch {
+                try {
+                    val result = lyricsTranslator.translateToEnglish(lyricsState.lyrics)
+                    if (_displayItem.value?.queueItem?.track?.id != lyricsState.trackId) {
+                        return@launch
+                    }
+                    _lyricsTranslation.value =
+                        when (result) {
+                            is LyricsTranslationResult.Translated ->
+                                LyricsTranslationState.Ready(
+                                    trackId = lyricsState.trackId,
+                                    sourceLanguage = result.sourceLanguage,
+                                    lyrics = result.lyrics,
+                                    visible = true,
+                                )
+                            LyricsTranslationResult.AlreadyEnglish ->
+                                LyricsTranslationState.AlreadyEnglish(lyricsState.trackId)
+                            LyricsTranslationResult.UnsupportedLanguage ->
+                                LyricsTranslationState.Unsupported(lyricsState.trackId)
+                        }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    if (_displayItem.value?.queueItem?.track?.id == lyricsState.trackId) {
+                        _lyricsTranslation.value =
+                            LyricsTranslationState.Error(lyricsState.trackId, error.message)
+                    }
+                }
+            }
+    }
+
+    fun toggleLyricsTranslationVisibility() {
+        val ready = _lyricsTranslation.value as? LyricsTranslationState.Ready ?: return
+        _lyricsTranslation.value = ready.copy(visible = !ready.visible)
     }
 
     private fun updateDisplayItem(item: PlaybackDisplayItem?) {
@@ -314,8 +374,12 @@ constructor(
         _displayItem.value = item
         if (item == null) {
             lyricsJob?.cancel()
+            lyricsTranslationJob?.cancel()
             _lyrics.value = PlaybackLyricsState.None
+            _lyricsTranslation.value = LyricsTranslationState.Hidden
         } else if (item.queueItem.track.id != previousTrackId) {
+            lyricsTranslationJob?.cancel()
+            _lyricsTranslation.value = LyricsTranslationState.Hidden
             updateLyrics(item, force = false)
         }
     }
@@ -895,4 +959,23 @@ sealed interface PlaybackLyricsState {
 
     data class Error(val trackId: TrackId, val retryable: Boolean, val message: String?) :
         PlaybackLyricsState
+}
+
+sealed interface LyricsTranslationState {
+    data object Hidden : LyricsTranslationState
+
+    data class Loading(val trackId: TrackId) : LyricsTranslationState
+
+    data class Ready(
+        val trackId: TrackId,
+        val sourceLanguage: String,
+        val lyrics: TranslatedLyrics,
+        val visible: Boolean,
+    ) : LyricsTranslationState
+
+    data class AlreadyEnglish(val trackId: TrackId) : LyricsTranslationState
+
+    data class Unsupported(val trackId: TrackId) : LyricsTranslationState
+
+    data class Error(val trackId: TrackId, val message: String?) : LyricsTranslationState
 }
