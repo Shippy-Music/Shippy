@@ -185,6 +185,10 @@ dependencies {
     implementation 'com.google.android.gms:play-services-nearby:19.3.0'
     implementation 'com.google.zxing:core:3.5.4'
 
+    // User-initiated, on-device lyric translation
+    implementation 'com.google.mlkit:language-id:17.0.6'
+    implementation 'com.google.mlkit:translate:17.0.3'
+
     // Material
     // TODO: Exactly figure out the conditions that the 1.7.0 ripple bug occurred so you can just
     //  PR a fix.

@@ -383,6 +383,16 @@
     <string name="lng_lyrics_unavailable">Lyrics are not available for this track.</string>
     <string name="lng_lyrics_error">Lyrics could not be loaded.</string>
     <string name="lng_lyrics_instrumental">Instrumental</string>
+    <string name="lbl_translate_lyrics">Translate to English</string>
+    <string name="lbl_hide_translation">Hide translation</string>
+    <string name="lbl_show_translation">Show translation</string>
+    <string name="lbl_retry_translation">Retry translation</string>
+    <string name="lng_translation_loading">Preparing English translation…</string>
+    <string name="lng_translation_download_disclosure">On-device translation by Google may download a language model of about 30 MB.</string>
+    <string name="lng_translation_attribution">Translated by Google</string>
+    <string name="lng_translation_already_english">These lyrics are already in English.</string>
+    <string name="lng_translation_unsupported">The lyrics language could not be translated.</string>
+    <string name="lng_translation_error">Translation could not be completed. Original lyrics are still available.</string>
     <string name="lng_local_indexing">Indexing local music…</string>
     <string name="lng_shippy_playlist">Playlist</string>
     <string name="lng_collection_empty">No tracks here yet.</string>

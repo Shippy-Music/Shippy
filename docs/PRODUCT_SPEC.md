@@ -72,8 +72,9 @@ These decisions came directly from the product owner.
     optional hosted relay for reliability and larger groups.
 21. The complete application is the target. Engineering may proceed in stages,
     but staging must not quietly remove final product requirements.
-22. AI is not part of the product unless a later explicit decision adds a
-    narrowly useful feature.
+22. AI is not part of the product except for the explicitly approved,
+    user-initiated on-device translation of loaded lyrics into English. This
+    utility does not introduce AI branding, chat, DJ, or creation behavior.
 23. Full chat and a general-purpose social network are not part of Crew.
 24. Accessibility implementation is a release-hardening pass after the
     functional application and product polish are complete. It remains required
@@ -414,7 +415,9 @@ Required product integrations:
 - Lyrics through an ordered provider chain, with synchronized lyrics where
   available and cached offline behavior. Musixmatch may be preferred only through
   an official securely supplied credential or broker; no reusable key is embedded
-  in the open-source APK. LRCLIB is the no-key fallback.
+  in the open-source APK. LRCLIB is the no-key fallback. Loaded non-English lyrics
+  may be translated to English only after an explicit user action; original text
+  and synchronized timestamps remain authoritative and visible.
 - Last.fm authentication and scrobbling, followed by relevant discovery/stats
 - Equalizer and audio settings
 - Playlist import/export where implementations are reliable

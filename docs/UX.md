@@ -234,6 +234,18 @@ Download. Tapping a timestamped synchronized line seeks playback to that line
 and immediately updates the progress presentation; plain lyrics are not
 misrepresented as seekable.
 
+The full lyrics surface exposes **Translate to English** only for loaded,
+non-instrumental lyrics. Translation is manual and never begins merely because a
+track starts. Before translation begins, the surface explains that on-device
+translation by Google may download a language model of about 30 MB. Original
+lyrics remain primary and the English translation appears immediately beneath
+each corresponding line in smaller secondary typography. Synchronized
+timestamps, active-line behavior, scrolling, and tap-to-seek stay attached to
+the original line pair. A completed translation can be hidden and shown without
+running translation again. Already-English, unsupported-language, loading, and
+retryable failure states are honest; no translation state replaces or hides the
+original lyrics.
+
 ### Overflow
 
 Allowed:

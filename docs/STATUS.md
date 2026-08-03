@@ -8,6 +8,19 @@
 Read this file after `PRODUCT_SPEC.md` whenever work resumes. This status is
 evidence-based: source presence is not counted as verified device behavior.
 
+**Unreleased English lyric translation slice:** The full lyrics sheet now
+offers manual on-device English translation for loaded non-instrumental lyrics,
+with original-first bilingual rendering, model-download disclosure, Google
+attribution, and honest loading/already-English/unsupported/error states.
+Synchronized timestamps, order, active-line behavior, scrolling, and
+tap-to-seek remain attached to each original/translated pair. Repeated lines
+translate once. `PlaybackViewModel` cancels work on track changes, rejects stale
+results, and retains the current-track result for hide/show without modifying
+the original Room lyrics cache. Focused deterministic tests were added;
+`dialog_lyrics.xml` parses successfully and `git diff --check` passes. Gradle
+formatting, compilation, JVM tests, and device behavior are not verified because
+this machine has no Java runtime configured.
+
 ## Implemented in the current pass
 
 - Typed playback mutations separate user intent, Crew projection, and local

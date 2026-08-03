@@ -44,6 +44,7 @@ import org.oxycblt.auxio.databinding.DialogLyricsBinding
 import org.oxycblt.auxio.playback.ui.StyledSeekBar
 import org.oxycblt.auxio.shippy.lyrics.PlainLyrics
 import org.oxycblt.auxio.shippy.lyrics.SyncedLyrics
+import org.oxycblt.auxio.shippy.lyrics.TranslatedLyrics
 import org.oxycblt.auxio.shippy.provider.ui.ProviderTrackActionsSheet
 import org.oxycblt.auxio.ui.ViewBindingBottomSheetDialogFragment
 import org.oxycblt.auxio.util.collectImmediately
@@ -56,6 +57,7 @@ class LyricsDialog :
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val playerActionsModel: PlayerActionsViewModel by viewModels()
     private var renderedState: PlaybackLyricsState = PlaybackLyricsState.None
+    private var renderedTranslationState: LyricsTranslationState = LyricsTranslationState.Hidden
     private var renderedLineIndex = Int.MIN_VALUE
 
     override fun onCreateBinding(inflater: LayoutInflater) = DialogLyricsBinding.inflate(inflater)
@@ -73,7 +75,12 @@ class LyricsDialog :
         binding.lyricsSeekBar.listener = this
         binding.lyricsBody.highlightColor = Color.TRANSPARENT
         collectImmediately(playbackModel.displayItem, ::updateTrack)
-        collectImmediately(playbackModel.lyrics, playbackModel.positionDs, ::updateLyrics)
+        collectImmediately(
+            playbackModel.lyrics,
+            playbackModel.lyricsTranslation,
+            playbackModel.positionDs,
+            ::updateLyrics,
+        )
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playerActionsModel.state, ::updateActions)
     }
@@ -89,6 +96,7 @@ class LyricsDialog :
     override fun onDestroyBinding(binding: DialogLyricsBinding) {
         binding.lyricsSeekBar.listener = null
         renderedState = PlaybackLyricsState.None
+        renderedTranslationState = LyricsTranslationState.Hidden
         renderedLineIndex = Int.MIN_VALUE
         super.onDestroyBinding(binding)
     }
@@ -147,15 +155,21 @@ class LyricsDialog :
         }
     }
 
-    private fun updateLyrics(state: PlaybackLyricsState, positionDs: Long) {
+    private fun updateLyrics(
+        state: PlaybackLyricsState,
+        translationState: LyricsTranslationState,
+        positionDs: Long,
+    ) {
         val binding = requireBinding()
         binding.lyricsSeekBar.positionDs = positionDs
-        val stateChanged = state != renderedState
+        val stateChanged = state != renderedState || translationState != renderedTranslationState
         if (stateChanged) {
             renderedState = state
+            renderedTranslationState = translationState
             renderedLineIndex = Int.MIN_VALUE
             binding.lyricsRetry.isVisible = false
             binding.lyricsRetry.setOnClickListener(null)
+            updateTranslationAction(binding, state, translationState)
         }
 
         when (state) {
@@ -178,15 +192,13 @@ class LyricsDialog :
                         val activeIndex = activeLyricIndex(lyrics, positionDs * 100)
                         if (stateChanged || activeIndex != renderedLineIndex) {
                             renderedLineIndex = activeIndex
-                            renderSyncedLyrics(binding, lyrics, activeIndex)
+                            renderSyncedLyrics(binding, lyrics, translationState, activeIndex)
                         }
                     }
                     is PlainLyrics -> {
                         if (stateChanged) {
                             binding.lyricsBody.movementMethod = null
-                            binding.lyricsBody.text =
-                                lyrics.plainText.takeIf(String::isNotBlank)
-                                    ?: getString(R.string.lng_lyrics_instrumental)
+                            renderPlainLyrics(binding, lyrics, translationState)
                         }
                     }
                 }
@@ -208,23 +220,57 @@ class LyricsDialog :
     private fun renderSyncedLyrics(
         binding: DialogLyricsBinding,
         lyrics: SyncedLyrics,
+        translationState: LyricsTranslationState,
         activeIndex: Int,
     ) {
         val text = SpannableStringBuilder()
         var activeStart = -1
         val activeColor = requireContext().getAttrColorCompat(MR.attr.colorOnSurface).defaultColor
         val inactiveColor = ColorUtils.setAlphaComponent(activeColor, 0x78)
+        val translatedLines =
+            ((translationState as? LyricsTranslationState.Ready)?.takeIf { it.visible }?.lyrics
+                    as? TranslatedLyrics.Synced)
+                ?.lines
         lyrics.lines.forEachIndexed { index, line ->
             if (index > 0) text.append("\n\n")
             val start = text.length
             text.append(line.text)
+            val originalEnd = text.length
+            val translatedText = translatedLines?.getOrNull(index)?.translatedText.orEmpty()
+            val translatedStart =
+                if (translatedText.isNotBlank()) {
+                    text.append("\n")
+                    text.length
+                } else {
+                    -1
+                }
+            if (translatedStart >= 0) text.append(translatedText)
             val end = text.length
             text.setSpan(
                 ForegroundColorSpan(if (index == activeIndex) activeColor else inactiveColor),
                 start,
-                end,
+                originalEnd,
                 Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
             )
+            if (translatedStart >= 0) {
+                text.setSpan(
+                    ForegroundColorSpan(
+                        ColorUtils.setAlphaComponent(
+                            activeColor,
+                            if (index == activeIndex) 0xB8 else 0x68,
+                        )
+                    ),
+                    translatedStart,
+                    end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+                text.setSpan(
+                    RelativeSizeSpan(0.78f),
+                    translatedStart,
+                    end,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
             text.setSpan(
                 object : ClickableSpan() {
                     override fun onClick(widget: View) {
@@ -244,20 +290,20 @@ class LyricsDialog :
                 text.setSpan(
                     StyleSpan(Typeface.BOLD),
                     start,
-                    end,
+                    originalEnd,
                     Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
                 )
                 text.setSpan(
                     RelativeSizeSpan(1.22f),
                     start,
-                    end,
+                    originalEnd,
                     Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
                 )
             } else {
                 text.setSpan(
                     RelativeSizeSpan(0.92f),
                     start,
-                    end,
+                    originalEnd,
                     Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
                 )
             }
@@ -271,6 +317,114 @@ class LyricsDialog :
                 val target =
                     (layout.getLineTop(line) - binding.lyricsScroll.height / 3).coerceAtLeast(0)
                 binding.lyricsScroll.smoothScrollTo(0, target)
+            }
+        }
+    }
+
+    private fun renderPlainLyrics(
+        binding: DialogLyricsBinding,
+        lyrics: PlainLyrics,
+        translationState: LyricsTranslationState,
+    ) {
+        if (lyrics.plainText.isBlank()) {
+            binding.lyricsBody.setText(R.string.lng_lyrics_instrumental)
+            return
+        }
+        val translated =
+            ((translationState as? LyricsTranslationState.Ready)?.takeIf { it.visible }?.lyrics
+                    as? TranslatedLyrics.Plain)
+                ?.lines
+        if (translated == null) {
+            binding.lyricsBody.text = lyrics.plainText
+            return
+        }
+        val activeColor = requireContext().getAttrColorCompat(MR.attr.colorOnSurface).defaultColor
+        val text = SpannableStringBuilder()
+        translated.forEachIndexed { index, line ->
+            if (index > 0) text.append("\n\n")
+            text.append(line.originalText)
+            if (line.translatedText.isNotBlank()) {
+                text.append("\n")
+                val start = text.length
+                text.append(line.translatedText)
+                text.setSpan(
+                    ForegroundColorSpan(ColorUtils.setAlphaComponent(activeColor, 0x78)),
+                    start,
+                    text.length,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+                text.setSpan(
+                    RelativeSizeSpan(0.78f),
+                    start,
+                    text.length,
+                    Spannable.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+        }
+        binding.lyricsBody.text = text
+    }
+
+    private fun updateTranslationAction(
+        binding: DialogLyricsBinding,
+        lyricsState: PlaybackLyricsState,
+        state: LyricsTranslationState,
+    ) {
+        val hasLyrics =
+            (lyricsState as? PlaybackLyricsState.Ready)?.lyrics?.plainText?.isNotBlank() == true
+        binding.lyricsTranslate.isVisible = hasLyrics
+        binding.lyricsTranslationStatus.isVisible = hasLyrics
+        binding.lyricsTranslate.setOnClickListener(null)
+        when (state) {
+            LyricsTranslationState.Hidden -> {
+                binding.lyricsTranslate.isEnabled = true
+                binding.lyricsTranslate.setText(R.string.lbl_translate_lyrics)
+                binding.lyricsTranslate.setOnClickListener {
+                    playbackModel.translateLyricsToEnglish()
+                }
+                binding.lyricsTranslationStatus.setText(
+                    R.string.lng_translation_download_disclosure
+                )
+            }
+            is LyricsTranslationState.Loading -> {
+                binding.lyricsTranslate.isEnabled = false
+                binding.lyricsTranslate.setText(R.string.lng_translation_loading)
+                binding.lyricsTranslationStatus.setText(
+                    R.string.lng_translation_download_disclosure
+                )
+            }
+            is LyricsTranslationState.Ready -> {
+                binding.lyricsTranslate.isEnabled = true
+                binding.lyricsTranslate.setText(
+                    if (state.visible) {
+                        R.string.lbl_hide_translation
+                    } else {
+                        R.string.lbl_show_translation
+                    }
+                )
+                binding.lyricsTranslate.setOnClickListener {
+                    playbackModel.toggleLyricsTranslationVisibility()
+                }
+                binding.lyricsTranslationStatus.setText(R.string.lng_translation_attribution)
+            }
+            is LyricsTranslationState.AlreadyEnglish -> {
+                binding.lyricsTranslate.isEnabled = false
+                binding.lyricsTranslate.setText(R.string.lbl_translate_lyrics)
+                binding.lyricsTranslationStatus.setText(
+                    R.string.lng_translation_already_english
+                )
+            }
+            is LyricsTranslationState.Unsupported -> {
+                binding.lyricsTranslate.isEnabled = false
+                binding.lyricsTranslate.setText(R.string.lbl_translate_lyrics)
+                binding.lyricsTranslationStatus.setText(R.string.lng_translation_unsupported)
+            }
+            is LyricsTranslationState.Error -> {
+                binding.lyricsTranslate.isEnabled = true
+                binding.lyricsTranslate.setText(R.string.lbl_retry_translation)
+                binding.lyricsTranslate.setOnClickListener {
+                    playbackModel.translateLyricsToEnglish()
+                }
+                binding.lyricsTranslationStatus.setText(R.string.lng_translation_error)
             }
         }
     }
