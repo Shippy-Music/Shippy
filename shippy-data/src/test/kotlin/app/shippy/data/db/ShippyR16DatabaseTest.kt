@@ -120,22 +120,24 @@ class ShippyR16DatabaseTest {
         sqlite.execSQL(
             """
             INSERT INTO source_reference (
-                source_reference_id, recording_id, provider_id, item_type, source_item_id,
+                source_reference_id, recording_id, provider_id, source_kind, item_type, source_item_id,
                 original_url, availability_state, availability_checked_at_epoch_ms,
-                availability_expires_at_epoch_ms, failure_kind, identity_status,
+                availability_expires_at_epoch_ms, failure_kind, failure_retryable, identity_status,
                 raw_metadata_observation_id, created_at_epoch_ms, updated_at_epoch_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
                 .trimIndent(),
             arrayOf<Any?>(
                 "source-1",
                 "recording-1",
                 "provider",
+                "IMPORTED_LINK",
                 "RECORDING",
                 "item-1",
                 null,
                 "AVAILABLE",
                 1L,
+                null,
                 null,
                 null,
                 "USER_CONFIRMED",
@@ -159,22 +161,24 @@ class ShippyR16DatabaseTest {
             sqlite.execSQL(
                 """
                 INSERT INTO source_reference (
-                    source_reference_id, recording_id, provider_id, item_type, source_item_id,
+                    source_reference_id, recording_id, provider_id, source_kind, item_type, source_item_id,
                     original_url, availability_state, availability_checked_at_epoch_ms,
-                    availability_expires_at_epoch_ms, failure_kind, identity_status,
+                    availability_expires_at_epoch_ms, failure_kind, failure_retryable, identity_status,
                     raw_metadata_observation_id, created_at_epoch_ms, updated_at_epoch_ms
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                     .trimIndent(),
                 arrayOf<Any?>(
                     "source-2",
                     "recording-1",
                     "provider",
+                    "IMPORTED_LINK",
                     "RECORDING",
                     "item-1",
                     null,
                     "AVAILABLE",
                     1L,
+                    null,
                     null,
                     null,
                     "USER_CONFIRMED",

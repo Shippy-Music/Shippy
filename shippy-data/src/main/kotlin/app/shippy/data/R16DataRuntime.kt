@@ -24,12 +24,15 @@ import app.shippy.data.ingest.R16IngestionRepository
 import app.shippy.data.ingest.RoomR16IngestionRepository
 import app.shippy.data.migration.R16LocalReindexAudit
 import app.shippy.data.migration.RoomR16LocalReindexAudit
+import app.shippy.data.source.R16SourceStateRepository
+import app.shippy.data.source.RoomR16SourceStateRepository
 import java.io.Closeable
 
 /** Explicitly opened R16 data owner; constructing it does not change active app authority. */
 class R16DataRuntime private constructor(private val database: ShippyR16Database) : Closeable {
     val ingestion: R16IngestionRepository = RoomR16IngestionRepository(database)
     val localReindexAudit: R16LocalReindexAudit = RoomR16LocalReindexAudit(database)
+    val sources: R16SourceStateRepository = RoomR16SourceStateRepository(database)
 
     override fun close() {
         database.close()

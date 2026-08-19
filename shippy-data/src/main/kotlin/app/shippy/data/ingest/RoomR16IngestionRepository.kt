@@ -236,7 +236,7 @@ private class RoomR16IngestionSession(private val database: ShippyR16Database) :
                                 }
                         }
                         .toString(),
-                extrasJson = null,
+                extrasJson = JSONObject().put("sourceKind", observation.sourceKind.name).toString(),
                 capturedAtEpochMs = now,
             )
         val source =
@@ -244,6 +244,7 @@ private class RoomR16IngestionSession(private val database: ShippyR16Database) :
                 sourceReferenceId = sourceId,
                 recordingId = command.recordingId?.value,
                 providerId = observation.sourceKey.providerId.value,
+                sourceKind = observation.sourceKind.toReferenceKind().name,
                 itemType = observation.sourceKey.itemType.name,
                 sourceItemId = observation.sourceKey.sourceItemId,
                 originalUrl = observation.originalUrl,
@@ -251,6 +252,7 @@ private class RoomR16IngestionSession(private val database: ShippyR16Database) :
                 availabilityCheckedAtEpochMs = now,
                 availabilityExpiresAtEpochMs = null,
                 failureKind = null,
+                failureRetryable = null,
                 identityStatus =
                     if (command.recordingId == null) "UNRESOLVED" else "AUTOMATICALLY_LINKED",
                 rawMetadataObservationId = observationId,
@@ -544,6 +546,9 @@ private fun SourceKind.toMetadataSourceType(): String =
         SourceKind.YOUTUBE -> "MUSIC_PROVIDER"
         else -> "GENERIC_PROVIDER"
     }
+
+private fun SourceKind.toReferenceKind(): SourceKind =
+    if (this == SourceKind.YOUTUBE_MUSIC) SourceKind.YOUTUBE else this
 
 private val app.shippy.core.asset.MediaAssetKind.isDurable: Boolean
     get() =

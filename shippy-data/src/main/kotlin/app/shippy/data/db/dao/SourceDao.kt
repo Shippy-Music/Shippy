@@ -41,7 +41,13 @@ internal abstract class SourceDao {
         sourceItemId: String,
     ): SourceReferenceEntity?
 
-    @Query("SELECT * FROM source_reference WHERE recording_id = :recordingId")
+    @Query(
+        """
+        SELECT * FROM source_reference
+        WHERE recording_id = :recordingId
+        ORDER BY provider_id, item_type, source_item_id
+        """
+    )
     abstract fun observeForRecording(recordingId: String): Flow<List<SourceReferenceEntity>>
 
     @Query(
@@ -63,6 +69,7 @@ internal abstract class SourceDao {
             availability_checked_at_epoch_ms = :checkedAtEpochMs,
             availability_expires_at_epoch_ms = :expiresAtEpochMs,
             failure_kind = :failureKind,
+            failure_retryable = :failureRetryable,
             raw_metadata_observation_id = :observationId,
             updated_at_epoch_ms = :updatedAtEpochMs
         WHERE source_reference_id = :sourceReferenceId
@@ -75,6 +82,7 @@ internal abstract class SourceDao {
         checkedAtEpochMs: Long?,
         expiresAtEpochMs: Long?,
         failureKind: String?,
+        failureRetryable: Boolean?,
         observationId: String,
         updatedAtEpochMs: Long,
     ): Int
@@ -96,6 +104,32 @@ internal abstract class SourceDao {
         updatedAtEpochMs: Long,
     ): Int
 
+    @Query(
+        """
+        UPDATE source_reference SET
+            availability_state = :availabilityState,
+            availability_checked_at_epoch_ms = :checkedAtEpochMs,
+            availability_expires_at_epoch_ms = :expiresAtEpochMs,
+            failure_kind = :failureKind,
+            failure_retryable = :failureRetryable,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE provider_id = :providerId
+          AND item_type = :itemType
+          AND source_item_id = :sourceItemId
+        """
+    )
+    abstract suspend fun updateAvailability(
+        providerId: String,
+        itemType: String,
+        sourceItemId: String,
+        availabilityState: String,
+        checkedAtEpochMs: Long?,
+        expiresAtEpochMs: Long?,
+        failureKind: String?,
+        failureRetryable: Boolean?,
+        updatedAtEpochMs: Long,
+    ): Int
+
     @Query("SELECT COUNT(*) FROM metadata_observation") abstract suspend fun observationCount(): Int
 
     @Transaction
@@ -112,6 +146,9 @@ internal abstract class SourceDao {
             insertSource(source)
             return source
         }
+        check(existing.sourceKind == source.sourceKind) {
+            "Exact source key cannot change its canonical source kind"
+        }
         check(
             updateObservationProjection(
                 sourceReferenceId = existing.sourceReferenceId,
@@ -120,6 +157,7 @@ internal abstract class SourceDao {
                 checkedAtEpochMs = source.availabilityCheckedAtEpochMs,
                 expiresAtEpochMs = source.availabilityExpiresAtEpochMs,
                 failureKind = source.failureKind,
+                failureRetryable = source.failureRetryable,
                 observationId = observation.observationId,
                 updatedAtEpochMs = source.updatedAtEpochMs,
             ) == 1

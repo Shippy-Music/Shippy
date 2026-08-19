@@ -256,6 +256,7 @@ private fun LegacyCanonicalCandidateRow.toSource(
         sourceReferenceId = LegacyIdMapper.source(trackId, candidateId).value,
         recordingId = recordingId,
         providerId = provider,
+        sourceKind = provider.toLegacyReferenceKind(kind),
         itemType = if (kind == LOCAL_KIND) LOCAL_ITEM_TYPE else RECORDING_ITEM_TYPE,
         sourceItemId = sourceItemId,
         originalUrl = null,
@@ -268,12 +269,22 @@ private fun LegacyCanonicalCandidateRow.toSource(
         availabilityCheckedAtEpochMs = importedAtEpochMs,
         availabilityExpiresAtEpochMs = null,
         failureKind = null,
+        failureRetryable = null,
         identityStatus = AUTOMATICALLY_LINKED,
         rawMetadataObservationId = observationId,
         createdAtEpochMs = importedAtEpochMs,
         updatedAtEpochMs = importedAtEpochMs,
     )
 }
+
+private fun String.toLegacyReferenceKind(candidateKind: String): String =
+    when {
+        candidateKind == LOCAL_KIND -> "LOCAL_FILE"
+        candidateKind == DOWNLOAD_KIND -> "SHIPPY_DOWNLOAD"
+        this == "jiosaavn" -> "JIOSAAVN"
+        this == "youtube" || this == "youtube_music" -> "YOUTUBE"
+        else -> "IMPORTED_LINK"
+    }
 
 private fun LegacyCanonicalCandidateRow.toObservation(
     source: SourceReferenceEntity?,

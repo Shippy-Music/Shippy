@@ -286,6 +286,15 @@ avoid checklist theatre.
   registry plus local scan ingestion reuses that exact asset while retaining
   `SHIPPY_DOWNLOAD` ownership. Re-ingesting a legacy `TrackId` as if it were an
   R16 `RecordingId` would create a competing identity path.
+- The scoped persistent `SourceRepository` boundary now composes the existing
+  `RecordingIngestor` with Room-backed exact lookup, per-Recording observation,
+  and transactional availability updates. Discovery remains a separate read-only
+  repository, so showing search results still cannot mutate catalogue identity.
+- `source_reference` now persists canonical source kind and failure retryability,
+  allowing the full availability contract to round-trip. YouTube Music discovery
+  provenance remains in the raw observation while its exact shared video source
+  stores canonical `YOUTUBE` kind. Availability failure never deletes or changes
+  Recording identity.
 
 ## Current blockers
 
@@ -298,11 +307,11 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete the Phase 4 persistence side without cutting over: expose the scoped
-   R16 `SourceRepository` over exact Room source identity and availability, then
-   add bounded transient-catalogue retention/GC and event-driven enrichment seams.
-   Provider result selection/save may call ingestion later; ordinary search must
-   remain read-only, and legacy playback/UI authority stays active.
+1. Complete the Phase 4 lifecycle side without cutting over: add conservative,
+   bounded transient-catalogue retention/GC eligibility and event-driven
+   enrichment scheduling. Provider result selection/save may call ingestion
+   later; ordinary search stays read-only, and legacy playback/UI authority
+   remains active.
 
 ## Verification level
 
@@ -320,7 +329,7 @@ schema/DAO tests, including duplicate playlist occurrences, orphan rejection,
 exact-source uniqueness/idempotence, asset/Library scoping, and complete-order
 playlist writes, plus canonical Library/playlist read projection and FTS lookup.
 The exported schema contains version 1, 30 entities including FTS, 2 views, and
-identity hash `b7024782afdceca83073f18e29fff640`. The durable identity/history/checkpoint
+identity hash `44e9cd72ef59268c22b636e7b74d7fdc`. The durable identity/history/checkpoint
 DAO suite adds 3 passing focused tests (9 total data-module tests).
 The download/integration/migration ledger suite adds 3 passing focused tests
 (12 total data-module tests).
@@ -355,6 +364,8 @@ rejection, corruption refusal, and premature-verification refusal add 2 passing
 focused tests (31 total data-module tests).
 Room-backed ingestion, managed-download preservation, conflict rollback, and the
 M12 audit checkpoint add 3 passing tests (34 total data-module tests).
+Room-backed source observation/exact lookup plus retryable availability updates
+that preserve Recording identity add 1 passing test (35 total data-module tests).
 `:shippy-sources:check` passes its forbidden-import gate and 8 focused
 managed-asset/ingestion tests. The app compiles with the inactive Musikr/data
 bridge; its exact observation-mapping test and interrupted/resumed/changed-snapshot

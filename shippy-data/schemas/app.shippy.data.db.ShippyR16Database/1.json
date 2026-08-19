@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "b7024782afdceca83073f18e29fff640",
+    "identityHash": "44e9cd72ef59268c22b636e7b74d7fdc",
     "entities": [
       {
         "tableName": "recording",
@@ -422,7 +422,7 @@
       },
       {
         "tableName": "source_reference",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source_reference_id` TEXT NOT NULL, `recording_id` TEXT, `provider_id` TEXT NOT NULL, `item_type` TEXT NOT NULL, `source_item_id` TEXT NOT NULL, `original_url` TEXT, `availability_state` TEXT NOT NULL, `availability_checked_at_epoch_ms` INTEGER, `availability_expires_at_epoch_ms` INTEGER, `failure_kind` TEXT, `identity_status` TEXT NOT NULL, `raw_metadata_observation_id` TEXT NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`source_reference_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source_reference_id` TEXT NOT NULL, `recording_id` TEXT, `provider_id` TEXT NOT NULL, `source_kind` TEXT NOT NULL, `item_type` TEXT NOT NULL, `source_item_id` TEXT NOT NULL, `original_url` TEXT, `availability_state` TEXT NOT NULL, `availability_checked_at_epoch_ms` INTEGER, `availability_expires_at_epoch_ms` INTEGER, `failure_kind` TEXT, `failure_retryable` INTEGER, `identity_status` TEXT NOT NULL, `raw_metadata_observation_id` TEXT NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`source_reference_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
         "fields": [
           {
             "fieldPath": "sourceReferenceId",
@@ -438,6 +438,12 @@
           {
             "fieldPath": "providerId",
             "columnName": "provider_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceKind",
+            "columnName": "source_kind",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -478,6 +484,11 @@
             "fieldPath": "failureKind",
             "columnName": "failure_kind",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "failureRetryable",
+            "columnName": "failure_retryable",
+            "affinity": "INTEGER"
           },
           {
             "fieldPath": "identityStatus",
@@ -2701,7 +2712,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b7024782afdceca83073f18e29fff640')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '44e9cd72ef59268c22b636e7b74d7fdc')"
     ]
   }
 }
