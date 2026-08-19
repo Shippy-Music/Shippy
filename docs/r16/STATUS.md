@@ -241,6 +241,16 @@ avoid checklist theatre.
   ownership before verified move-recovery evidence. Unrelated files remain
   ordinary Local candidates, while ambiguous checksum/fingerprint matches are
   surfaced for review rather than silently merged.
+- The pure `RecordingIngestor` now executes inside one caller-supplied
+  transaction and resolves exact source identity before exact managed ownership,
+  then verified identity evidence. Multiple strong candidates and metadata-only
+  similarity cannot silently merge recordings; incomplete observations remain
+  explicitly unresolved rather than manufacturing canonical metadata.
+- The app now contains an inactive `MusikrLocalMediaEngine` adapter over the
+  existing process-owned `MusicRepository`. It emits exact Musikr UID/URI/path
+  observations, scan state, and duplicate-safe change keys without constructing
+  a second scanner. Android delete consent and tag mutation remain explicitly
+  unsupported at this R16 boundary until their existing app paths are unified.
 
 ## Current blockers
 
@@ -253,12 +263,12 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Implement the idempotent `RecordingIngestor` transaction boundary and the
-   concrete app-side Musikr wrapper, then feed real local scan observations
-   through managed-asset classification to unlock M5/M12. Production remains on
-   legacy v10. The sanitized backup exporter/restore adapter follows once these
-   asset and merge semantics are stable enough to avoid exporting private
-   locators or promising a false restore.
+1. Implement the Room-backed ingestion transaction and feed a bounded snapshot
+   from `MusikrLocalMediaEngine` through it as migration M12, with resumable audit
+   progress and no production authority switch. The sanitized backup
+   exporter/restore adapter follows once these asset and merge semantics are
+   stable enough to avoid exporting private locators or promising a false
+   restore.
 
 ## Verification level
 
@@ -309,6 +319,8 @@ total data-module tests).
 Checksum-protected atomic bootstrap state, legal transition checks, stale-writer
 rejection, corruption refusal, and premature-verification refusal add 2 passing
 focused tests (31 total data-module tests).
-`:shippy-sources:check` passes its forbidden-import gate and 2 focused
-managed-asset tests. The new source contracts and registry are not yet connected
-to Musikr, Room, the production app, instrumentation, or a physical device.
+`:shippy-sources:check` passes its forbidden-import gate and 6 focused
+managed-asset/ingestion tests. The app compiles with the inactive Musikr adapter,
+and its exact observation-mapping test passes. The ingestion transaction is not
+yet Room-backed or invoked by migration/production; none of this work is
+instrumented or physical-device tested.

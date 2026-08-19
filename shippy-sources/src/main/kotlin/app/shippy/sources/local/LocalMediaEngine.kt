@@ -18,6 +18,7 @@
 package app.shippy.sources.local
 
 import app.shippy.core.asset.AssetLocation
+import app.shippy.sources.observation.SourceTrackObservation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -110,6 +111,8 @@ data class TagPatch(
 sealed interface LocalDeleteResult {
     data object Deleted : LocalDeleteResult
 
+    data object Unsupported : LocalDeleteResult
+
     data class PermissionRequired(val requestToken: String) : LocalDeleteResult {
         init {
             require(requestToken.isNotBlank()) { "Delete permission token cannot be blank" }
@@ -149,6 +152,8 @@ interface LocalMediaEngine {
     fun observeChanges(): Flow<LocalMediaChange>
 
     suspend fun scan(request: LocalScanRequest)
+
+    suspend fun snapshot(): List<SourceTrackObservation>
 
     suspend fun open(asset: LocalAssetKey): LocalAssetHandle
 

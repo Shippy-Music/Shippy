@@ -160,6 +160,7 @@ dependencies {
 
     // Musikr
     implementation project(":musikr")
+    implementation project(":shippy-sources")
 
     // --- THIRD PARTY ---
 
