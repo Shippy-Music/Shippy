@@ -97,6 +97,8 @@ data class PlaybackRequestTag(
     }
 }
 
+data class PlaybackWindowItem(val queueEntryId: QueueEntryId, val source: PlaybackSourceHandle)
+
 data class PlaybackSnapshot(
     val generation: Long,
     val queueRevision: Long,
@@ -167,13 +169,27 @@ sealed interface PlaybackCoreEvent {
 
     data class SelectEntry(val queueEntryId: QueueEntryId) : PlaybackCoreEvent
 
+    data class RestoreContext(val checkpoint: PlaybackCheckpoint, val allowResume: Boolean) :
+        PlaybackCoreEvent
+
     data class SourceReady(val tag: PlaybackRequestTag, val source: PlaybackSourceHandle) :
         PlaybackCoreEvent
 
     data class SourceUnavailable(val tag: PlaybackRequestTag, val error: PlaybackError) :
         PlaybackCoreEvent
 
+    data class SourceRecoveryStarted(
+        val tag: PlaybackRequestTag,
+        val attempt: Int,
+        val error: PlaybackError,
+    ) : PlaybackCoreEvent
+
+    data class WindowPrepared(val tag: PlaybackRequestTag, val items: List<PlaybackWindowItem>) :
+        PlaybackCoreEvent
+
     data class EngineCommitted(val tag: PlaybackRequestTag) : PlaybackCoreEvent
+
+    data class EngineAdvanced(val tag: PlaybackRequestTag) : PlaybackCoreEvent
 
     data class EnginePhaseChanged(
         val generation: Long,
@@ -209,7 +225,9 @@ enum class CommittedEnginePhase {
 sealed interface PlaybackEffect {
     data class PrepareSource(val tag: PlaybackRequestTag) : PlaybackEffect
 
-    data class ApplyEngineWindow(val tag: PlaybackRequestTag, val source: PlaybackSourceHandle) :
+    data class PrepareEngineWindow(val tag: PlaybackRequestTag) : PlaybackEffect
+
+    data class ApplyEngineWindow(val tag: PlaybackRequestTag, val items: List<PlaybackWindowItem>) :
         PlaybackEffect
 
     data class SetEnginePlayWhenReady(val value: Boolean) : PlaybackEffect
@@ -225,9 +243,13 @@ class PlaybackReducer {
             is PlaybackCoreEvent.ReplaceContext -> replaceContext(snapshot, event)
             is PlaybackCoreEvent.QueueChanged -> queueChanged(snapshot, event.queue)
             is PlaybackCoreEvent.SelectEntry -> selectEntry(snapshot, event.queueEntryId)
+            is PlaybackCoreEvent.RestoreContext -> restoreContext(snapshot, event)
             is PlaybackCoreEvent.SourceReady -> sourceReady(snapshot, event)
             is PlaybackCoreEvent.SourceUnavailable -> sourceUnavailable(snapshot, event)
+            is PlaybackCoreEvent.SourceRecoveryStarted -> sourceRecoveryStarted(snapshot, event)
+            is PlaybackCoreEvent.WindowPrepared -> windowPrepared(snapshot, event)
             is PlaybackCoreEvent.EngineCommitted -> engineCommitted(snapshot, event.tag)
+            is PlaybackCoreEvent.EngineAdvanced -> engineAdvanced(snapshot, event.tag)
             is PlaybackCoreEvent.EnginePhaseChanged -> enginePhaseChanged(snapshot, event)
             is PlaybackCoreEvent.EnginePosition -> enginePosition(snapshot, event)
             is PlaybackCoreEvent.EngineFailed -> engineFailed(snapshot, event)
@@ -239,9 +261,47 @@ class PlaybackReducer {
             is PlaybackCoreEvent.SetRepeat ->
                 PlaybackReduction(
                     snapshot.copy(repeatMode = event.mode),
-                    listOf(PlaybackEffect.SetEngineRepeat(event.mode)),
+                    listOfNotNull(
+                        PlaybackEffect.SetEngineRepeat(event.mode),
+                        snapshot.committedQueueEntryId?.let {
+                            PlaybackEffect.PrepareEngineWindow(
+                                PlaybackRequestTag(snapshot.generation, snapshot.queueRevision, it)
+                            )
+                        },
+                    ),
                 )
         }
+
+    private fun restoreContext(
+        snapshot: PlaybackSnapshot,
+        event: PlaybackCoreEvent.RestoreContext,
+    ): PlaybackReduction {
+        val selected =
+            event.checkpoint.queue.currentQueueEntryId
+                ?: event.checkpoint.queue.traversalOrder.firstOrNull()
+        val queue = event.checkpoint.queue.copy(currentQueueEntryId = selected)
+        val generation = snapshot.generation + 1
+        val revision = snapshot.queueRevision + 1
+        val tag = selected?.let { PlaybackRequestTag(generation, revision, it) }
+        return PlaybackReduction(
+            snapshot.copy(
+                generation = generation,
+                queueRevision = revision,
+                queue = queue,
+                committedQueueEntryId = null,
+                phase = tag?.let { PlaybackPhase.Preparing(it.queueEntryId) } ?: PlaybackPhase.Idle,
+                playWhenReady = event.allowResume && event.checkpoint.playWhenReady,
+                repeatMode = event.checkpoint.repeatMode,
+                position =
+                    PositionAnchor(if (selected == null) 0 else event.checkpoint.positionMs, 0),
+                resolvedSources = emptyMap(),
+                engineWindow = emptyList(),
+                expectedEngineCommit = null,
+                currentError = null,
+            ),
+            tag?.let { listOf(PlaybackEffect.PrepareSource(it)) }.orEmpty(),
+        )
+    }
 
     private fun selectEntry(
         snapshot: PlaybackSnapshot,
@@ -259,6 +319,7 @@ class PlaybackReducer {
                 committedQueueEntryId = null,
                 phase = PlaybackPhase.Preparing(queueEntryId),
                 position = PositionAnchor(0, 0),
+                resolvedSources = emptyMap(),
                 engineWindow = emptyList(),
                 expectedEngineCommit = null,
                 currentError = null,
@@ -310,10 +371,16 @@ class PlaybackReducer {
         val target =
             pendingEntry ?: if (retainedCommitted == null) queue.currentQueueEntryId else null
         val tag = target?.let { PlaybackRequestTag(snapshot.generation, revision, it) }
+        val retainedSource = retainedCommitted?.let(snapshot.resolvedSources::get)
+        val rebuildTag =
+            retainedCommitted
+                ?.takeIf { tag == null && retainedSource != null }
+                ?.let { PlaybackRequestTag(snapshot.generation, revision, it) }
         val phaseEntryWasRemoved = snapshot.phase.entryIdOrNull()?.let { it !in queueIds } == true
         val phase =
             when {
                 tag != null -> PlaybackPhase.Preparing(tag.queueEntryId)
+                rebuildTag != null -> PlaybackPhase.Buffering(rebuildTag.queueEntryId)
                 queueIds.isEmpty() -> PlaybackPhase.Idle
                 phaseEntryWasRemoved && retainedCommitted != null ->
                     PlaybackPhase.Ready(retainedCommitted)
@@ -326,13 +393,25 @@ class PlaybackReducer {
                 committedQueueEntryId = retainedCommitted,
                 phase = phase,
                 resolvedSources = snapshot.resolvedSources.filterKeys { it in queueIds },
-                engineWindow = snapshot.engineWindow.filter { it in queueIds },
-                expectedEngineCommit = null,
+                engineWindow =
+                    rebuildTag?.let { listOf(it.queueEntryId) }
+                        ?: snapshot.engineWindow.filter { it in queueIds },
+                expectedEngineCommit = rebuildTag,
                 currentError = if (tag != null) null else snapshot.currentError,
             )
         return PlaybackReduction(
             next,
-            tag?.let { listOf(PlaybackEffect.PrepareSource(it)) }.orEmpty(),
+            when {
+                tag != null -> listOf(PlaybackEffect.PrepareSource(tag))
+                rebuildTag != null && retainedSource != null ->
+                    listOf(
+                        PlaybackEffect.ApplyEngineWindow(
+                            rebuildTag,
+                            listOf(PlaybackWindowItem(rebuildTag.queueEntryId, retainedSource)),
+                        )
+                    )
+                else -> emptyList()
+            },
         )
     }
 
@@ -358,7 +437,12 @@ class PlaybackReducer {
             )
         return PlaybackReduction(
             next,
-            listOf(PlaybackEffect.ApplyEngineWindow(event.tag, event.source)),
+            listOf(
+                PlaybackEffect.ApplyEngineWindow(
+                    event.tag,
+                    listOf(PlaybackWindowItem(event.tag.queueEntryId, event.source)),
+                )
+            ),
         )
     }
 
@@ -383,11 +467,67 @@ class PlaybackReducer {
         )
     }
 
+    private fun sourceRecoveryStarted(
+        snapshot: PlaybackSnapshot,
+        event: PlaybackCoreEvent.SourceRecoveryStarted,
+    ): PlaybackReduction {
+        if (
+            !snapshot.accepts(event.tag) ||
+                snapshot.phase.pendingEntryId() != event.tag.queueEntryId ||
+                snapshot.expectedEngineCommit != null
+        ) {
+            return PlaybackReduction(snapshot, emptyList())
+        }
+        return PlaybackReduction(
+            snapshot.copy(
+                phase = PlaybackPhase.Recovering(event.tag.queueEntryId, event.attempt),
+                currentError = event.error,
+            ),
+            emptyList(),
+        )
+    }
+
+    private fun windowPrepared(
+        snapshot: PlaybackSnapshot,
+        event: PlaybackCoreEvent.WindowPrepared,
+    ): PlaybackReduction {
+        if (
+            event.tag.generation != snapshot.generation ||
+                event.tag.queueRevision != snapshot.queueRevision ||
+                event.tag.queueEntryId != snapshot.committedQueueEntryId
+        ) {
+            return PlaybackReduction(snapshot, emptyList())
+        }
+        val queueIds = snapshot.queue.baseQueue.map { it.id }.toSet()
+        val itemIds = event.items.map(PlaybackWindowItem::queueEntryId)
+        if (
+            itemIds.isEmpty() ||
+                itemIds.size != itemIds.toSet().size ||
+                event.tag.queueEntryId !in itemIds ||
+                itemIds.any { it !in queueIds }
+        ) {
+            return PlaybackReduction(snapshot, emptyList())
+        }
+        if (itemIds == snapshot.engineWindow) return PlaybackReduction(snapshot, emptyList())
+        val resolved = event.items.associate { it.queueEntryId to it.source }
+        return PlaybackReduction(
+            snapshot.copy(
+                phase = PlaybackPhase.Buffering(event.tag.queueEntryId),
+                resolvedSources = resolved,
+                engineWindow = itemIds,
+                expectedEngineCommit = event.tag,
+                currentError = null,
+            ),
+            listOf(PlaybackEffect.ApplyEngineWindow(event.tag, event.items)),
+        )
+    }
+
     private fun engineCommitted(
         snapshot: PlaybackSnapshot,
         tag: PlaybackRequestTag,
     ): PlaybackReduction {
         if (snapshot.expectedEngineCommit != tag) return PlaybackReduction(snapshot, emptyList())
+        val firstCommit = snapshot.committedQueueEntryId != tag.queueEntryId
         return PlaybackReduction(
             snapshot.copy(
                 committedQueueEntryId = tag.queueEntryId,
@@ -395,7 +535,44 @@ class PlaybackReducer {
                 expectedEngineCommit = null,
                 currentError = null,
             ),
-            emptyList(),
+            if (firstCommit || snapshot.engineWindow.size == 1) {
+                listOf(PlaybackEffect.PrepareEngineWindow(tag))
+            } else {
+                emptyList()
+            },
+        )
+    }
+
+    private fun engineAdvanced(
+        snapshot: PlaybackSnapshot,
+        tag: PlaybackRequestTag,
+    ): PlaybackReduction {
+        if (
+            tag.generation != snapshot.generation ||
+                tag.queueRevision != snapshot.queueRevision ||
+                snapshot.expectedEngineCommit != null ||
+                tag.queueEntryId !in snapshot.engineWindow
+        ) {
+            return PlaybackReduction(snapshot, emptyList())
+        }
+        val current =
+            snapshot.committedQueueEntryId ?: return PlaybackReduction(snapshot, emptyList())
+        val order = snapshot.queue.traversalOrder
+        val currentIndex = order.indexOf(current)
+        val expectedNext =
+            order.getOrNull(currentIndex + 1)
+                ?: if (snapshot.repeatMode == RepeatMode.ALL) order.firstOrNull() else null
+        if (tag.queueEntryId != expectedNext) return PlaybackReduction(snapshot, emptyList())
+        return PlaybackReduction(
+            snapshot.copy(
+                queue = snapshot.queue.copy(currentQueueEntryId = tag.queueEntryId),
+                committedQueueEntryId = tag.queueEntryId,
+                phase = PlaybackPhase.Ready(tag.queueEntryId),
+                position = PositionAnchor(0, 0),
+                expectedEngineCommit = null,
+                currentError = null,
+            ),
+            listOf(PlaybackEffect.PrepareEngineWindow(tag)),
         )
     }
 

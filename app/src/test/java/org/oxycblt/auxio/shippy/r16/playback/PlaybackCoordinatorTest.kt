@@ -23,11 +23,15 @@ import app.shippy.core.identity.SourceReferenceId
 import app.shippy.core.playback.CommittedEnginePhase
 import app.shippy.core.playback.PlaybackCommand
 import app.shippy.core.playback.PlaybackCommandResult
+import app.shippy.core.playback.PlaybackSnapshot
 import app.shippy.core.playback.PlaybackSourceHandle
+import app.shippy.core.playback.PositionAnchor
 import app.shippy.core.playback.RepeatMode
 import app.shippy.core.queue.QueueEntry
 import java.time.Instant
+import kotlin.random.Random
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
@@ -42,7 +46,9 @@ class PlaybackCoordinatorTest {
     @Test
     fun `inline engine commit publishes the exact selected duplicate occurrence`() = runBlocking {
         val engine = FakePlayerEngine(autoCommit = true)
-        val coordinator = PlaybackCoordinator(this, engine, ImmediateSourcePreparer())
+        val trace = BoundedPlaybackTraceRecorder(capacity = 16)
+        val coordinator =
+            PlaybackCoordinator(this, engine, ImmediateSourcePreparer(), traceSink = trace)
         val recordingId = recordingId(7)
         val first = entry(1, recordingId)
         val selected = entry(2, recordingId)
@@ -58,6 +64,15 @@ class PlaybackCoordinatorTest {
         assertEquals(selected.id, committed.queue.currentQueueEntryId)
         assertEquals(selected.id, committed.committedQueueEntryId)
         assertEquals(selected.id, engine.transactions.receive().expectedCurrentEntryId)
+        val traceEvents = trace.snapshot()
+        assertEquals(
+            traceEvents.map(PlaybackTraceEvent::sequence).sorted(),
+            traceEvents.map(PlaybackTraceEvent::sequence),
+        )
+        assertTrue(traceEvents.any { it.detail == "APPLY_ENGINE_WINDOW" })
+        assertTrue(
+            traceEvents.any { it.detail == "ENGINE_COMMITTED" && it.queueEntryId == selected.id }
+        )
         coordinator.release()
         assertEquals(
             app.shippy.core.playback.PlaybackCommandRejection.COORDINATOR_RELEASED,
@@ -119,6 +134,268 @@ class PlaybackCoordinatorTest {
             coordinator.release()
         }
 
+    @Test
+    fun `checkpoint restore preserves queue intent but prepares a fresh source`() = runBlocking {
+        val originalEngine = FakePlayerEngine(autoCommit = true)
+        val original =
+            PlaybackCoordinator(this, originalEngine, ImmediateSourcePreparer("original"))
+        val recordingId = recordingId(9)
+        val entries = listOf(entry(1, recordingId), entry(2, recordingId), entry(3, recordingId))
+        original.dispatch(PlaybackCommand.PlayContext(entries, entries[1].id, shuffleSeed = 73))
+        val committed =
+            withTimeout(TEST_TIMEOUT_MS) {
+                original.snapshots.first { it.committedQueueEntryId == entries[1].id }
+            }
+        originalEngine.emit(
+            PlayerObservation.PositionChanged(
+                generation = committed.generation,
+                queueEntryId = entries[1].id,
+                position = PositionAnchor(42_000, 7_000, playbackSpeed = 1.25, advancing = true),
+            )
+        )
+        withTimeout(TEST_TIMEOUT_MS) {
+            original.snapshots.first { it.position.positionMs == 42_000L }
+        }
+        val checkpoint = original.checkpoint()
+        original.release()
+
+        val restoredEngine = FakePlayerEngine(autoCommit = true)
+        val restored =
+            PlaybackCoordinator(this, restoredEngine, ImmediateSourcePreparer("restored"))
+        restored.restore(checkpoint, allowResume = false)
+        val transaction = withTimeout(TEST_TIMEOUT_MS) { restoredEngine.transactions.receive() }
+        val restoredSnapshot =
+            withTimeout(TEST_TIMEOUT_MS) {
+                restored.snapshots.first { it.committedQueueEntryId == entries[1].id }
+            }
+
+        assertEquals(42_000L, transaction.startPositionMs)
+        assertEquals(false, transaction.playWhenReady)
+        assertEquals(checkpoint.queue.traversalOrder, restoredSnapshot.queue.traversalOrder)
+        assertEquals(entries[1].id, restoredSnapshot.committedQueueEntryId)
+        assertTrue(
+            restoredSnapshot.resolvedSources
+                .getValue(entries[1].id)
+                .stableKey
+                .startsWith("restored:")
+        )
+        restored.release()
+    }
+
+    @Test
+    fun `engine window stays bounded and rebuilds around a distant occurrence`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val coordinator = PlaybackCoordinator(this, engine, ImmediateSourcePreparer())
+        val entries = (1..7).map { entry(it, recordingId(it)) }
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(entries, entries[2].id))
+        withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+        val initialWindow = withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+
+        assertEquals(
+            listOf(entries[1].id, entries[2].id, entries[3].id, entries[4].id),
+            initialWindow.window.map(PreparedEngineItem::queueEntryId),
+        )
+
+        coordinator.dispatch(PlaybackCommand.GoTo(entries[6].id))
+        withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+        val distantWindow = withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+
+        assertEquals(entries[6].id, distantWindow.expectedCurrentEntryId)
+        assertEquals(
+            listOf(entries[5].id, entries[6].id),
+            distantWindow.window.map(PreparedEngineItem::queueEntryId),
+        )
+        coordinator.release()
+    }
+
+    @Test
+    fun `automatic engine transition commits the next window occurrence`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val coordinator = PlaybackCoordinator(this, engine, ImmediateSourcePreparer())
+        val entries = (1..3).map { entry(it, recordingId(it)) }
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(entries, entries[0].id))
+        withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+        val expanded = withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first {
+                it.engineWindow.size == 3 && it.expectedEngineCommit == null
+            }
+        }
+        engine.emit(
+            PlayerObservation.CurrentItemCommitted(
+                expanded.tag.copy(queueEntryId = entries[1].id),
+                automaticTransition = true,
+            )
+        )
+
+        val advanced =
+            withTimeout(TEST_TIMEOUT_MS) {
+                coordinator.snapshots.first { it.committedQueueEntryId == entries[1].id }
+            }
+        assertEquals(entries[1].id, advanced.queue.currentQueueEntryId)
+        assertEquals(entries[1].id, advanced.committedQueueEntryId)
+        coordinator.release()
+    }
+
+    @Test
+    fun `retryable source failure recovers on the same queue occurrence`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val preparer = RetryingSourcePreparer()
+        val trace = BoundedPlaybackTraceRecorder()
+        val coordinator = PlaybackCoordinator(this, engine, preparer, traceSink = trace)
+        val selected = entry(1, recordingId(1))
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(listOf(selected), selected.id))
+        val committed =
+            withTimeout(TEST_TIMEOUT_MS) {
+                coordinator.snapshots.first { it.committedQueueEntryId == selected.id }
+            }
+
+        assertEquals(listOf(1, 2), preparer.attempts)
+        assertEquals(selected.id, committed.committedQueueEntryId)
+        assertTrue(trace.snapshot().any { it.detail == "SOURCE_RECOVERY_STARTED" })
+        coordinator.release()
+    }
+
+    @Test
+    fun `continuous playing ticks finalize monotonic audible time`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val clock = FakePlaybackClock(elapsedRealtimeMs = 1_000)
+        val finalized = Channel<app.shippy.core.listening.ActiveListeningSession>(1)
+        val coordinator =
+            PlaybackCoordinator(
+                this,
+                engine,
+                ImmediateSourcePreparer(),
+                listeningSessionSink =
+                    ListeningSessionSink {
+                        finalized.trySend(it)
+                        Unit
+                    },
+                playbackClock = clock,
+                listeningTickIntervalMs = 10,
+            )
+        val selected = entry(1, recordingId(1))
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(listOf(selected), selected.id))
+        val committed =
+            withTimeout(TEST_TIMEOUT_MS) {
+                coordinator.snapshots.first { it.committedQueueEntryId == selected.id }
+            }
+        engine.emit(
+            PlayerObservation.PhaseChanged(
+                committed.generation,
+                selected.id,
+                CommittedEnginePhase.PLAYING,
+            )
+        )
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first {
+                it.phase == app.shippy.core.playback.PlaybackPhase.Playing(selected.id)
+            }
+        }
+        clock.elapsedRealtimeMs = 6_000
+        delay(30)
+        engine.emit(
+            PlayerObservation.PhaseChanged(
+                committed.generation,
+                selected.id,
+                CommittedEnginePhase.ENDED,
+            )
+        )
+
+        val session = withTimeout(TEST_TIMEOUT_MS) { finalized.receive() }
+        assertEquals(selected.id, session.queueEntryId)
+        assertEquals(5_000L, session.audibleTime.accumulatedAudibleMs)
+        coordinator.release()
+    }
+
+    @Test
+    fun `ten thousand entry queue prepares only the bounded engine window`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val preparer = CountingSourcePreparer()
+        val coordinator = PlaybackCoordinator(this, engine, preparer)
+        val entries = (1..10_000).map { entry(it, recordingId(it)) }
+        val selected = entries[4_999]
+
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.dispatch(PlaybackCommand.PlayContext(entries, selected.id))
+        }
+        withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+        val expanded = withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+
+        assertEquals(4, preparer.requests.size)
+        assertEquals(
+            listOf(entries[4_998].id, selected.id, entries[5_000].id, entries[5_001].id),
+            expanded.window.map(PreparedEngineItem::queueEntryId),
+        )
+        coordinator.release()
+    }
+
+    @Test
+    fun `seeded command trace preserves queue and playback invariants`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val coordinator = PlaybackCoordinator(this, engine, ImmediateSourcePreparer())
+        val random = Random(1_603)
+        var nextId = 21
+        val entries = (1 until nextId).map { entry(it, recordingId(it)) }
+        coordinator.dispatch(PlaybackCommand.PlayContext(entries, entries[7].id))
+
+        withTimeout(10_000) {
+            repeat(300) {
+                val snapshot = coordinator.snapshots.value
+                val ids = snapshot.queue.baseQueue.map(QueueEntry::id)
+                val command =
+                    when (random.nextInt(8)) {
+                        0 ->
+                            if (random.nextBoolean()) PlaybackCommand.Play
+                            else PlaybackCommand.Pause
+                        1 ->
+                            PlaybackCommand.SetShuffle(
+                                enabled = random.nextBoolean(),
+                                seed = random.nextLong(),
+                            )
+                        2 -> PlaybackCommand.SetRepeat(RepeatMode.entries[random.nextInt(3)])
+                        3 -> PlaybackCommand.GoTo(ids[random.nextInt(ids.size)])
+                        4 -> {
+                            val addition = entry(nextId, recordingId(nextId))
+                            nextId += 1
+                            PlaybackCommand.AddToEnd(listOf(addition))
+                        }
+                        5 ->
+                            if (ids.size > 1) {
+                                PlaybackCommand.Remove(setOf(ids[random.nextInt(ids.size)]))
+                            } else {
+                                PlaybackCommand.Play
+                            }
+                        6 -> PlaybackCommand.Next
+                        else -> PlaybackCommand.Previous
+                    }
+                coordinator.dispatch(command)
+                assertSnapshotInvariants(coordinator.snapshots.value)
+            }
+        }
+        coordinator.release()
+    }
+
+    private fun assertSnapshotInvariants(snapshot: PlaybackSnapshot) {
+        val queueIds = snapshot.queue.baseQueue.map(QueueEntry::id)
+        assertEquals(queueIds.toSet(), snapshot.queue.traversalOrder.toSet())
+        assertEquals(queueIds.size, snapshot.queue.traversalOrder.size)
+        assertTrue(
+            snapshot.queue.currentQueueEntryId == null ||
+                snapshot.queue.currentQueueEntryId in queueIds
+        )
+        assertTrue(
+            snapshot.committedQueueEntryId == null || snapshot.committedQueueEntryId in queueIds
+        )
+        assertTrue(snapshot.resolvedSources.keys.all { it in queueIds })
+        assertTrue(snapshot.engineWindow.size <= 4)
+        assertTrue(snapshot.engineWindow.all { it in queueIds })
+    }
+
     private fun entry(index: Int, recordingId: RecordingId) =
         QueueEntry(
             id = queueEntryId(index),
@@ -137,15 +414,58 @@ class PlaybackCoordinatorTest {
         "00000000-0000-0000-0000-${index.toString().padStart(12, '0')}"
 }
 
-private class ImmediateSourcePreparer : PlaybackSourcePreparer {
+private class ImmediateSourcePreparer(private val prefix: String = "prepared") :
+    PlaybackSourcePreparer {
     override suspend fun prepare(request: PlaybackPreparationRequest): PlaybackPreparationResult =
         PlaybackPreparationResult.Ready(
             PlaybackSourceHandle(
-                stableKey = "prepared:${request.recordingId.value}",
+                stableKey = "$prefix:${request.recordingId.value}",
                 sourceReferenceId = SourceReferenceId(request.recordingId.value),
                 mediaAssetId = null,
             )
         )
+}
+
+private class RetryingSourcePreparer : PlaybackSourcePreparer {
+    val attempts = mutableListOf<Int>()
+
+    override suspend fun prepare(request: PlaybackPreparationRequest): PlaybackPreparationResult {
+        attempts += request.attempt
+        return if (request.attempt == 1) {
+            PlaybackPreparationResult.Unavailable(
+                app.shippy.core.playback.PlaybackError("EXPIRED_SOURCE", retryable = true)
+            )
+        } else {
+            PlaybackPreparationResult.Ready(
+                PlaybackSourceHandle(
+                    stableKey = "recovered:${request.recordingId.value}",
+                    sourceReferenceId = SourceReferenceId(request.recordingId.value),
+                    mediaAssetId = null,
+                )
+            )
+        }
+    }
+}
+
+private class CountingSourcePreparer : PlaybackSourcePreparer {
+    val requests = mutableListOf<PlaybackPreparationRequest>()
+
+    override suspend fun prepare(request: PlaybackPreparationRequest): PlaybackPreparationResult {
+        requests += request
+        return PlaybackPreparationResult.Ready(
+            PlaybackSourceHandle(
+                stableKey = "counted:${request.recordingId.value}",
+                sourceReferenceId = SourceReferenceId(request.recordingId.value),
+                mediaAssetId = null,
+            )
+        )
+    }
+}
+
+private class FakePlaybackClock(var elapsedRealtimeMs: Long) : PlaybackClock {
+    override fun elapsedRealtimeMs(): Long = elapsedRealtimeMs
+
+    override fun wallClock(): Instant = Instant.EPOCH
 }
 
 private class FakePlayerEngine(private val autoCommit: Boolean) : PlayerEngine {

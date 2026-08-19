@@ -14,6 +14,37 @@ next stage from unstable foundations. The final target remains the complete app.
 - Add tests beside new domain/protocol behavior.
 - Avoid repeated full Gradle/Android builds on this machine.
 - Never label a placeholder as implemented.
+
+## R16 master execution track
+
+`Shippy_R16_Master_Architecture_and_Implementation_Spec.md` is the directional
+authority for this track. Preserve its locked invariants and end state while
+keeping implementation slices proportional to evidence from the repository.
+
+- [x] Preserve the R15.3 rollback baseline and repair the immediate layout,
+      identity-ordering, audible-time, large-list, and managed-download hazards.
+- [x] Establish pure R16 identity, source, queue, playback, listening, and Crew
+      descriptor boundaries.
+- [x] Establish the separate R16 Room schema, repositories, search/read models,
+      backup verification, and resumable read-only legacy importer.
+- [x] Add conservative local ingestion, provider discovery adapters, persistent
+      source authority, and bounded catalogue maintenance.
+- [ ] Replace playback authority.
+  - [x] Implement the inactive serialized coordinator, deterministic queue,
+        bounded engine window, retry/recovery, checkpoint/restore, audible-time
+        ticker, trace, 10k queue proof, and seeded command invariants.
+  - [ ] Implement the Media3 adapter/transaction bridge and route service,
+        MediaSession, notification, widgets, Android Auto, and Crew through the
+        one command/snapshot path.
+  - [ ] Pass physical callback-order, process-death, source-expiry/fallback,
+        audio-focus, route, gapless/crossfade, and large-queue acceptance.
+- [ ] Complete canonical Library/search/playlist/offline read models and UI
+      projections on R16 identity without whole-catalogue hydration.
+- [ ] Migrate Last.fm, lyrics, recommendations, Home, and Crew integrations to
+      the R16 recording/playback authorities.
+- [ ] Run verified owner-data import, device/accessibility/performance/security
+      gates, then cut over and remove legacy authorities only after rollback-safe
+      acceptance.
 - Do not expand scope beyond the canonical documents without updating them.
 - Engineer exactly enough for the locked requirements.
 - Use a top-down shipping sequence: complete the broad visible Shippy workflow

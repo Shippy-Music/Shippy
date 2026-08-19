@@ -9,6 +9,25 @@
 > the original architecture baseline; the following addendum supersedes any
 > older local-only playback or Crew assumptions.
 
+## R16 authority addendum (2026-08-19)
+
+`Shippy_R16_Master_Architecture_and_Implementation_Spec.md` supersedes this
+legacy baseline for R16 direction. Its locked invariants, ownership boundaries,
+data-loss protections, and target end state are binding; suggested concrete
+types and sequencing remain adaptable to repository evidence.
+
+R15.3 remains the only active runtime authority. R16 currently lives behind
+separate `:shippy-core`, `:shippy-data`, and `:shippy-sources` boundaries plus an
+inactive app-layer playback coordinator. The R16 coordinator serializes commands,
+source completions, engine observations, restore, and listening ticks; Shippy
+owns QueueEntryId traversal and bounded source preparation, while the future
+Media3 adapter remains a projection. R16 checkpoint state is source-neutral,
+and expiring locators, headers, cache leases, and temporary Crew paths are never
+checkpoint identity.
+
+No production cutover is valid until the legacy importer/backup audit, Media3
+bridge, system surfaces, device matrix, and rollback gates pass together.
+
 ## 0. Beta-Readiness Addendum (2026-08-02)
 
 - `PlaybackStateManager` remains the ordinary local player authority, but typed

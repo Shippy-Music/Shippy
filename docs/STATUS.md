@@ -1,13 +1,48 @@
 # Shippy Live Status
 
 **Updated:** 2026-08-19
-**Stage:** Stabilization implementation complete; automated gate passed; physical acceptance pending
+**Stage:** R16 architecture overhaul in progress; R15.3 remains the active runtime
 **Canonical audit:** `Shippy_Beta_Readiness_Audit_2026-08-02.md`  
 **Traceability:** `BETA_READINESS_IMPLEMENTATION.md`
 **Current stabilization spec:** `STABILIZATION_SPEC_2026-08-18.md`
+**R16 directional authority:** `Shippy_R16_Master_Architecture_and_Implementation_Spec.md`
 
 Read this file after `PRODUCT_SPEC.md` whenever work resumes. This status is
 evidence-based: source presence is not counted as verified device behavior.
+
+## R16 architecture reset
+
+R16 is being built locally on `r16/architecture-reset`. The master R16 document
+defines the invariants, data-safety requirements, authority boundaries, and
+target product direction; concrete names and slice boundaries adapt to verified
+repository constraints. R15.3 is still the production playback/database/UI
+authority. The R16 database, source stack, and playback coordinator are not yet
+wired into the shipped service, so there is no dual-authority runtime.
+
+Implemented R16 foundations now include:
+
+- pure identity, metadata, source-selection, queue, redirect, listening, and
+  generation-safe playback models in `:shippy-core`;
+- the separate Room R16 schema, transactional repositories, FTS/read models,
+  verified backup/import audit path, and resumable read-only R15 importer;
+- conservative local/provider ingestion, exact source identity, persistent
+  source authority, and bounded transient-catalogue lifecycle;
+- an inactive serialized playback coordinator with QueueEntryId occurrence
+  semantics, deterministic shuffle/repeat, stale callback rejection, bounded
+  current/previous/look-ahead source preparation, automatic engine transitions,
+  source-neutral checkpoint/restore, and one bounded retry for retryable current
+  source failure;
+- monotonic audible-time tracking driven by continuous low-frequency ticks,
+  plus a bounded generation/queue/entry playback trace.
+
+Focused verification covers duplicate occurrences, rapid generation replacement,
+distant window rebuild, source retry, source-neutral restore, automatic advance,
+continuous audible time, a 300-command seeded invariant trace, and a 10,000-entry
+queue that prepares only four sources. The coordinator still uses a fake engine
+contract in tests; Media3 service integration and production cutover remain open.
+The full local gate passes: 25 `:shippy-core`, 10 `:shippy-sources`, 37
+`:shippy-data`, and 529 app JVM tests (0 failures, 1 existing skip), plus
+`spotlessCheck`, `:app:lintDebug`, and `:app:assembleDebug`.
 
 ## Reopened from current device feedback
 
@@ -85,7 +120,7 @@ acceptance remains open. The acceptance plan is in
 - Kotlin source and Android/JVM test-source compilation: passed.
 - Focused playback, library, and Last.fm tests: passed.
 - Final non-device gate passed: `spotlessCheck`, `:app:testDebugUnitTest`
-  (507 tests, 0 failures, 1 skipped), and `:app:lintDebug` (0 errors).
+  (529 tests, 0 failures, 1 skipped), and `:app:lintDebug` (0 errors).
 - `:app:assembleDebug` passed. Current debug artifact:
   `artifacts/Shippy-Alpha-R15.3-Stabilized-20260819.apk` (61,707,279 bytes;
   SHA-256

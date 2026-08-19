@@ -22,7 +22,15 @@ import app.shippy.core.playback.PlaybackError
 import app.shippy.core.playback.PlaybackRequestTag
 import app.shippy.core.playback.PlaybackSourceHandle
 
-data class PlaybackPreparationRequest(val tag: PlaybackRequestTag, val recordingId: RecordingId)
+data class PlaybackPreparationRequest(
+    val tag: PlaybackRequestTag,
+    val recordingId: RecordingId,
+    val attempt: Int = 1,
+) {
+    init {
+        require(attempt > 0) { "Playback source preparation attempt must be positive" }
+    }
+}
 
 sealed interface PlaybackPreparationResult {
     data class Ready(val source: PlaybackSourceHandle) : PlaybackPreparationResult

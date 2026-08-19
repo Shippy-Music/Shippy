@@ -51,7 +51,10 @@ data class PlayerTransaction(
 }
 
 sealed interface PlayerObservation {
-    data class CurrentItemCommitted(val tag: PlaybackRequestTag) : PlayerObservation
+    data class CurrentItemCommitted(
+        val tag: PlaybackRequestTag,
+        val automaticTransition: Boolean = false,
+    ) : PlayerObservation
 
     data class PhaseChanged(
         val generation: Long,
@@ -63,6 +66,7 @@ sealed interface PlayerObservation {
         val generation: Long,
         val queueEntryId: QueueEntryId,
         val position: PositionAnchor,
+        val discontinuity: Boolean = false,
     ) : PlayerObservation
 
     data class Failed(
