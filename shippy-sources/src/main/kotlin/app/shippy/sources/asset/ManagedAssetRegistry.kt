@@ -21,6 +21,7 @@ import app.shippy.core.asset.AssetLocation
 import app.shippy.core.asset.ContentChecksum
 import app.shippy.core.identity.MediaAssetId
 import app.shippy.core.identity.RecordingId
+import java.net.URI
 
 data class ManagedAssetEvidence(
     val locationType: String,
@@ -110,11 +111,17 @@ class ManagedAssetRegistry(records: Collection<ManagedAssetRecord>) {
             it.locationType == scanned.locationType && it.location == scanned.location
         }
         scanned.documentId?.let { documentId ->
-            directMatches(ManagedAssetMatchEvidence.DOCUMENT_ID) { it.documentId == documentId }
+            directMatches(ManagedAssetMatchEvidence.DOCUMENT_ID) {
+                it.documentId == documentId &&
+                    it.locationAuthority() != null &&
+                    it.locationAuthority() == scanned.locationAuthority()
+            }
         }
         scanned.mediaStoreId?.let { mediaStoreId ->
             directMatches(ManagedAssetMatchEvidence.MEDIASTORE_ID) {
-                it.mediaStoreId == mediaStoreId
+                it.mediaStoreId == mediaStoreId &&
+                    it.storageRoot() != null &&
+                    it.storageRoot() == scanned.storageRoot()
             }
         }
         scanned.downloadJobId?.let { jobId ->
@@ -165,6 +172,10 @@ class ManagedAssetRegistry(records: Collection<ManagedAssetRecord>) {
                 (scanned.checksum != null && record.evidence.checksum == scanned.checksum) ||
                     (scanned.fingerprint != null &&
                         record.evidence.fingerprint == scanned.fingerprint) ||
+                    (scanned.documentId != null &&
+                        record.evidence.documentId == scanned.documentId) ||
+                    (scanned.mediaStoreId != null &&
+                        record.evidence.mediaStoreId == scanned.mediaStoreId) ||
                     (scanned.normalizedPathToken != null &&
                         record.evidence.normalizedPathToken == scanned.normalizedPathToken)
             }
@@ -175,6 +186,12 @@ class ManagedAssetRegistry(records: Collection<ManagedAssetRecord>) {
         }
     }
 }
+
+private fun ManagedAssetEvidence.locationAuthority(): String? =
+    runCatching { URI(location.opaqueHandle).authority }.getOrNull()?.takeIf(String::isNotBlank)
+
+private fun ManagedAssetEvidence.storageRoot(): String? =
+    normalizedPathToken?.substringBefore('/')?.takeIf(String::isNotBlank)
 
 private fun Map<ManagedAssetRecord, Set<ManagedAssetMatchEvidence>>.singleExactOrProbable():
     ManagedAssetMatch? {

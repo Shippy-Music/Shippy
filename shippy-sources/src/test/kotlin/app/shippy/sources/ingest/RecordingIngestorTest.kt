@@ -85,6 +85,33 @@ class RecordingIngestorTest {
     }
 
     @Test
+    fun `exact source still classifies its managed asset`() = runSuspend {
+        val observation =
+            observation(
+                sourceItemId = "local-1",
+                sourceKind = SourceKind.LOCAL_FILE,
+                asset = observedAsset("content://downloads/owned"),
+            )
+        val managed =
+            ManagedAssetRecord(
+                assetId = ASSET_MANAGED,
+                recordingId = RECORDING_MANAGED,
+                evidence = managedEvidence("content://downloads/owned"),
+                verified = true,
+            )
+        val store = FakeStore(managedRecords = listOf(managed))
+        store.sources[observation.sourceKey] = RECORDING_MANAGED
+
+        val result = RecordingIngestor(store).ingest(observation)
+
+        assertEquals(IngestionResolution.EXACT_SOURCE, result.resolution)
+        assertEquals(
+            ASSET_MANAGED,
+            (store.writes.single().managedAssetMatch as ManagedAssetMatch.Exact).record.assetId,
+        )
+    }
+
+    @Test
     fun `metadata ambiguity creates a separate recording and review`() = runSuspend {
         val store =
             FakeStore(
@@ -144,7 +171,8 @@ class RecordingIngestorTest {
             registry.classify(asset)
 
         override suspend fun identityCandidates(
-            features: MatchingFeatures
+            observation: SourceTrackObservation,
+            features: MatchingFeatures,
         ): List<IngestionIdentityCandidate> = candidates
 
         override suspend fun persist(write: RecordingIngestionWrite) {

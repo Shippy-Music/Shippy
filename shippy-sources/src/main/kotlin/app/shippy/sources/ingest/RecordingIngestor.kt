@@ -86,7 +86,10 @@ interface RecordingIngestionTransaction {
 
     suspend fun classifyManagedAsset(asset: ManagedAssetEvidence): ManagedAssetMatch
 
-    suspend fun identityCandidates(features: MatchingFeatures): List<IngestionIdentityCandidate>
+    suspend fun identityCandidates(
+        observation: SourceTrackObservation,
+        features: MatchingFeatures,
+    ): List<IngestionIdentityCandidate>
 
     suspend fun persist(write: RecordingIngestionWrite)
 }
@@ -110,6 +113,9 @@ class RecordingIngestor(
         store.transaction {
             val exactSource = exactSource(observation.sourceKey)
             exactSource?.recordingId?.let { recordingId ->
+                val managedMatch =
+                    observation.asset?.let { classifyManagedAsset(it.toManagedEvidence()) }
+                        ?: ManagedAssetMatch.None
                 return@transaction persistAndReturn(
                     RecordingIngestionWrite(
                         observation = observation,
@@ -117,7 +123,7 @@ class RecordingIngestor(
                         newRecording = null,
                         resolution = IngestionResolution.EXACT_SOURCE,
                         identityEvidence = null,
-                        managedAssetMatch = null,
+                        managedAssetMatch = managedMatch,
                         reviewCandidateIds = emptySet(),
                     )
                 )
@@ -142,7 +148,7 @@ class RecordingIngestor(
 
             val features = observation.toMatchingFeatures()
             val assessed =
-                identityCandidates(features)
+                identityCandidates(observation, features)
                     .distinctBy(IngestionIdentityCandidate::recordingId)
                     .sortedBy { it.recordingId.value }
                     .map { candidate ->

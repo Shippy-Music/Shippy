@@ -49,6 +49,7 @@ class MusikrLocalMediaEngineTest {
                 .toObservation(capturedAt)
 
         assertEquals("ums00000000-0000-0000-0000-000000000001", observation.sourceKey.sourceItemId)
+        assertEquals("local-file", observation.sourceKey.providerId.value)
         assertEquals(VersionKind.LIVE, observation.version.kind)
         assertEquals(
             "content://media/external/audio/media/7",

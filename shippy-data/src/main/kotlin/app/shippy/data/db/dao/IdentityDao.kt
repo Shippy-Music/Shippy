@@ -32,6 +32,9 @@ internal abstract class IdentityDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertDecision(entity: IdentityDecisionEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertDecisionIfAbsent(entity: IdentityDecisionEntity): Long
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun upsertRejection(entity: IdentityRejectionEntity)
 

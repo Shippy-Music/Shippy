@@ -67,6 +67,34 @@ class ManagedAssetRegistryTest {
         assertEquals(2, (ambiguous as ManagedAssetMatch.Probable).candidates.size)
     }
 
+    @Test
+    fun `platform IDs are exact only inside the same provider and storage root`() {
+        val managed =
+            record(
+                "asset-a",
+                "recording-a",
+                evidence("content://documents-a/root", pathToken = "external:primary/Music/a")
+                    .copy(documentId = "primary:a", mediaStoreId = 7),
+            )
+        val registry = ManagedAssetRegistry(listOf(managed))
+        val otherRoot =
+            evidence(
+                    location = "content://documents-b/moved",
+                    pathToken = "external:sdcard/Music/a",
+                    checksum = ContentChecksum("SHA-256", "other"),
+                    fingerprint = "other",
+                )
+                .copy(documentId = "primary:a", mediaStoreId = 7)
+        val sameScope =
+            otherRoot.copy(
+                location = AssetLocation("content://documents-a/moved"),
+                normalizedPathToken = "external:primary/Music/moved-a",
+            )
+
+        assertTrue(registry.classify(otherRoot) is ManagedAssetMatch.Probable)
+        assertEquals(managed, (registry.classify(sameScope) as ManagedAssetMatch.Exact).record)
+    }
+
     private fun record(assetId: String, recordingId: String, evidence: ManagedAssetEvidence) =
         ManagedAssetRecord(
             MediaAssetId(TEST_IDS.getValue(assetId)),

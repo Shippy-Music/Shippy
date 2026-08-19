@@ -31,6 +31,32 @@ internal interface AssetDao {
     @Query("SELECT * FROM media_asset WHERE location_type = :locationType AND location = :location")
     suspend fun exactLocation(locationType: String, location: String): MediaAssetEntity?
 
+    @Query(
+        """
+        SELECT * FROM media_asset
+        WHERE (location_type = :locationType AND location = :location)
+           OR (:documentId IS NOT NULL AND document_id = :documentId)
+           OR (:mediaStoreId IS NOT NULL AND media_store_id = :mediaStoreId)
+           OR (:downloadJobId IS NOT NULL AND download_job_id = :downloadJobId)
+           OR (:normalizedPathToken IS NOT NULL AND normalized_path_token = :normalizedPathToken)
+           OR (:contentChecksum IS NOT NULL AND content_checksum = :contentChecksum)
+           OR (:fingerprintId IS NOT NULL AND fingerprint_id = :fingerprintId)
+        ORDER BY asset_id
+        LIMIT :limit
+        """
+    )
+    suspend fun managedCandidates(
+        locationType: String,
+        location: String,
+        documentId: String?,
+        mediaStoreId: Long?,
+        normalizedPathToken: String?,
+        contentChecksum: String?,
+        fingerprintId: String?,
+        downloadJobId: String?,
+        limit: Int,
+    ): List<MediaAssetEntity>
+
     @Query("SELECT * FROM media_asset WHERE recording_id = :recordingId")
     fun observeForRecording(recordingId: String): Flow<List<MediaAssetEntity>>
 
@@ -42,6 +68,9 @@ internal interface AssetDao {
         """
     )
     suspend fun verifiedPlayable(recordingId: String): List<MediaAssetEntity>
+
+    @Query("SELECT * FROM media_asset WHERE recording_id = :recordingId ORDER BY asset_id")
+    suspend fun forRecording(recordingId: String): List<MediaAssetEntity>
 
     @Upsert suspend fun upsert(entity: MediaAssetEntity)
 

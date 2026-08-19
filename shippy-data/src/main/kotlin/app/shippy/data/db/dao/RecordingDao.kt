@@ -24,6 +24,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
 import app.shippy.data.db.entity.ArtistEntity
+import app.shippy.data.db.entity.ExternalIdentifierEntity
 import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.entity.ReleaseEntity
@@ -46,6 +47,58 @@ internal abstract class RecordingDao {
     )
     abstract suspend fun artistCredits(recordingId: String): List<RecordingArtistCreditEntity>
 
+    @Query("SELECT * FROM release WHERE release_id = :releaseId")
+    abstract suspend fun release(releaseId: String): ReleaseEntity?
+
+    @Query(
+        """
+        SELECT DISTINCT recording.* FROM recording
+        JOIN external_identifier identifier
+          ON identifier.owner_type = 'RECORDING'
+         AND identifier.owner_id = recording.recording_id
+        WHERE identifier.scheme || ':' || identifier.value IN (:identifierKeys)
+        ORDER BY recording.recording_id
+        LIMIT :limit
+        """
+    )
+    abstract suspend fun candidatesByExternalIdentifier(
+        identifierKeys: Set<String>,
+        limit: Int,
+    ): List<RecordingEntity>
+
+    @Query(
+        """
+        SELECT DISTINCT recording.* FROM recording
+        JOIN media_asset asset ON asset.recording_id = recording.recording_id
+        WHERE asset.fingerprint_id IN (:fingerprintIds)
+        ORDER BY recording.recording_id
+        LIMIT :limit
+        """
+    )
+    abstract suspend fun candidatesByFingerprint(
+        fingerprintIds: Set<String>,
+        limit: Int,
+    ): List<RecordingEntity>
+
+    @Query(
+        """
+        SELECT * FROM recording
+        WHERE canonical_title = :title COLLATE NOCASE
+        ORDER BY recording_id
+        LIMIT :limit
+        """
+    )
+    abstract suspend fun candidatesByTitle(title: String, limit: Int): List<RecordingEntity>
+
+    @Query(
+        """
+        SELECT * FROM external_identifier
+        WHERE owner_type = 'RECORDING' AND owner_id = :recordingId
+        ORDER BY scheme, value
+        """
+    )
+    abstract suspend fun externalIdentifiers(recordingId: String): List<ExternalIdentifierEntity>
+
     @Upsert protected abstract suspend fun upsertRecording(entity: RecordingEntity)
 
     @Upsert protected abstract suspend fun upsertArtists(entities: List<ArtistEntity>)
@@ -59,6 +112,9 @@ internal abstract class RecordingDao {
     @Upsert abstract suspend fun upsertRelease(entity: ReleaseEntity)
 
     @Upsert abstract suspend fun upsertReleaseTracks(entities: List<ReleaseTrackEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertExternalIdentifiers(entities: List<ExternalIdentifierEntity>)
 
     @Transaction
     open suspend fun upsertRecordingGraph(

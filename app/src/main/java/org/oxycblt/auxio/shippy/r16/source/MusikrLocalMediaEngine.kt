@@ -160,7 +160,7 @@ internal data class MusikrSongSnapshot(
 ) {
     fun toObservation(capturedAt: Instant): SourceTrackObservation =
         SourceTrackObservation(
-            sourceKey = SourceKey(MUSIKR_PROVIDER_ID, SourceItemType.LOCAL_FILE, uid),
+            sourceKey = SourceKey(LOCAL_FILE_PROVIDER_ID, SourceItemType.LOCAL_FILE, uid),
             sourceKind = SourceKind.LOCAL_FILE,
             title = title,
             artistNames = artistNames,
@@ -268,6 +268,6 @@ private fun IndexingState?.toR16State(): LocalScanState =
         null -> LocalScanState.Idle
     }
 
-private val MUSIKR_PROVIDER_ID = ProviderId("musikr")
+private val LOCAL_FILE_PROVIDER_ID = ProviderId("local-file")
 private const val CONTENT_URI = "CONTENT_URI"
 private const val MUSICBRAINZ_SONG_PREFIX = "ums"

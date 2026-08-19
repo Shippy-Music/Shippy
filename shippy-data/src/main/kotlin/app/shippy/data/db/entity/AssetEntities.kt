@@ -50,6 +50,13 @@ import androidx.room.PrimaryKey
                 name = "index_media_asset_recording_kind_state",
             ),
             Index(value = ["content_checksum"], name = "index_media_asset_checksum"),
+            Index(value = ["document_id"], name = "index_media_asset_document"),
+            Index(value = ["media_store_id"], name = "index_media_asset_media_store"),
+            Index(value = ["download_job_id"], name = "index_media_asset_download_job"),
+            Index(
+                value = ["normalized_path_token", "content_length", "last_modified_epoch_ms"],
+                name = "index_media_asset_path_stat",
+            ),
             Index(value = ["source_reference_id"], name = "index_media_asset_source"),
         ],
 )
@@ -76,6 +83,9 @@ data class MediaAssetEntity(
     @ColumnInfo(name = "created_at_epoch_ms") val createdAtEpochMs: Long,
     @ColumnInfo(name = "updated_at_epoch_ms") val updatedAtEpochMs: Long,
     @ColumnInfo(name = "last_verified_at_epoch_ms") val lastVerifiedAtEpochMs: Long?,
+    @ColumnInfo(name = "normalized_path_token") val normalizedPathToken: String? = null,
+    @ColumnInfo(name = "last_modified_epoch_ms") val lastModifiedEpochMs: Long? = null,
+    @ColumnInfo(name = "download_job_id") val downloadJobId: String? = null,
 )
 
 @Entity(

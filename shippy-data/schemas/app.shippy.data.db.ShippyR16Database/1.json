@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "a492bff168b76a611f7a9dfb6d8b665b",
+    "identityHash": "b7024782afdceca83073f18e29fff640",
     "entities": [
       {
         "tableName": "recording",
@@ -860,7 +860,7 @@
       },
       {
         "tableName": "media_asset",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`asset_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `source_reference_id` TEXT, `asset_kind` TEXT NOT NULL, `asset_state` TEXT NOT NULL, `location_type` TEXT NOT NULL, `location` TEXT NOT NULL, `document_id` TEXT, `media_store_id` INTEGER, `display_name` TEXT, `mime_type` TEXT, `container` TEXT, `codec` TEXT, `bitrate_bps` INTEGER, `sample_rate_hz` INTEGER, `channel_count` INTEGER, `content_length` INTEGER, `content_checksum` TEXT, `fingerprint_id` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, `last_verified_at_epoch_ms` INTEGER, PRIMARY KEY(`asset_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`source_reference_id`) REFERENCES `source_reference`(`source_reference_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`asset_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `source_reference_id` TEXT, `asset_kind` TEXT NOT NULL, `asset_state` TEXT NOT NULL, `location_type` TEXT NOT NULL, `location` TEXT NOT NULL, `document_id` TEXT, `media_store_id` INTEGER, `display_name` TEXT, `mime_type` TEXT, `container` TEXT, `codec` TEXT, `bitrate_bps` INTEGER, `sample_rate_hz` INTEGER, `channel_count` INTEGER, `content_length` INTEGER, `content_checksum` TEXT, `fingerprint_id` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, `last_verified_at_epoch_ms` INTEGER, `normalized_path_token` TEXT, `last_modified_epoch_ms` INTEGER, `download_job_id` TEXT, PRIMARY KEY(`asset_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`source_reference_id`) REFERENCES `source_reference`(`source_reference_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
         "fields": [
           {
             "fieldPath": "assetId",
@@ -979,6 +979,21 @@
             "fieldPath": "lastVerifiedAtEpochMs",
             "columnName": "last_verified_at_epoch_ms",
             "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "normalizedPathToken",
+            "columnName": "normalized_path_token",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastModifiedEpochMs",
+            "columnName": "last_modified_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "downloadJobId",
+            "columnName": "download_job_id",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -1017,6 +1032,44 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_checksum` ON `${TABLE_NAME}` (`content_checksum`)"
+          },
+          {
+            "name": "index_media_asset_document",
+            "unique": false,
+            "columnNames": [
+              "document_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_document` ON `${TABLE_NAME}` (`document_id`)"
+          },
+          {
+            "name": "index_media_asset_media_store",
+            "unique": false,
+            "columnNames": [
+              "media_store_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_media_store` ON `${TABLE_NAME}` (`media_store_id`)"
+          },
+          {
+            "name": "index_media_asset_download_job",
+            "unique": false,
+            "columnNames": [
+              "download_job_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_download_job` ON `${TABLE_NAME}` (`download_job_id`)"
+          },
+          {
+            "name": "index_media_asset_path_stat",
+            "unique": false,
+            "columnNames": [
+              "normalized_path_token",
+              "content_length",
+              "last_modified_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_path_stat` ON `${TABLE_NAME}` (`normalized_path_token`, `content_length`, `last_modified_epoch_ms`)"
           },
           {
             "name": "index_media_asset_source",
@@ -2648,7 +2701,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a492bff168b76a611f7a9dfb6d8b665b')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b7024782afdceca83073f18e29fff640')"
     ]
   }
 }

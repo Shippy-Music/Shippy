@@ -101,8 +101,9 @@ avoid checklist theatre.
   playlist, metadata authority, redirect/audit, history/checkpoint, download,
   integration, saved-source, and migration tables. Exact-source uniqueness,
   duplicate playlist occurrences, ownership, checksum, and referential
-  constraints are exercised in-memory; `:app` does not depend on or read this
-  database yet.
+  constraints are exercised in-memory. `:app` now sees the database only through
+  the explicitly opened inactive R16 runtime and M12 bridge; production Library,
+  playback, and database authority still do not read it.
 - The first five internal DAOs are scoped by canonical identity: transactional
   recording/artist graphs, idempotent exact-source observation ingestion,
   verified assets, per-recording Library relationships, and duplicate-safe
@@ -238,19 +239,37 @@ avoid checklist theatre.
   depend only on `:shippy-core`, provider observations cannot carry durable
   device locators, and the module has a forbidden-import gate.
 - The first managed-asset registry classifies exact URI/document/MediaStore/job
-  ownership before verified move-recovery evidence. Unrelated files remain
-  ordinary Local candidates, while ambiguous checksum/fingerprint matches are
-  surfaced for review rather than silently merged.
+  ownership before verified move-recovery evidence. Document and MediaStore IDs
+  are exact only within the same provider/storage root; cross-root collisions are
+  review candidates. Unrelated files remain ordinary Local candidates, while
+  ambiguous checksum/fingerprint matches are surfaced for review rather than
+  silently merged.
 - The pure `RecordingIngestor` now executes inside one caller-supplied
-  transaction and resolves exact source identity before exact managed ownership,
-  then verified identity evidence. Multiple strong candidates and metadata-only
-  similarity cannot silently merge recordings; incomplete observations remain
-  explicitly unresolved rather than manufacturing canonical metadata.
+  transaction and selects exact source identity first while still reclassifying
+  its asset before persistence, followed by exact managed ownership and verified
+  identity evidence. Multiple strong candidates and metadata-only similarity
+  cannot silently merge recordings; incomplete observations remain explicitly
+  unresolved rather than manufacturing canonical metadata.
 - The app now contains an inactive `MusikrLocalMediaEngine` adapter over the
   existing process-owned `MusicRepository`. It emits exact Musikr UID/URI/path
   observations, scan state, and duplicate-safe change keys without constructing
   a second scanner. Android delete consent and tag mutation remain explicitly
   unsupported at this R16 boundary until their existing app paths are unified.
+- The Room-backed ingestion store now keeps exact source lookup, bounded managed
+  asset lookup, conservative identity candidates, new Recording creation, raw
+  observation/source/asset writes, provenance, decisions, and FTS refresh inside
+  one transaction. Repeated observations are idempotent and a source or asset
+  ownership conflict rolls back instead of partially publishing identity.
+- Managed download rescans retain `SHIPPY_DOWNLOAD` ownership, job identity,
+  checksum/fingerprint, and original source ownership while accepting verified
+  moved-location evidence. Probable/ambiguous managed assets are held out of the
+  asset table for review instead of becoming duplicate local assets.
+- The inactive M12 bridge now feeds the existing Musikr snapshot through the
+  production `RecordingIngestor` and Room store in 50-item checkpoint pages.
+  Its audit is resumable after interruption and fingerprints source/metadata/
+  asset evidence so a changed snapshot restarts idempotently rather than skipping
+  a newly inserted key. This seam does not mark bootstrap M12 complete or switch
+  any production authority.
 
 ## Current blockers
 
@@ -263,12 +282,12 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Implement the Room-backed ingestion transaction and feed a bounded snapshot
-   from `MusikrLocalMediaEngine` through it as migration M12, with resumable audit
-   progress and no production authority switch. The sanitized backup
-   exporter/restore adapter follows once these asset and merge semantics are
-   stable enough to avoid exporting private locators or promising a false
-   restore.
+1. Complete the Phase 4 source side rather than cutting over early: route existing
+   Shippy download reconciliation through the same managed registry, then adapt
+   the current JioSaavn/YouTube/YouTube Music search results to
+   `SourceTrackObservation` behind one cancellable `SourceRepository`. Preserve
+   the legacy playback/UI path while adding focused repeated-source, partial
+   provider failure, ambiguity, and transient-retention evidence.
 
 ## Verification level
 
@@ -286,7 +305,7 @@ schema/DAO tests, including duplicate playlist occurrences, orphan rejection,
 exact-source uniqueness/idempotence, asset/Library scoping, and complete-order
 playlist writes, plus canonical Library/playlist read projection and FTS lookup.
 The exported schema contains version 1, 30 entities including FTS, 2 views, and
-identity hash `a492bff168b76a611f7a9dfb6d8b665b`. The durable identity/history/checkpoint
+identity hash `b7024782afdceca83073f18e29fff640`. The durable identity/history/checkpoint
 DAO suite adds 3 passing focused tests (9 total data-module tests).
 The download/integration/migration ledger suite adds 3 passing focused tests
 (12 total data-module tests).
@@ -319,8 +338,11 @@ total data-module tests).
 Checksum-protected atomic bootstrap state, legal transition checks, stale-writer
 rejection, corruption refusal, and premature-verification refusal add 2 passing
 focused tests (31 total data-module tests).
-`:shippy-sources:check` passes its forbidden-import gate and 6 focused
-managed-asset/ingestion tests. The app compiles with the inactive Musikr adapter,
-and its exact observation-mapping test passes. The ingestion transaction is not
-yet Room-backed or invoked by migration/production; none of this work is
-instrumented or physical-device tested.
+Room-backed ingestion, managed-download preservation, conflict rollback, and the
+M12 audit checkpoint add 3 passing tests (34 total data-module tests).
+`:shippy-sources:check` passes its forbidden-import gate and 8 focused
+managed-asset/ingestion tests. The app compiles with the inactive Musikr/data
+bridge; its exact observation-mapping test and interrupted/resumed/changed-snapshot
+M12 test pass. Root `spotlessCheck` also passes. M12 has an explicit callable seam
+but is not invoked by production or recorded complete in bootstrap state; none of
+this work is instrumented, physical-device tested, or performance-profiled.

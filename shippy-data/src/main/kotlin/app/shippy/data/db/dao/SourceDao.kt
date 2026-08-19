@@ -44,6 +44,11 @@ internal abstract class SourceDao {
     @Query("SELECT * FROM source_reference WHERE recording_id = :recordingId")
     abstract fun observeForRecording(recordingId: String): Flow<List<SourceReferenceEntity>>
 
+    @Query(
+        "SELECT * FROM source_reference WHERE recording_id = :recordingId ORDER BY source_reference_id"
+    )
+    abstract suspend fun forRecording(recordingId: String): List<SourceReferenceEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     protected abstract suspend fun insertObservation(entity: MetadataObservationEntity): Long
 
