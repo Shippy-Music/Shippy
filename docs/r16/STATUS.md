@@ -51,6 +51,11 @@ avoid checklist theatre.
   items into artwork display models, then recenters that bounded window after a
   transition; the full canonical queue remains owned by playback and the queue
   screen.
+- Local indexing now snapshots exact Shippy-managed artifact and in-progress
+  document identities before Musikr ingestion. Exact URI matches are filtered;
+  verified artifacts also match the same stable Musikr path and length across
+  SAF/MediaStore aliases. Unrelated files in the selected download folder pass
+  through normally.
 
 ## Current blockers
 
@@ -63,8 +68,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Prevent Shippy-managed downloads from being rediscovered as Local duplicates
-   before establishing `:shippy-core`.
+1. Establish the deliberately small pure `:shippy-core` boundary and its typed
+   identities/invariants without moving Android behavior into it.
 
 ## Verification level
 
@@ -73,5 +78,7 @@ resources compile. `R16LayoutRegressionTest` passes (2 tests), and the focused
 playback identity/transition suites pass (11 tests). The Last.fm suite passes
 (23 tests). Scoped collection composition passes its focused repository and
 presentation suites (10 tests). The bounded pager projection suite passes (4
-tests). No R16 code has been instrumented,
+tests). Managed-download reconciliation/filtering passes its focused suite (7
+tests). All eight named urgent R15.3 regression repairs are implemented and
+focused-unit-tested. No R16 code has been instrumented,
 device-tested, or performance-tested.

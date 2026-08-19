@@ -33,16 +33,27 @@ import org.oxycblt.musikr.fs.saf.SAF
  * behavior.
  */
 internal object ShippyMusicFileSystemFactory {
-    fun create(context: Context, settings: MusicSettings): FS =
-        when (settings.locationMode) {
-            LocationMode.SAF -> SAF.from(context, settings.safQuery)
-            LocationMode.MEDIA_STORE -> {
-                val primary = MediaStore.from(context, settings.mediaStoreQuery)
-                if (settings.safQuery.source.isEmpty()) {
-                    primary
-                } else {
-                    CompositeFS(primary, SAF.from(context, settings.safQuery))
+    fun create(
+        context: Context,
+        settings: MusicSettings,
+        managedDownloads: ManagedDownloadFileIndex = ManagedDownloadFileIndex.EMPTY,
+    ): FS {
+        val source =
+            when (settings.locationMode) {
+                LocationMode.SAF -> SAF.from(context, settings.safQuery)
+                LocationMode.MEDIA_STORE -> {
+                    val primary = MediaStore.from(context, settings.mediaStoreQuery)
+                    if (settings.safQuery.source.isEmpty()) {
+                        primary
+                    } else {
+                        CompositeFS(primary, SAF.from(context, settings.safQuery))
+                    }
                 }
             }
+        return if (managedDownloads.isEmpty) {
+            source
+        } else {
+            ManagedDownloadFilteringFS(source, managedDownloads)
         }
+    }
 }

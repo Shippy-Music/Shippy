@@ -59,6 +59,10 @@ internal interface DocumentPathFactory {
     }
 }
 
+/** Resolve a document-provider URI to Musikr's stable path when the provider exposes one. */
+fun resolveDocumentPath(context: Context, uri: Uri): Path? =
+    DocumentPathFactory.from(context).unpackDocumentUri(uri)
+
 private class DocumentPathFactoryImpl(
     private val context: Context,
     private val volumeManager: VolumeManager,

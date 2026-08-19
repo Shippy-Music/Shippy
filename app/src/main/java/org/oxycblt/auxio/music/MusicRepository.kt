@@ -29,6 +29,7 @@ import kotlinx.coroutines.yield
 import org.oxycblt.auxio.image.covers.SettingCovers
 import org.oxycblt.auxio.music.MusicRepository.IndexingWorker
 import org.oxycblt.auxio.music.shim.WriteOnlyMutableCache
+import org.oxycblt.auxio.shippy.persistence.download.DownloadJobRepository
 import org.oxycblt.musikr.Config
 import org.oxycblt.musikr.IndexingProgress
 import org.oxycblt.musikr.Interpretation
@@ -241,6 +242,7 @@ constructor(
     private val storedPlaylists: StoredPlaylists,
     private val settingCovers: SettingCovers,
     private val musicSettings: MusicSettings,
+    private val downloadJobs: DownloadJobRepository,
 ) : MusicRepository {
     private val updateListeners = mutableListOf<MusicRepository.UpdateListener>()
     private val indexingListeners = mutableListOf<MusicRepository.IndexingListener>()
@@ -394,7 +396,8 @@ constructor(
         L.d("Cache: $cache")
         val covers = settingCovers.mutate(context, newRevision)
         L.d("Covers: $covers")
-        val fs = ShippyMusicFileSystemFactory.create(context, musicSettings)
+        val managedDownloads = ManagedDownloadFileIndex.from(context, downloadJobs.getAll())
+        val fs = ShippyMusicFileSystemFactory.create(context, musicSettings, managedDownloads)
         L.d("FS: $fs")
         val storage = Storage(cache, covers, storedPlaylists)
         val interpretation = Interpretation(nameFactory, separators)
