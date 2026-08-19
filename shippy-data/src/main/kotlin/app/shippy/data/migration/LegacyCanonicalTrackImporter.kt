@@ -28,6 +28,7 @@ import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.entity.ReleaseEntity
 import app.shippy.data.db.entity.ReleaseTrackEntity
+import app.shippy.data.maintenance.R16CatalogueRetentionPolicy
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -161,7 +162,8 @@ internal class LegacyCanonicalTrackImporter(private val database: ShippyR16Datab
                 preferredReleaseId = releaseId,
                 preferredArtworkId = null,
                 retentionKind = "TRANSIENT",
-                retainedUntilEpochMs = importedAtEpochMs + TRANSIENT_RETENTION_MS,
+                retainedUntilEpochMs =
+                    importedAtEpochMs + R16CatalogueRetentionPolicy.transientTtl.toMillis(),
                 createdAtEpochMs = importedAtEpochMs,
                 updatedAtEpochMs = importedAtEpochMs,
             )
@@ -288,4 +290,3 @@ private fun decodeLegacyStringList(value: String): List<String> = buildList {
 
 private const val MAX_IMPORT_PAGE_SIZE = 500
 private const val MAX_WARNINGS = 1_000
-private const val TRANSIENT_RETENTION_MS = 30L * 24 * 60 * 60 * 1_000

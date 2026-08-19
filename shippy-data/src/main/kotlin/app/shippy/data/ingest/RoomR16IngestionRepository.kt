@@ -42,10 +42,10 @@ import app.shippy.data.db.entity.MetadataObservationEntity
 import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.entity.SourceReferenceEntity
+import app.shippy.data.maintenance.R16CatalogueRetentionPolicy
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.time.Duration
 import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject
@@ -171,7 +171,11 @@ private class RoomR16IngestionSession(private val database: ShippyR16Database) :
                                 retentionKind =
                                     if (durable) RETENTION_DURABLE else RETENTION_TRANSIENT,
                                 retainedUntilEpochMs =
-                                    if (durable) null else now + TRANSIENT_RETENTION.toMillis(),
+                                    if (durable) {
+                                        null
+                                    } else {
+                                        now + R16CatalogueRetentionPolicy.transientTtl.toMillis()
+                                    },
                                 createdAtEpochMs = now,
                                 updatedAtEpochMs = now,
                             ),
@@ -652,4 +656,3 @@ private const val SUBJECT_SOURCE = "SOURCE"
 private const val RETENTION_DURABLE = "DURABLE"
 private const val RETENTION_TRANSIENT = "TRANSIENT"
 private const val UNIT_SEPARATOR = "\u001f"
-private val TRANSIENT_RETENTION: Duration = Duration.ofDays(7)

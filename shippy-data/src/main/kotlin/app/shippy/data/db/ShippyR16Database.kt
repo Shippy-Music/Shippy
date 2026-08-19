@@ -20,6 +20,7 @@ package app.shippy.data.db
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import app.shippy.data.db.dao.AssetDao
+import app.shippy.data.db.dao.CatalogueMaintenanceDao
 import app.shippy.data.db.dao.DownloadDao
 import app.shippy.data.db.dao.HistoryDao
 import app.shippy.data.db.dao.IdentityDao
@@ -112,6 +113,8 @@ internal abstract class ShippyR16Database : RoomDatabase() {
     abstract fun sourceDao(): SourceDao
 
     abstract fun assetDao(): AssetDao
+
+    abstract fun catalogueMaintenanceDao(): CatalogueMaintenanceDao
 
     abstract fun libraryDao(): LibraryDao
 

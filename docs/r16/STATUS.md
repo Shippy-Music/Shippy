@@ -295,6 +295,23 @@ avoid checklist theatre.
   provenance remains in the raw observation while its exact shared video source
   stores canonical `YOUTUBE` kind. Availability failure never deletes or changes
   Recording identity.
+- Transient catalogue retention now has one 60-day default shared by fresh
+  ingestion and legacy import. The Room maintenance owner scans at most 800
+  eligible rows and deletes at most 200 per invocation, rechecking every row in
+  its deletion transaction and reporting scanned/protected/raced/deleted counts.
+- GC refuses any Recording with a Library/playlist relationship, any asset,
+  user metadata or manual identity decision, checkpoint, retained history,
+  download, Last.fm outbox row, or merge/redirect audit. Runtime queue, retained
+  cache, and pending-work snapshots are explicit protections. It removes only
+  database catalogue rows and derived observations; it has no filesystem API and
+  therefore cannot delete user files.
+- `:shippy-sources` now owns the inactive event-driven enrichment boundary.
+  Playback may schedule only after commit, durable intent upgrades the same
+  `enrich-recording:<RecordingId>` identity, and idle maintenance is deterministic,
+  capped at 50, and unmetered. The scheduler contract is cancellable and
+  observable. Search rendering and interactive manual Identify are deliberately
+  absent from this background path; an Android WorkManager executor remains a
+  later activation step rather than a no-op worker.
 
 ## Current blockers
 
@@ -307,11 +324,11 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete the Phase 4 lifecycle side without cutting over: add conservative,
-   bounded transient-catalogue retention/GC eligibility and event-driven
-   enrichment scheduling. Provider result selection/save may call ingestion
-   later; ordinary search stays read-only, and legacy playback/UI authority
-   remains active.
+1. Start Phase 5 behind the inactive R16 boundary: implement the process-scoped
+   playback coordinator and fake engine around immutable snapshots, QueueEntryId
+   occurrence identity, deterministic shuffle, generation-safe preparation, and
+   restore semantics. Do not project to Media3 or switch legacy playback authority
+   until the pure state machine is proven.
 
 ## Verification level
 
@@ -366,8 +383,11 @@ Room-backed ingestion, managed-download preservation, conflict rollback, and the
 M12 audit checkpoint add 3 passing tests (34 total data-module tests).
 Room-backed source observation/exact lookup plus retryable availability updates
 that preserve Recording identity add 1 passing test (35 total data-module tests).
-`:shippy-sources:check` passes its forbidden-import gate and 8 focused
-managed-asset/ingestion tests. The app compiles with the inactive Musikr/data
+Bounded transient collection, complete durable-reference protection, derived-row
+cleanup, runtime protection, and the shared 60-day default add 2 passing tests
+(37 total data-module tests).
+`:shippy-sources:check` passes its forbidden-import gate and 10 focused
+source, managed-asset, ingestion, and enrichment tests. The app compiles with the inactive Musikr/data
 bridge; its exact observation-mapping test and interrupted/resumed/changed-snapshot
 M12 test pass. The provider observation adapter adds 3 passing tests for stable
 repeated source keys, shared YouTube/YouTube Music video identity, locator/artwork

@@ -22,6 +22,8 @@ import androidx.room.Room
 import app.shippy.data.db.ShippyR16Database
 import app.shippy.data.ingest.R16IngestionRepository
 import app.shippy.data.ingest.RoomR16IngestionRepository
+import app.shippy.data.maintenance.R16CatalogueMaintenance
+import app.shippy.data.maintenance.RoomR16CatalogueMaintenance
 import app.shippy.data.migration.R16LocalReindexAudit
 import app.shippy.data.migration.RoomR16LocalReindexAudit
 import app.shippy.data.source.R16SourceStateRepository
@@ -33,6 +35,7 @@ class R16DataRuntime private constructor(private val database: ShippyR16Database
     val ingestion: R16IngestionRepository = RoomR16IngestionRepository(database)
     val localReindexAudit: R16LocalReindexAudit = RoomR16LocalReindexAudit(database)
     val sources: R16SourceStateRepository = RoomR16SourceStateRepository(database)
+    val catalogueMaintenance: R16CatalogueMaintenance = RoomR16CatalogueMaintenance(database)
 
     override fun close() {
         database.close()
