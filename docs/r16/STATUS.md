@@ -40,6 +40,8 @@ avoid checklist theatre.
 - Playlist order controls now live in a playlist-only layout and no longer
   inflate on Songs, Albums, Artists, or Genres.
 - The focused layout regression suite passes both ownership invariants.
+- New playback now validates its target and records the expected queue-item ID
+  before any Media3 mutation can synchronously publish a transition callback.
 
 ## Current blockers
 
@@ -52,14 +54,14 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Move the expected new-playback identity assignment before Media3 mutation.
-2. Give Last.fm a continuous audible clock and refresh its queue projection on
+1. Give Last.fm a continuous audible clock and refresh its queue projection on
    reorder.
-3. Bound collection composition, queue display projection, and managed-download
+2. Bound collection composition, queue display projection, and managed-download
    rediscovery before establishing `:shippy-core`.
 
 ## Verification level
 
 Baseline preservation is checksum-verified. Changed app Kotlin and Android
-resources compile, and `R16LayoutRegressionTest` passes (2 tests). No R16 code
-has been instrumented, device-tested, or performance-tested.
+resources compile. `R16LayoutRegressionTest` passes (2 tests), and the focused
+playback identity/transition suites pass (11 tests). No R16 code has been
+instrumented, device-tested, or performance-tested.

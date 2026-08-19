@@ -310,20 +310,26 @@ class ExoPlaybackStateHolder(
         retriedCurrentError = false
         failedMediaIds.clear()
         parent = command.parent
-        pendingNewPlaybackAck = StateAck.NewPlayback
-        playbackRequestHeaders.replace(command.queue)
-        player.shuffleModeEnabled = command.shuffled
-        player.setMediaItems(command.queue.map { it.buildMediaItem() })
         val startIndex =
             command.selectedItemId
                 ?.let { selectedId -> command.queue.indexOfFirst { it.item.id == selectedId } }
                 .also { check(it != -1) { "Start song not in queue" } }
-        if (command.shuffled) {
-            player.setShuffleOrder(BetterShuffleOrder(command.queue.size, startIndex ?: -1))
-        }
-        val target = startIndex ?: player.currentTimeline.getFirstWindowIndex(command.shuffled)
+        val shuffleOrder =
+            command.shuffled
+                .takeIf { it }
+                ?.let { BetterShuffleOrder(command.queue.size, startIndex ?: -1) }
+        val target =
+            startIndex
+                ?: shuffleOrder?.getFirstIndex()
+                ?: command.queue.indices.firstOrNull()
+                ?: C.INDEX_UNSET
         check(target in command.queue.indices) { "Playback queue has no selected item" }
+        pendingNewPlaybackAck = StateAck.NewPlayback
         pendingNewPlaybackMediaId = command.queue[target].item.id.value
+        playbackRequestHeaders.replace(command.queue)
+        player.shuffleModeEnabled = command.shuffled
+        player.setMediaItems(command.queue.map { it.buildMediaItem() })
+        shuffleOrder?.let(player::setShuffleOrder)
         player.seekTo(target, C.TIME_UNSET)
         player.prepare()
         player.play()
