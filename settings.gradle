@@ -26,3 +26,4 @@ rootProject.name = "Shippy"
 include ':app'
 include ':musikr'
 include ':shippy-core'
+include ':shippy-data'

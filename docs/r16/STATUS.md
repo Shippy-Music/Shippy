@@ -92,6 +92,12 @@ avoid checklist theatre.
   every mutation advances revision, source and engine work is tagged, stale
   results are ignored, and only a matching QueueEntryId engine commit publishes
   current playback state.
+- `:shippy-data` now exists as an isolated Android/Room module depending only on
+  core. Schema v1 exports the first 11 normalized recording, artist, release,
+  source-observation, artwork, asset, and fingerprint tables with exact-key,
+  ownership, availability, checksum, and referential constraints. An in-memory
+  Room creation test proves the table set, schema version, and foreign-key mode;
+  `:app` does not depend on or read this database yet.
 
 ## Current blockers
 
@@ -104,8 +110,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Scaffold `:shippy-data`, define the normalized R16 schema and constraints,
-   and prove empty creation/migration wiring without switching production reads.
+1. Add the remaining Library, playlist, metadata-authority, redirect/audit,
+   history/checkpoint, download/integration, and migration tables before DAOs
+   and read models; production remains on legacy v10.
 
 ## Verification level
 
@@ -118,4 +125,6 @@ tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
 focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (22
 tests plus its forbidden-import gate). No R16 code has been instrumented,
-device-tested, or performance-tested.
+device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes
+its initial empty-schema creation test; the exported schema contains version 1,
+11 entities, zero views, and identity hash `0bddf0562a82be11be613e2ab84da6cd`.

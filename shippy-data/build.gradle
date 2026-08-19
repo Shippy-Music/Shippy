@@ -1,0 +1,48 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+plugins {
+    id 'com.android.library'
+    id 'com.google.devtools.ksp'
+}
+
+android {
+    namespace 'app.shippy.data'
+    compileSdk target_sdk
+
+    defaultConfig {
+        minSdk min_sdk
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
+}
+
+ksp {
+    arg('room.schemaLocation', file("$projectDir/schemas").path)
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_21
+        freeCompilerArgs.add('-Xannotation-default-target=param-property')
+    }
+}
+
+dependencies {
+    implementation project(':shippy-core')
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlin_coroutines_version"
+    implementation "androidx.room:room-runtime:$room_version"
+    implementation "androidx.room:room-ktx:$room_version"
+    ksp "androidx.room:room-compiler:$room_version"
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'androidx.test:core-ktx:1.7.0'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+}
