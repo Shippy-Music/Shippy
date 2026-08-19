@@ -270,6 +270,22 @@ avoid checklist theatre.
   asset evidence so a changed snapshot restarts idempotently rather than skipping
   a newly inserted key. This seam does not mark bootstrap M12 complete or switch
   any production authority.
+- `:shippy-sources` now exposes a small metadata-only `SourceDiscoveryRepository`
+  contract with typed provider sections, entities, continuations, failures, and
+  discarded-result truth. Provider artwork and original links must be public
+  HTTPS, while source observations still cannot carry resolved playback locators.
+- One inactive app adapter reuses the existing concurrent
+  `UnifiedSearchRepository` rather than starting a second provider pipeline. It
+  maps JioSaavn, YouTube, and YouTube Music results to source observations,
+  rethrows cancellation, preserves per-provider failures, discards invalid source
+  tokens, and never persists a result merely because Search displayed it.
+  YouTube and YouTube Music retain distinct `SourceKind` provenance but share the
+  exact `youtube`/video source family for the same video ID.
+- No second legacy-download ingestion bridge was added: verified M6 publication
+  already owns the Recording/source/asset relationship, and the shared managed
+  registry plus local scan ingestion reuses that exact asset while retaining
+  `SHIPPY_DOWNLOAD` ownership. Re-ingesting a legacy `TrackId` as if it were an
+  R16 `RecordingId` would create a competing identity path.
 
 ## Current blockers
 
@@ -282,12 +298,11 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete the Phase 4 source side rather than cutting over early: route existing
-   Shippy download reconciliation through the same managed registry, then adapt
-   the current JioSaavn/YouTube/YouTube Music search results to
-   `SourceTrackObservation` behind one cancellable `SourceRepository`. Preserve
-   the legacy playback/UI path while adding focused repeated-source, partial
-   provider failure, ambiguity, and transient-retention evidence.
+1. Complete the Phase 4 persistence side without cutting over: expose the scoped
+   R16 `SourceRepository` over exact Room source identity and availability, then
+   add bounded transient-catalogue retention/GC and event-driven enrichment seams.
+   Provider result selection/save may call ingestion later; ordinary search must
+   remain read-only, and legacy playback/UI authority stays active.
 
 ## Verification level
 
@@ -343,6 +358,10 @@ M12 audit checkpoint add 3 passing tests (34 total data-module tests).
 `:shippy-sources:check` passes its forbidden-import gate and 8 focused
 managed-asset/ingestion tests. The app compiles with the inactive Musikr/data
 bridge; its exact observation-mapping test and interrupted/resumed/changed-snapshot
-M12 test pass. Root `spotlessCheck` also passes. M12 has an explicit callable seam
-but is not invoked by production or recorded complete in bootstrap state; none of
-this work is instrumented, physical-device tested, or performance-profiled.
+M12 test pass. The provider observation adapter adds 3 passing tests for stable
+repeated source keys, shared YouTube/YouTube Music video identity, locator/artwork
+sanitization, scoped partial failure, and cancellation propagation. Root
+`spotlessCheck` also passes. M12 and provider discovery have explicit callable
+seams but are not invoked by production or recorded complete in bootstrap state;
+none of this work is instrumented, physical-device tested, or
+performance-profiled.

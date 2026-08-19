@@ -89,6 +89,13 @@ data class SourceTrackObservation(
         require(
             sourceKind == SourceKind.LOCAL_FILE ||
                 sourceKind == SourceKind.SHIPPY_DOWNLOAD ||
+                artwork.all { it.value.isPublicHttps() }
+        ) {
+            "Provider artwork references must be public HTTPS"
+        }
+        require(
+            sourceKind == SourceKind.LOCAL_FILE ||
+                sourceKind == SourceKind.SHIPPY_DOWNLOAD ||
                 asset == null
         ) {
             "Provider observations cannot embed durable device asset locations"
