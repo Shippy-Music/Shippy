@@ -109,6 +109,10 @@ avoid checklist theatre.
   availability without rebuilding the full Library in memory. A Room FTS4 table
   indexes title, artist, release, identifiers, linked source titles, and user
   overrides through an explicit per-recording refresh boundary.
+- Canonical recording-graph writes and exact-source observation ingestion now
+  refresh the affected FTS row inside the same Room transaction. Repeated exact
+  sources retain their original source identity while refreshed provider titles
+  become searchable without an inconsistent intermediate state.
 
 ## Current blockers
 
@@ -121,9 +125,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Bind canonical writes and FTS refresh in one database transaction, then
-   complete redirect/audit, history/checkpoint, download/integration, and
-   migration DAOs; production remains on legacy v10.
+1. Complete redirect/audit, history/checkpoint, download/integration, and
+   migration DAOs with focused transaction tests; production remains on legacy
+   v10.
 
 ## Verification level
 

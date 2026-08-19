@@ -29,6 +29,7 @@ import app.shippy.data.db.entity.PlaylistEntryEntity
 import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.entity.SourceReferenceEntity
+import app.shippy.data.db.transaction.CanonicalWriteTransactions
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -66,13 +67,22 @@ class CoreDaoTest {
         val first = source("source-1", "observation-1")
         val repeated = source("source-2", "observation-2").copy(availabilityState = "DEGRADED")
 
-        val inserted = database.sourceDao().ingestExact(observation("observation-1"), first)
-        val reused = database.sourceDao().ingestExact(observation("observation-2"), repeated)
+        val writer = CanonicalWriteTransactions(database)
+        val inserted = writer.ingestExactSource(observation("observation-1"), first)
+        val reused =
+            writer.ingestExactSource(
+                observation("observation-2").copy(title = "Alternate Alias"),
+                repeated,
+            )
 
         assertEquals("source-1", inserted.sourceReferenceId)
         assertEquals("source-1", reused.sourceReferenceId)
         assertEquals("DEGRADED", reused.availabilityState)
         assertEquals(2, database.sourceDao().observationCount())
+        assertEquals(
+            listOf("recording-1"),
+            database.searchDao().searchRecordingIds("Alternate*", 10),
+        )
         assertThrows(IllegalStateException::class.java) {
             runBlocking {
                 database.sourceDao().link("source-1", "recording-2", "USER_CONFIRMED", 3)
@@ -159,7 +169,6 @@ class CoreDaoTest {
 
         val song = checkNotNull(database.readModelDao().librarySong("recording-1"))
         val playlistEntry = database.readModelDao().playlistEntries("playlist-1").single()
-        database.searchDao().refresh("recording-1")
 
         assertEquals("Artist", song.artistDisplay)
         assertTrue(song.localAssetExists)
@@ -179,8 +188,7 @@ class CoreDaoTest {
                 createdAtEpochMs = 1,
                 updatedAtEpochMs = 1,
             )
-        database
-            .recordingDao()
+        CanonicalWriteTransactions(database)
             .upsertRecordingGraph(
                 recording = recording(recordingId),
                 artists = listOf(artist),
