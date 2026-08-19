@@ -1,7 +1,7 @@
 # Shippy R16 Status
 
 **Updated:** 2026-08-19  
-**Active phase:** Phase 1 — Urgent R15.3 Correctness Repairs  
+**Active phase:** Phase 2 — Pure Core Model  
 **Authority:** `../Shippy_R16_Master_Architecture_and_Implementation_Spec.md`
 
 ## Execution mandate
@@ -56,6 +56,10 @@ avoid checklist theatre.
   verified artifacts also match the same stable Musikr path and length across
   SAF/MediaStore aliases. Unrelated files in the selected download folder pass
   through normally.
+- `:shippy-core` now exists as an independent Kotlin/JVM module with a forbidden
+  dependency gate. Its first model slice defines canonical UUID identities,
+  Recording/Artist/Release, source, media-asset, Library, playlist-entry, and
+  queue-entry types without Android, Room, Media3, Musikr, provider DTOs, or UI.
 
 ## Current blockers
 
@@ -68,8 +72,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Establish the deliberately small pure `:shippy-core` boundary and its typed
-   identities/invariants without moving Android behavior into it.
+1. Complete the remaining pure-core policies: metadata/version matching,
+   source selection, queue/shuffle reduction, merge redirects, listening
+   thresholds, and portable Crew descriptors.
 
 ## Verification level
 
@@ -80,5 +85,6 @@ playback identity/transition suites pass (11 tests). The Last.fm suite passes
 presentation suites (10 tests). The bounded pager projection suite passes (4
 tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
-focused-unit-tested. No R16 code has been instrumented,
+focused-unit-tested. `:shippy-core:check` passes independently (2 tests plus its
+forbidden-import gate). No R16 code has been instrumented,
 device-tested, or performance-tested.

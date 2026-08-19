@@ -25,3 +25,4 @@ apply from: file("media/core_settings.gradle")
 rootProject.name = "Shippy"
 include ':app'
 include ':musikr'
+include ':shippy-core'

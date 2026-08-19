@@ -1,0 +1,47 @@
+plugins {
+    id 'java-library'
+    id 'org.jetbrains.kotlin.jvm'
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    testImplementation 'junit:junit:4.13.2'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnit()
+}
+
+def forbiddenImports = [
+    'android.',
+    'androidx.',
+    'org.oxycblt.musikr.',
+    'retrofit2.',
+    'okhttp3.',
+]
+
+tasks.register('checkForbiddenDependencies') {
+    inputs.files(fileTree('src/main/kotlin') { include '**/*.kt' })
+    doLast {
+        def violations = []
+        inputs.files.files.each { source ->
+            source.eachLine { line, number ->
+                def imported = line.trim()
+                if (imported.startsWith('import ') && forbiddenImports.any { imported.startsWith("import $it") }) {
+                    violations << "${source}:${number}: ${imported}"
+                }
+            }
+        }
+        if (!violations.isEmpty()) {
+            throw new GradleException("Forbidden shippy-core imports:\n${violations.join('\n')}")
+        }
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn tasks.named('checkForbiddenDependencies')
+}
