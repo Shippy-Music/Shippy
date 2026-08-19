@@ -139,6 +139,35 @@ internal data class LegacyLastFmOutboxRow(
     val trackId: String?,
 )
 
+internal data class LegacyPlaybackCheckpointItemRow(
+    val heapPosition: Int,
+    val queueItemId: String,
+    val trackId: String,
+    val contextId: String?,
+    val contributorId: String?,
+)
+
+internal data class LegacyPlaybackCheckpointRow(
+    val slot: String,
+    val positionMs: Long,
+    val repeatMode: String,
+    val heapIndex: Int,
+    val shuffledMapping: String,
+    val items: List<LegacyPlaybackCheckpointItemRow>,
+)
+
+internal data class LegacySavedProviderEntityRow(
+    val providerId: String,
+    val entityType: String,
+    val sourceItemId: String,
+    val title: String,
+    val subtitle: String?,
+    val artwork: String?,
+    val originalUrl: String?,
+    val pinned: Boolean,
+    val savedAtEpochMs: Long,
+)
+
 internal class LegacyDatabaseReader private constructor(private val database: SQLiteDatabase) :
     Closeable {
     init {
@@ -624,6 +653,138 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
             }
     }
 
+    fun playbackCheckpoint(slot: String): LegacyPlaybackCheckpointRow? {
+        require(slot.isNotBlank()) { "Legacy playback checkpoint slot must not be blank" }
+        val header =
+            database
+                .rawQuery(
+                    """
+                    SELECT slot, positionMs, repeatMode, heapIndex, shuffledMapping
+                    FROM playback_checkpoint
+                    WHERE slot = ?
+                    """
+                        .trimIndent(),
+                    arrayOf(slot),
+                )
+                .useRows { cursor ->
+                    if (!cursor.moveToFirst()) {
+                        null
+                    } else {
+                        LegacyPlaybackCheckpointRow(
+                            slot = cursor.getString(0),
+                            positionMs = cursor.getLong(1),
+                            repeatMode = cursor.getString(2),
+                            heapIndex = cursor.getInt(3),
+                            shuffledMapping = cursor.getString(4),
+                            items = emptyList(),
+                        )
+                    }
+                } ?: return null
+        val items =
+            database
+                .rawQuery(
+                    """
+                    SELECT heapPosition, queueItemId, trackId, contextId, contributorId
+                    FROM playback_checkpoint_item
+                    WHERE slot = ?
+                    ORDER BY heapPosition, queueItemId
+                    LIMIT ${MAX_PLAYBACK_CHECKPOINT_ITEMS + 1}
+                    """
+                        .trimIndent(),
+                    arrayOf(slot),
+                )
+                .useRows { cursor ->
+                    buildList {
+                        while (cursor.moveToNext()) {
+                            add(
+                                LegacyPlaybackCheckpointItemRow(
+                                    heapPosition = cursor.getInt(0),
+                                    queueItemId = cursor.getString(1),
+                                    trackId = cursor.getString(2),
+                                    contextId = cursor.stringOrNull(3),
+                                    contributorId = cursor.stringOrNull(4),
+                                )
+                            )
+                        }
+                    }
+                }
+        check(items.size <= MAX_PLAYBACK_CHECKPOINT_ITEMS) {
+            "Legacy playback checkpoint exceeds $MAX_PLAYBACK_CHECKPOINT_ITEMS entries"
+        }
+        return header.copy(items = items)
+    }
+
+    fun savedProviderEntities(
+        afterProviderId: String?,
+        afterEntityType: String?,
+        afterSourceItemId: String?,
+        limit: Int,
+    ): List<LegacySavedProviderEntityRow> {
+        requirePageSize(limit)
+        require(
+            listOf(afterProviderId, afterEntityType, afterSourceItemId).all { it == null } ||
+                listOf(afterProviderId, afterEntityType, afterSourceItemId).all { it != null }
+        ) {
+            "Legacy saved-provider checkpoint must contain all three key parts"
+        }
+        val selection =
+            if (afterProviderId == null) {
+                ""
+            } else {
+                """
+                WHERE providerId > ?
+                   OR (providerId = ? AND entityType > ?)
+                   OR (providerId = ? AND entityType = ? AND sourceItemId > ?)
+                """
+                    .trimIndent()
+            }
+        val arguments =
+            if (afterProviderId == null) {
+                emptyArray()
+            } else {
+                arrayOf(
+                    afterProviderId,
+                    afterProviderId,
+                    checkNotNull(afterEntityType),
+                    afterProviderId,
+                    afterEntityType,
+                    checkNotNull(afterSourceItemId),
+                )
+            }
+        return database
+            .rawQuery(
+                """
+                SELECT providerId, entityType, sourceItemId, title, subtitle, artwork,
+                       originalUrl, pinned, savedAtEpochMs
+                FROM saved_provider_entity
+                $selection
+                ORDER BY providerId, entityType, sourceItemId
+                LIMIT $limit
+                """
+                    .trimIndent(),
+                arguments,
+            )
+            .useRows { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            LegacySavedProviderEntityRow(
+                                providerId = cursor.getString(0),
+                                entityType = cursor.getString(1),
+                                sourceItemId = cursor.getString(2),
+                                title = cursor.getString(3),
+                                subtitle = cursor.stringOrNull(4),
+                                artwork = cursor.stringOrNull(5),
+                                originalUrl = cursor.stringOrNull(6),
+                                pinned = cursor.getInt(7) != 0,
+                                savedAtEpochMs = cursor.getLong(8),
+                            )
+                        )
+                    }
+                }
+            }
+    }
+
     override fun close() {
         database.close()
     }
@@ -670,6 +831,7 @@ private fun Cursor.booleanOrNull(column: Int): Boolean? =
 
 internal const val LEGACY_SCHEMA_VERSION = 10
 private const val MAX_PAGE_SIZE = 500
+private const val MAX_PLAYBACK_CHECKPOINT_ITEMS = 10_000
 private val REQUIRED_TABLES =
     setOf(
         "library_relationship",

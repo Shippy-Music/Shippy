@@ -139,6 +139,25 @@ class LegacyImportFoundationTest {
                 reader.lastFmOutbox(afterQueuedAtEpochMs = null, afterId = null, limit = 1).single()
             assertEquals("queue-item:queue-1", outbox.id)
             assertEquals("track-a", outbox.trackId)
+
+            val checkpoint = checkNotNull(reader.playbackCheckpoint("active"))
+            assertEquals("TRACK", checkpoint.repeatMode)
+            assertEquals("queue-1", checkpoint.items.single().queueItemId)
+
+            val firstSaved = reader.savedProviderEntities(null, null, null, limit = 1).single()
+            val secondSaved =
+                reader
+                    .savedProviderEntities(
+                        firstSaved.providerId,
+                        firstSaved.entityType,
+                        firstSaved.sourceItemId,
+                        limit = 1,
+                    )
+                    .single()
+            assertEquals(
+                listOf("album-a", "playlist-b"),
+                listOf(firstSaved, secondSaved).map { it.sourceItemId },
+            )
         }
     }
 
@@ -525,6 +544,92 @@ class LegacyImportFoundationTest {
             assertEquals(2, database.lastFmOutboxDao().count())
         }
 
+    @Test
+    fun `M9 and M10 preserve source-neutral queue intent and exact saved source keys`() =
+        kotlinx.coroutines.runBlocking {
+            startAudit("migration-10")
+            LegacyCanonicalTrackImporter(database)
+                .importPage(
+                    "migration-10",
+                    listOf(legacyTrack("track-a", "Alpha", "6:Artist", null)),
+                    1_000,
+                )
+            val checkpointRow =
+                LegacyPlaybackCheckpointRow(
+                    slot = "active",
+                    positionMs = 45_000,
+                    repeatMode = "TRACK",
+                    heapIndex = 1,
+                    shuffledMapping = "2,0,1",
+                    items =
+                        listOf(
+                            legacyCheckpointItem(0, "queue-a", "track-a"),
+                            legacyCheckpointItem(1, "queue-missing", "track-missing"),
+                            legacyCheckpointItem(2, "queue-b", "track-a"),
+                        ),
+                )
+
+            val checkpointImporter = LegacyPlaybackCheckpointImporter(database)
+            val checkpointResult =
+                checkpointImporter.importCheckpoint("migration-10", checkpointRow, 2_000)
+
+            assertEquals(2, checkpointResult.importedEntryCount)
+            assertEquals(1, checkpointResult.skippedEntryCount)
+            val stored = checkNotNull(database.playbackCheckpointDao().load("active"))
+            val queueA = LegacyIdMapper.queueEntry("queue-a").value
+            val queueB = LegacyIdMapper.queueEntry("queue-b").value
+            assertEquals(listOf(queueA, queueB), stored.entries.map { it.queueEntryId })
+            assertEquals(queueA, stored.checkpoint.currentQueueEntryId)
+            assertEquals(0L, stored.checkpoint.positionMs)
+            assertEquals("ONE", stored.checkpoint.repeatMode)
+            assertTrue(stored.checkpoint.shuffleEnabled)
+            assertEquals(
+                org.json.JSONArray(listOf(queueB, queueA)).toString(),
+                stored.checkpoint.traversalOrderJson,
+            )
+            assertEquals(64, stored.checkpoint.checksum.length)
+            assertEquals(1, stored.entries.map { it.recordingId }.distinct().size)
+
+            val savedRows =
+                listOf(
+                    legacySavedSource(
+                        providerId = "jiosaavn",
+                        entityType = "ALBUM",
+                        sourceItemId = "album-a",
+                        artwork = "https://img.example/album.jpg",
+                        originalUrl = "https://music.example/album-a",
+                    ),
+                    legacySavedSource(
+                        providerId = "youtube",
+                        entityType = "PLAYLIST",
+                        sourceItemId = "playlist-b",
+                        artwork = "content://legacy/artwork",
+                        originalUrl = "file:///legacy/private",
+                    ),
+                    legacySavedSource(
+                        providerId = "z-provider",
+                        entityType = "ALBUM",
+                        sourceItemId = "invalid-title",
+                        title = " ",
+                    ),
+                )
+            val savedImporter = LegacySavedSourceImporter(database)
+            val savedResult = savedImporter.importPage("migration-10", savedRows, 3_000)
+
+            assertEquals(2, savedResult.importedCount)
+            assertEquals(1, savedResult.skippedCount)
+            val saved = database.savedSourceDao().library(10)
+            assertEquals(2, saved.size)
+            assertEquals("album-a", saved.first().sourceItemId)
+            assertEquals(null, saved.last().artworkUrl)
+            assertEquals(null, saved.last().originalUrl)
+
+            checkpointImporter.importCheckpoint("migration-10", checkpointRow, 2_000)
+            savedImporter.importPage("migration-10", savedRows, 3_000)
+            assertEquals(2, database.playbackCheckpointDao().load("active")?.entries?.size)
+            assertEquals(2, database.savedSourceDao().library(10).size)
+        }
+
     private fun createLegacyDatabase() {
         SQLiteDatabase.openOrCreateDatabase(legacyFile, null).use { database ->
             database.version = LEGACY_SCHEMA_VERSION
@@ -540,7 +645,8 @@ class LegacyImportFoundationTest {
                         table == "lyrics_cache" ||
                         table == "lastfm_scrobble_outbox" ||
                         table == "playback_checkpoint" ||
-                        table == "playback_checkpoint_item"
+                        table == "playback_checkpoint_item" ||
+                        table == "saved_provider_entity"
                 ) {
                     continue
                 }
@@ -840,7 +946,26 @@ class LegacyImportFoundationTest {
             """
                 .trimIndent()
         )
-        database.execSQL("CREATE TABLE playback_checkpoint (slot TEXT NOT NULL PRIMARY KEY)")
+        database.execSQL(
+            """
+            CREATE TABLE playback_checkpoint (
+                slot TEXT NOT NULL PRIMARY KEY,
+                positionMs INTEGER NOT NULL,
+                repeatMode TEXT NOT NULL,
+                heapIndex INTEGER NOT NULL,
+                shuffledMapping TEXT NOT NULL
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO playback_checkpoint
+            (slot, positionMs, repeatMode, heapIndex, shuffledMapping)
+            VALUES ('active', 15000, 'TRACK', 0, '')
+            """
+                .trimIndent()
+        )
         database.execSQL(
             """
             CREATE TABLE playback_checkpoint_item (
@@ -848,6 +973,8 @@ class LegacyImportFoundationTest {
                 heapPosition INTEGER NOT NULL,
                 queueItemId TEXT NOT NULL,
                 trackId TEXT NOT NULL,
+                contextId TEXT,
+                contributorId TEXT,
                 PRIMARY KEY(slot, heapPosition)
             )
             """
@@ -857,6 +984,36 @@ class LegacyImportFoundationTest {
             """
             INSERT INTO playback_checkpoint_item (slot, heapPosition, queueItemId, trackId)
             VALUES ('active', 0, 'queue-1', 'track-a')
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            CREATE TABLE saved_provider_entity (
+                providerId TEXT NOT NULL,
+                entityType TEXT NOT NULL,
+                sourceItemId TEXT NOT NULL,
+                title TEXT NOT NULL,
+                subtitle TEXT,
+                artwork TEXT,
+                originalUrl TEXT,
+                pinned INTEGER NOT NULL,
+                savedAtEpochMs INTEGER NOT NULL,
+                PRIMARY KEY(providerId, entityType, sourceItemId)
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO saved_provider_entity
+            (providerId, entityType, sourceItemId, title, subtitle, artwork, originalUrl,
+             pinned, savedAtEpochMs)
+            VALUES
+            ('jiosaavn', 'ALBUM', 'album-a', 'Album A', 'Artist',
+             'https://img.example/a.jpg', 'https://music.example/a', 1, 100),
+            ('youtube', 'PLAYLIST', 'playlist-b', 'Playlist B', NULL,
+             NULL, 'https://music.example/b', 0, 200)
             """
                 .trimIndent()
         )
@@ -1004,6 +1161,35 @@ class LegacyImportFoundationTest {
             startedAtEpochSeconds = 100,
             queuedAtEpochMs = queuedAtEpochMs,
             trackId = trackId,
+        )
+
+    private fun legacyCheckpointItem(heapPosition: Int, queueItemId: String, trackId: String) =
+        LegacyPlaybackCheckpointItemRow(
+            heapPosition = heapPosition,
+            queueItemId = queueItemId,
+            trackId = trackId,
+            contextId = "playlist:legacy",
+            contributorId = null,
+        )
+
+    private fun legacySavedSource(
+        providerId: String,
+        entityType: String,
+        sourceItemId: String,
+        title: String = "Saved title",
+        artwork: String? = null,
+        originalUrl: String? = null,
+    ) =
+        LegacySavedProviderEntityRow(
+            providerId = providerId,
+            entityType = entityType,
+            sourceItemId = sourceItemId,
+            title = title,
+            subtitle = "Saved subtitle",
+            artwork = artwork,
+            originalUrl = originalUrl,
+            pinned = providerId == "jiosaavn",
+            savedAtEpochMs = 500,
         )
 
     private companion object {

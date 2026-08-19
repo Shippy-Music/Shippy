@@ -200,6 +200,20 @@ avoid checklist theatre.
   from the scrobble metadata rather than fuzzy-merging or dropping the pending
   listen. Retry cannot duplicate delivery rows, and unavailable legacy
   `chosenByUser` evidence defaults honestly to false.
+- M9 reads the bounded legacy active checkpoint without copying resolved media,
+  maps every surviving queue occurrence and Recording deterministically, and
+  retains duplicate Recordings through distinct QueueEntry IDs. Valid shuffle
+  traversal is compacted by identity after invalid rows are skipped; an invalid
+  current row moves to the nearest prior surviving traversal entry with position
+  reset. The imported checkpoint is source-neutral, versioned, checksummed, and
+  makes its retained Recordings durable. Playing intent and shuffle seed default
+  honestly because v10 did not persist them.
+- M10 pages saved provider entities by their exact composite source key and
+  preserves title, subtitle, pin, and save time in `saved_source_entity` without
+  pretending they are canonical Releases, Artists, or user playlists. Only
+  public-shaped HTTPS artwork/original links cross the migration boundary;
+  private or device locators are discarded with bounded audit warnings. Retry
+  is idempotent.
 
 ## Current blockers
 
@@ -212,9 +226,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add bounded M9 source-neutral playback-checkpoint migration and M10 saved
-   provider entity import while retaining the M5 Musikr/local-ingestion
-   dependency before any runnable cutover; production remains on legacy v10.
+1. Add the M11 Crew compatibility/expiry decision and M13 audit verifier
+   foundation, while retaining M5/M12 as explicit Musikr/local-ingestion
+   dependencies before any runnable cutover; production remains on legacy v10.
 
 ## Verification level
 
@@ -255,3 +269,7 @@ passing focused test (25 total data-module tests).
 M7/M8 lyrics fingerprint validation, stale-cache preservation, exact queue-item
 outbox linking, isolated fallback identity, FIFO order, and retry behavior add 1
 passing focused test (26 total data-module tests).
+M9/M10 source-neutral checkpoint conversion, invalid-entry compaction, duplicate
+Recording occurrences, current/traversal preservation, checksum generation,
+exact saved-source paging, private-locator discard, and retry behavior add 1
+passing focused test (27 total data-module tests).
