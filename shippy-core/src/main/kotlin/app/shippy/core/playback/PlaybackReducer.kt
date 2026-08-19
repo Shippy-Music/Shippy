@@ -471,9 +471,11 @@ class PlaybackReducer {
         snapshot: PlaybackSnapshot,
         event: PlaybackCoreEvent.SourceRecoveryStarted,
     ): PlaybackReduction {
+        val samePendingEntry = snapshot.phase.pendingEntryId() == event.tag.queueEntryId
+        val sameCommittedEntry = snapshot.committedQueueEntryId == event.tag.queueEntryId
         if (
             !snapshot.accepts(event.tag) ||
-                snapshot.phase.pendingEntryId() != event.tag.queueEntryId ||
+                (!samePendingEntry && !sameCommittedEntry) ||
                 snapshot.expectedEngineCommit != null
         ) {
             return PlaybackReduction(snapshot, emptyList())

@@ -90,7 +90,7 @@ internal class RoomR16SourceStateRepository(private val database: ShippyR16Datab
     }
 }
 
-private fun SourceReferenceEntity.toDomain() =
+internal fun SourceReferenceEntity.toDomain() =
     SourceReference(
         id = SourceReferenceId(sourceReferenceId),
         recordingId = recordingId?.let(::RecordingId),

@@ -70,6 +70,17 @@ class SourcePolicyTest {
     }
 
     @Test
+    fun `lossless verified local asset can beat a lossy permanent download`() {
+        val local =
+            candidate("local", ResolutionCandidateKind.LINKED_LOCAL_ASSET).copy(lossless = true)
+        val download = candidate("download", ResolutionCandidateKind.PERMANENT_DOWNLOAD)
+
+        val result = SourceSelectionPolicy().select(listOf(download, local), false)
+
+        assertEquals(local, (result as SourceSelectionResult.Selected).candidate)
+    }
+
+    @Test
     fun `exact source link is idempotent and rejects silent reassignment`() {
         val source = SourceKey(ProviderId("jiosaavn"), SourceItemType.RECORDING, "song-1")
         val firstId = id(1)

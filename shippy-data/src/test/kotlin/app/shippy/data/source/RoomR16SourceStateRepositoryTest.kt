@@ -20,6 +20,9 @@ package app.shippy.data.source
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import app.shippy.core.asset.AssetLocation
+import app.shippy.core.asset.AudioTechnicalMetadata
+import app.shippy.core.asset.MediaAssetKind
 import app.shippy.core.identity.ProviderId
 import app.shippy.core.identity.RecordingId
 import app.shippy.core.identitymatch.RecordingDraft
@@ -36,8 +39,11 @@ import app.shippy.data.db.ShippyR16Database
 import app.shippy.data.ingest.R16AssetWriteMode
 import app.shippy.data.ingest.R16IngestionCommand
 import app.shippy.data.ingest.R16IngestionRepository
+import app.shippy.data.ingest.R16ObservedAsset
 import app.shippy.data.ingest.R16SourceObservation
 import app.shippy.data.ingest.RoomR16IngestionRepository
+import app.shippy.data.playback.R16PlaybackSourceRepository
+import app.shippy.data.playback.RoomR16PlaybackSourceRepository
 import java.time.Instant
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -53,6 +59,7 @@ class RoomR16SourceStateRepositoryTest {
     private lateinit var database: ShippyR16Database
     private lateinit var ingestion: R16IngestionRepository
     private lateinit var sources: R16SourceStateRepository
+    private lateinit var playbackSources: R16PlaybackSourceRepository
 
     @Before
     fun setUp() {
@@ -63,6 +70,7 @@ class RoomR16SourceStateRepositoryTest {
                 .build()
         ingestion = RoomR16IngestionRepository(database)
         sources = RoomR16SourceStateRepository(database)
+        playbackSources = RoomR16PlaybackSourceRepository(database)
     }
 
     @After
@@ -137,4 +145,77 @@ class RoomR16SourceStateRepositoryTest {
         assertEquals("NETWORK", updated.availability.failure?.code)
         assertEquals(true, updated.availability.failure?.retryable)
     }
+
+    @Test
+    fun `playback options return only verified assets with their linked durable sources`() =
+        runBlocking {
+            val key = SourceKey(ProviderId("youtube"), SourceItemType.VIDEO, "video-1")
+            val recordingId = RecordingId("00000000-0000-0000-0000-000000000010")
+            val capturedAt = Instant.parse("2026-08-19T00:00:00Z")
+            ingestion.transaction {
+                persist(
+                    R16IngestionCommand(
+                        observation =
+                            R16SourceObservation(
+                                sourceKey = key,
+                                sourceKind = SourceKind.YOUTUBE,
+                                title = "Fixture",
+                                artistNames = listOf("Artist"),
+                                releaseTitle = null,
+                                durationMs = 180_000,
+                                version = RecordingVersion(VersionKind.ORIGINAL),
+                                explicitness = Explicitness.UNKNOWN,
+                                artwork = emptyList(),
+                                externalIdentifiers = emptySet(),
+                                originalUrl = "https://www.youtube.com/watch?v=video-1",
+                                asset =
+                                    R16ObservedAsset(
+                                        kind = MediaAssetKind.SHIPPY_DOWNLOAD,
+                                        location =
+                                            AssetLocation("content://downloads/shippy/video-1"),
+                                        locationType = "CONTENT_URI",
+                                        documentId = "video-1",
+                                        mediaStoreId = null,
+                                        normalizedPathToken = null,
+                                        downloadJobId = "job-1",
+                                        lastModifiedEpochMs = capturedAt.toEpochMilli(),
+                                        technical =
+                                            AudioTechnicalMetadata(
+                                                mimeType = "audio/mp4",
+                                                codec = "aac",
+                                                bitrateBps = 192_000,
+                                                sampleRateHz = 48_000,
+                                                channelCount = 2,
+                                                contentLength = 1_024,
+                                            ),
+                                        checksum = null,
+                                        fingerprintId = null,
+                                        verifiedAt = capturedAt,
+                                    ),
+                                capturedAt = capturedAt,
+                            ),
+                        recordingId = recordingId,
+                        newRecording =
+                            RecordingDraft(
+                                title = "Fixture",
+                                primaryArtist = "Artist",
+                                durationMs = 180_000,
+                                version = RecordingVersion(VersionKind.ORIGINAL),
+                            ),
+                        resolution = "NEW_RECORDING",
+                        identityEvidence = null,
+                        assetWriteMode = R16AssetWriteMode.REGISTER,
+                        exactManagedAssetId = null,
+                        reviewCandidateIds = emptySet(),
+                    )
+                )
+            }
+
+            val options = playbackSources.options(recordingId)
+
+            assertEquals(1, options.assets.size)
+            assertEquals(MediaAssetKind.SHIPPY_DOWNLOAD, options.assets.single().kind)
+            assertEquals("content://downloads/shippy/video-1", options.assets.single().location)
+            assertEquals(key, options.sources.single().source)
+        }
 }

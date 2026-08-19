@@ -26,9 +26,13 @@ data class PlaybackPreparationRequest(
     val tag: PlaybackRequestTag,
     val recordingId: RecordingId,
     val attempt: Int = 1,
+    val excludedStableKeys: Set<String> = emptySet(),
 ) {
     init {
         require(attempt > 0) { "Playback source preparation attempt must be positive" }
+        require(excludedStableKeys.none(String::isBlank)) {
+            "Excluded playback source key cannot be blank"
+        }
     }
 }
 

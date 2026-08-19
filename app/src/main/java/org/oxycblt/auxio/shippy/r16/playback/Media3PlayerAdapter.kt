@@ -32,13 +32,15 @@ import app.shippy.core.playback.RepeatMode
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 fun interface Media3ItemFactory {
     fun create(item: PreparedEngineItem): MediaItem
+
+    fun release() = Unit
 }
 
 internal data class R16MediaItemTag(val requestTag: PlaybackRequestTag)
@@ -116,9 +118,8 @@ class Media3PlayerAdapter(
     private val itemFactory: Media3ItemFactory,
     private val clock: PlaybackClock = SystemPlaybackClock,
 ) : PlayerEngine, Player.Listener {
-    private val mutableObservations =
-        MutableSharedFlow<PlayerObservation>(extraBufferCapacity = OBSERVATION_BUFFER_CAPACITY)
-    override val observations: Flow<PlayerObservation> = mutableObservations.asSharedFlow()
+    private val observationChannel = Channel<PlayerObservation>(Channel.UNLIMITED)
+    override val observations: Flow<PlayerObservation> = observationChannel.receiveAsFlow()
 
     private val playerLooper = player.applicationLooper
     private val playerHandler = Handler(playerLooper)
@@ -166,9 +167,14 @@ class Media3PlayerAdapter(
 
     override suspend fun release() {
         if (!released.compareAndSet(false, true)) return
-        onPlayer {
-            player.removeListener(this)
-            player.release()
+        try {
+            onPlayer {
+                player.removeListener(this)
+                player.release()
+            }
+        } finally {
+            itemFactory.release()
+            observationChannel.close()
         }
     }
 
@@ -178,13 +184,13 @@ class Media3PlayerAdapter(
             ?.tag
             ?.let { it as? R16MediaItemTag }
             ?.let { Media3TransactionProjector.committedObservation(it.requestTag, reason) }
-            ?.let(mutableObservations::tryEmit)
+            ?.let(observationChannel::trySend)
         publishPosition(discontinuity = true)
     }
 
     override fun onPlayerError(error: PlaybackException) {
         val tag = currentRequestTag() ?: return
-        mutableObservations.tryEmit(
+        observationChannel.trySend(
             PlayerObservation.Failed(
                 tag.generation,
                 tag.queueEntryId,
@@ -228,14 +234,14 @@ class Media3PlayerAdapter(
                     }
                 else -> CommittedEnginePhase.PAUSED
             }
-        mutableObservations.tryEmit(
+        observationChannel.trySend(
             PlayerObservation.PhaseChanged(tag.generation, tag.queueEntryId, phase)
         )
     }
 
     private fun publishPosition(discontinuity: Boolean) {
         val tag = currentRequestTag() ?: return
-        mutableObservations.tryEmit(
+        observationChannel.trySend(
             PlayerObservation.PositionChanged(
                 tag.generation,
                 tag.queueEntryId,
@@ -254,7 +260,11 @@ class Media3PlayerAdapter(
         (player.currentMediaItem?.localConfiguration?.tag as? R16MediaItemTag)?.requestTag
 
     private fun postToPlayer(block: () -> Unit) {
-        if (Looper.myLooper() == playerLooper) block() else playerHandler.post(block)
+        if (Looper.myLooper() == playerLooper) {
+            block()
+        } else {
+            check(playerHandler.post(block)) { "Media3 player looper rejected adapter work" }
+        }
     }
 
     private suspend fun onPlayer(block: () -> Unit) {
@@ -263,17 +273,21 @@ class Media3PlayerAdapter(
             return
         }
         suspendCancellableCoroutine { continuation ->
-            playerHandler.post {
-                if (!continuation.isActive) return@post
-                try {
-                    block()
-                    continuation.resume(Unit)
-                } catch (error: Throwable) {
-                    continuation.resumeWithException(error)
+            val accepted =
+                playerHandler.post {
+                    if (!continuation.isActive) return@post
+                    try {
+                        block()
+                        continuation.resume(Unit)
+                    } catch (error: Throwable) {
+                        continuation.resumeWithException(error)
+                    }
                 }
+            if (!accepted && continuation.isActive) {
+                continuation.resumeWithException(
+                    IllegalStateException("Media3 player looper rejected adapter work")
+                )
             }
         }
     }
 }
-
-private const val OBSERVATION_BUFFER_CAPACITY = 64

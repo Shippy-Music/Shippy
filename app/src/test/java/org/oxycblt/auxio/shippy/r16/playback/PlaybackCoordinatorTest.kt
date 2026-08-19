@@ -260,6 +260,60 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
+    fun `retryable engine failure refreshes the same occurrence only once`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val preparer = CountingSourcePreparer()
+        val coordinator = PlaybackCoordinator(this, engine, preparer)
+        val selected = entry(1, recordingId(1))
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(listOf(selected), selected.id))
+        val committed =
+            withTimeout(TEST_TIMEOUT_MS) {
+                coordinator.snapshots.first {
+                    it.committedQueueEntryId == selected.id && it.expectedEngineCommit == null
+                }
+            }
+        delay(20)
+        while (engine.transactions.tryReceive().isSuccess) {
+            // Discard the initial and bounded-window commits.
+        }
+
+        engine.emit(
+            PlayerObservation.Failed(
+                committed.generation,
+                selected.id,
+                app.shippy.core.playback.PlaybackError("EXPIRED_STREAM", retryable = true),
+            )
+        )
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first {
+                preparer.requests.size == 2 &&
+                    it.committedQueueEntryId == selected.id &&
+                    it.expectedEngineCommit == null
+            }
+        }
+        val requestsAfterRecovery = preparer.requests.size
+
+        engine.emit(
+            PlayerObservation.Failed(
+                committed.generation,
+                selected.id,
+                app.shippy.core.playback.PlaybackError("EXPIRED_STREAM", retryable = true),
+            )
+        )
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first {
+                it.phase is app.shippy.core.playback.PlaybackPhase.Failed
+            }
+        }
+        delay(20)
+
+        assertEquals(requestsAfterRecovery, preparer.requests.size)
+        assertEquals(selected.id, coordinator.snapshots.value.committedQueueEntryId)
+        coordinator.release()
+    }
+
+    @Test
     fun `continuous playing ticks finalize monotonic audible time`() = runBlocking {
         val engine = FakePlayerEngine(autoCommit = true)
         val clock = FakePlaybackClock(elapsedRealtimeMs = 1_000)

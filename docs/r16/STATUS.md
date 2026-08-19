@@ -319,13 +319,22 @@ avoid checklist theatre.
   engine callbacks cannot commit over newer intent.
 - The new narrow `PlayerEngine` and `PlaybackSourcePreparer` contracts contain no
   Media3 types. A `PlayerTransaction` with expected QueueEntryId and generation
-  exists before engine mutation, closing the R15 early-transition race. The first
-  engine window intentionally contains only the selected prepared occurrence;
-  bounded neighbor prefetch/expansion remains the next Phase 5 slice.
+  exists before engine mutation, closing the R15 early-transition race. The
+  engine projection now uses the selected occurrence plus a bounded deterministic
+  neighbor window; QueueEntryId is the Media3 identity and Media3 shuffle remains
+  disabled.
 - `PositionAnchor` now carries positive playback speed and advancing state while
   retaining a monotonic timestamp. Engine failures are accepted only for the
   pending/committed generation and occurrence; source/engine exceptions become
   typed retryable playback failures without changing Recording identity.
+- Source-neutral checkpoint/restore, occurrence-scoped listening sessions,
+  bounded trace retention, long-queue proof, and deterministic randomized
+  coordinator runs are implemented behind the inactive R16 boundary.
+- Playback materialization now resolves verified managed assets and provider
+  sources through the pure ranking policy, stores expiring locators only in a
+  bounded process-local registry, projects cache/header keys without persisting
+  private URLs, and permits one generation-safe retry/fallback per occurrence.
+  Media3 observations are delivered through a non-lossy callback channel.
 
 ## Current blockers
 
@@ -338,11 +347,10 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Continue Phase 5 behind the inactive R16 boundary: add the bounded neighbor
-   engine-window planner, source fallback/recovery transitions, source-neutral
-   checkpoint/restore, listening-session integration, trace events, and long
-   deterministic/randomized fake-engine runs. Do not project to Media3 or switch
-   legacy playback authority until the pure state machine exit gate is proven.
+1. Add the process-scoped R16 playback service/runtime and canonical
+   command/snapshot bridge behind an explicit inactive cutover boundary. Preserve
+   the proven service, audio-focus, and MediaSession infrastructure; do not create
+   a second player or switch R15.3 authority before the service/system gates pass.
 
 ## Verification level
 
@@ -353,7 +361,7 @@ playback identity/transition suites pass (11 tests). The Last.fm suite passes
 presentation suites (10 tests). The bounded pager projection suite passes (4
 tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
-focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (23
+focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (26
 tests plus its forbidden-import gate). No R16 code has been instrumented,
 device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes 6
 schema/DAO tests, including duplicate playlist occurrences, orphan rejection,
@@ -400,6 +408,9 @@ that preserve Recording identity add 1 passing test (35 total data-module tests)
 Bounded transient collection, complete durable-reference protection, derived-row
 cleanup, runtime protection, and the shared 60-day default add 2 passing tests
 (37 total data-module tests).
+Transactional playback source options add one passing test covering verified
+assets, linked providers, and rejection of unavailable or unverified assets (38
+total data-module tests).
 `:shippy-sources:check` passes its forbidden-import gate and 10 focused
 source, managed-asset, ingestion, and enrichment tests. The app compiles with the
 inactive Musikr/data bridge; its exact observation-mapping test and
@@ -407,12 +418,12 @@ interrupted/resumed/changed-snapshot
 M12 test pass. The provider observation adapter adds 3 passing tests for stable
 repeated source keys, shared YouTube/YouTube Music video identity, locator/artwork
 sanitization, scoped partial failure, and cancellation propagation.
-The inactive Phase 5 coordinator adds 3 passing fake-engine tests for inline
-commit ordering, duplicate-Recording occurrence identity, stale-generation
-commit rejection, and deterministic shuffle preservation. Its reducer adds one
-focused selection/failure-scoping test. The first window is current-only and is
-not yet the required bounded neighbor window or a Media3 integration. Root
-`spotlessCheck` also passes. M12 and provider discovery have explicit callable
-seams but are not invoked by production or recorded complete in bootstrap state;
-none of this work is instrumented, physical-device tested, or
-performance-profiled.
+The inactive Phase 5 path now covers the coordinator, bounded engine window,
+checkpoint/restore, listening, trace, QueueEntryId Media3 projection, expiring
+locator materialization, request headers/cache keys, and one bounded source
+fallback. The current full cached gate passes `spotlessCheck`, 26 core tests, 10
+source tests, 38 data tests, 541 app tests (1 skipped), `:app:lintDebug`, and
+`:app:assembleDebug`. The R16 runtime still has no production authority; M12 and
+provider discovery have explicit callable seams but are not invoked by production
+or recorded complete in bootstrap state. None of this work is instrumented,
+physical-device tested, or performance-profiled.

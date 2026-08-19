@@ -78,6 +78,7 @@ class PlaybackCoordinator(
     private var preparationJob: Job? = null
     private var windowPreparationJob: Job? = null
     private var engineTransactionJob: Job? = null
+    private var engineRecoveryTag: PlaybackRequestTag? = null
     private var listeningTickJob: Job? = null
     private var listeningState = ListeningTrackerState()
     private val released = AtomicBoolean(false)
@@ -315,6 +316,12 @@ class PlaybackCoordinator(
         val before = mutableSnapshot.value
         val reduction = playbackReducer.reduce(before, event)
         mutableSnapshot.value = reduction.snapshot
+        engineRecoveryTag =
+            engineRecoveryTag?.takeIf { recovery ->
+                recovery.generation == reduction.snapshot.generation &&
+                    recovery.queueRevision == reduction.snapshot.queueRevision &&
+                    recovery.queueEntryId == reduction.snapshot.queue.currentQueueEntryId
+            }
         recordTrace(
             PlaybackTraceKind.CORE_EVENT,
             event.traceName(),
@@ -336,7 +343,10 @@ class PlaybackCoordinator(
         }
     }
 
-    private fun prepareSource(tag: PlaybackRequestTag) {
+    private fun prepareSource(
+        tag: PlaybackRequestTag,
+        excludedStableKeys: Set<String> = emptySet(),
+    ) {
         preparationJob?.cancel()
         windowPreparationJob?.cancel()
         val entry =
@@ -352,7 +362,12 @@ class PlaybackCoordinator(
                     result =
                         try {
                             sourcePreparer.prepare(
-                                PlaybackPreparationRequest(tag, entry.recordingId, attempt)
+                                PlaybackPreparationRequest(
+                                    tag,
+                                    entry.recordingId,
+                                    attempt,
+                                    excludedStableKeys,
+                                )
                             )
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -480,6 +495,10 @@ class PlaybackCoordinator(
 
     private fun handleEngineObservation(observation: PlayerObservation) {
         val before = mutableSnapshot.value
+        if (observation is PlayerObservation.Failed && recoverEngineSource(observation, before)) {
+            updateListeningSession(observation, before, mutableSnapshot.value)
+            return
+        }
         val coreEvent =
             when (observation) {
                 is PlayerObservation.CurrentItemCommitted ->
@@ -509,6 +528,42 @@ class PlaybackCoordinator(
             }
         apply(coreEvent)
         updateListeningSession(observation, before, mutableSnapshot.value)
+    }
+
+    private fun recoverEngineSource(
+        observation: PlayerObservation.Failed,
+        snapshot: PlaybackSnapshot,
+    ): Boolean {
+        if (!observation.error.retryable || snapshot.generation != observation.generation) {
+            return false
+        }
+        val pending =
+            snapshot.expectedEngineCommit?.takeIf { it.queueEntryId == observation.queueEntryId }
+        val tag =
+            pending
+                ?: if (snapshot.committedQueueEntryId == observation.queueEntryId) {
+                    PlaybackRequestTag(
+                        snapshot.generation,
+                        snapshot.queueRevision,
+                        observation.queueEntryId,
+                    )
+                } else {
+                    return false
+                }
+        if (engineRecoveryTag == tag) return false
+        apply(PlaybackCoreEvent.SourceRecoveryStarted(tag, attempt = 1, observation.error))
+        if (mutableSnapshot.value.phase !is app.shippy.core.playback.PlaybackPhase.Recovering) {
+            return false
+        }
+        engineRecoveryTag = tag
+        val failedSource = snapshot.resolvedSources[observation.queueEntryId]
+        prepareSource(
+            tag,
+            excludedStableKeys =
+                if (failedSource?.mediaAssetId != null) setOf(failedSource.stableKey)
+                else emptySet(),
+        )
+        return true
     }
 
     private fun updateListeningSession(

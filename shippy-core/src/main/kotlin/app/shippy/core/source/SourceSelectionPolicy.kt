@@ -101,8 +101,8 @@ class SourceSelectionPolicy {
         if (crewRequired && kind == ResolutionCandidateKind.CREW_REQUIRED_ASSET) return 1
         return when (kind) {
             ResolutionCandidateKind.CREW_REQUIRED_ASSET -> 2
-            ResolutionCandidateKind.PERMANENT_DOWNLOAD -> 3
-            ResolutionCandidateKind.LINKED_LOCAL_ASSET -> 4
+            ResolutionCandidateKind.PERMANENT_DOWNLOAD,
+            ResolutionCandidateKind.LINKED_LOCAL_ASSET -> 3
             ResolutionCandidateKind.COMPLETE_CACHE -> 5
             ResolutionCandidateKind.PROVIDER -> 6
             ResolutionCandidateKind.CREW_PEER -> 7
