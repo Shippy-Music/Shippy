@@ -17,14 +17,19 @@
  */
 package org.oxycblt.auxio.home.list
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.ViewGroup
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isInvisible
+import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.ItemTouchHelper
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentHomeListBinding
@@ -46,6 +51,7 @@ import org.oxycblt.auxio.shippy.library.LibraryCollectionsState
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
 import org.oxycblt.auxio.shippy.library.collectionRows
 import org.oxycblt.auxio.shippy.library.shouldShowOnboarding
+import org.oxycblt.auxio.shippy.library.ui.LibraryCollectionActionsSheet
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
@@ -68,9 +74,34 @@ class PlaylistListFragment :
     override val musicModel: MusicViewModel by activityViewModels()
     override val playbackModel: PlaybackViewModel by activityViewModels()
     private val collectionsModel: LibraryCollectionsViewModel by viewModels()
-    private val collectionAdapter = UnifiedLibraryCollectionAdapter { row ->
-        homeModel.openShippyCollection(row.id)
-    }
+    private val collectionAdapter =
+        UnifiedLibraryCollectionAdapter(
+            onClick = { row -> homeModel.openShippyCollection(row.id) },
+            onLongClick = { row ->
+                LibraryCollectionActionsSheet.show(
+                    parentFragmentManager,
+                    collectionId = row.id.value,
+                    title =
+                        when (row) {
+                            is LibraryCollectionListRow.System ->
+                                getString(
+                                    when (row.collection.kind) {
+                                        org.oxycblt.auxio.shippy.domain.SystemCollectionKind
+                                            .LIKED -> R.string.lbl_liked
+                                        org.oxycblt.auxio.shippy.domain.SystemCollectionKind
+                                            .DOWNLOADS -> R.string.lbl_downloads
+                                        org.oxycblt.auxio.shippy.domain.SystemCollectionKind
+                                            .LOCAL -> R.string.lbl_local
+                                    }
+                                )
+                            is LibraryCollectionListRow.Playlist -> row.playlist.displayName
+                        },
+                    isSystem = row is LibraryCollectionListRow.System,
+                    isPinned = row.isPinned,
+                    artwork = (row as? LibraryCollectionListRow.Playlist)?.artwork,
+                )
+            },
+        )
     private val onboardingAdapter = LibraryOnboardingAdapter {
         homeModel.startChooseMusicLocations()
     }
@@ -96,6 +127,25 @@ class PlaylistListFragment :
     private var devicePlaylistCount = 0
     private var isLocalIndexing = false
     private var collectionState = LibraryCollectionsState()
+    private var orderEditing = false
+    private var pendingArtworkCollectionId: String? = null
+    private var orderBackCallback: OnBackPressedCallback? = null
+
+    private val artworkPicker =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            val collectionId = pendingArtworkCollectionId
+            pendingArtworkCollectionId = null
+            if (uri == null || collectionId == null) return@registerForActivityResult
+            runCatching {
+                requireContext()
+                    .contentResolver
+                    .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            collectionsModel.setPlaylistArtwork(
+                org.oxycblt.auxio.shippy.domain.LibraryCollectionId(collectionId),
+                uri.toString(),
+            )
+        }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentHomeListBinding.inflate(inflater)
@@ -109,15 +159,46 @@ class PlaylistListFragment :
             popupProvider = this@PlaylistListFragment
             listener = this@PlaylistListFragment
         }
-        playlistDragHelper =
-            ItemTouchHelper(
-                    ShippyPlaylistDragCallback(collectionAdapter) { reorderedRows ->
-                        if (!collectionsModel.reorderCollections(reorderedRows)) {
-                            collectionAdapter.rejectPending(currentCollectionRows())
-                        }
+        binding.homeCollectionEditStart.setOnClickListener { startOrderEditing() }
+        binding.homeCollectionEditCancel.setOnClickListener { cancelOrderEditing() }
+        binding.homeCollectionEditDone.setOnClickListener { finishOrderEditing() }
+        parentFragmentManager.setFragmentResultListener(
+            LibraryCollectionActionsSheet.RESULT,
+            viewLifecycleOwner,
+        ) { _, result ->
+            val collectionId =
+                result.getString(LibraryCollectionActionsSheet.KEY_COLLECTION_ID)
+                    ?: return@setFragmentResultListener
+            val row =
+                currentCollectionRows().firstOrNull { it.id.value == collectionId }
+                    ?: return@setFragmentResultListener
+            when (result.getInt(LibraryCollectionActionsSheet.KEY_ACTION)) {
+                R.id.action_library_edit_order -> startOrderEditing()
+                R.id.action_library_pin -> collectionsModel.setPinned(row.id, !row.isPinned)
+                R.id.action_library_rename ->
+                    (row as? LibraryCollectionListRow.Playlist)?.let {
+                        showRenameDialog(it.id.value, it.playlist.displayName)
                     }
-                )
-                .also { it.attachToRecyclerView(binding.homeRecycler) }
+                R.id.action_library_artwork -> {
+                    if (row is LibraryCollectionListRow.Playlist) {
+                        pendingArtworkCollectionId = row.id.value
+                        artworkPicker.launch(arrayOf("image/*"))
+                    }
+                }
+                R.id.action_library_delete ->
+                    (row as? LibraryCollectionListRow.Playlist)?.let {
+                        showDeleteDialog(it.id.value, it.playlist.displayName)
+                    }
+            }
+        }
+        orderBackCallback =
+            object : OnBackPressedCallback(false) {
+                    override fun handleOnBackPressed() = cancelOrderEditing()
+                }
+                .also {
+                    requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it)
+                }
+        playlistDragHelper = ItemTouchHelper(ShippyPlaylistDragCallback(collectionAdapter) {})
 
         binding.homeNoMusicPlaceholder.apply {
             setImageResource(R.drawable.ic_playlist_48)
@@ -142,6 +223,7 @@ class PlaylistListFragment :
         super.onDestroyBinding(binding)
         playlistDragHelper?.attachToRecyclerView(null)
         playlistDragHelper = null
+        orderEditing = false
         binding.homeRecycler.apply {
             adapter = null
             popupProvider = null
@@ -206,7 +288,8 @@ class PlaylistListFragment :
     }
 
     private fun renderSystemCollections() {
-        collectionAdapter.update(currentCollectionRows())
+        val rows = currentCollectionRows()
+        collectionAdapter.update(rows)
         onboardingAdapter.setShown(
             collectionState.shouldShowOnboarding(
                 localSongCount = localSongCount,
@@ -215,12 +298,79 @@ class PlaylistListFragment :
             )
         )
         val binding = requireBinding()
+        binding.homeCollectionEditStart.isVisible = !orderEditing && rows.isNotEmpty()
         binding.homeRecycler.isInvisible = false
         binding.homeNoMusic.isInvisible = true
     }
 
     private fun currentCollectionRows(): List<LibraryCollectionListRow> =
         collectionState.collectionRows(localSongCount, isLocalIndexing)
+
+    private fun startOrderEditing() {
+        if (orderEditing) return
+        orderEditing = true
+        collectionAdapter.setEditMode(true)
+        requireBinding().homeCollectionEditStart.isVisible = false
+        requireBinding().homeCollectionEditActions.isVisible = true
+        orderBackCallback?.isEnabled = true
+        playlistDragHelper?.attachToRecyclerView(requireBinding().homeRecycler)
+    }
+
+    private fun cancelOrderEditing() {
+        if (!orderEditing) return
+        collectionAdapter.cancelEdit()
+        orderEditing = false
+        orderBackCallback?.isEnabled = false
+        playlistDragHelper?.attachToRecyclerView(null)
+        requireBinding().homeCollectionEditStart.isVisible = currentCollectionRows().isNotEmpty()
+        requireBinding().homeCollectionEditActions.isVisible = false
+    }
+
+    private fun finishOrderEditing() {
+        if (!orderEditing) return
+        val reorderedRows = collectionAdapter.finishEdit()
+        orderEditing = false
+        orderBackCallback?.isEnabled = false
+        playlistDragHelper?.attachToRecyclerView(null)
+        requireBinding().homeCollectionEditStart.isVisible = currentCollectionRows().isNotEmpty()
+        requireBinding().homeCollectionEditActions.isVisible = false
+        if (reorderedRows != null && !collectionsModel.reorderCollections(reorderedRows)) {
+            collectionAdapter.rejectPending(currentCollectionRows())
+        }
+    }
+
+    private fun showRenameDialog(collectionId: String, currentName: String) {
+        val input =
+            android.widget.EditText(requireContext()).apply {
+                setText(currentName)
+                selectAll()
+                setSingleLine()
+            }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.lbl_rename_playlist)
+            .setView(input)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.lbl_rename) { _, _ ->
+                collectionsModel.renamePlaylist(
+                    org.oxycblt.auxio.shippy.domain.LibraryCollectionId(collectionId),
+                    input.text.toString(),
+                )
+            }
+            .show()
+    }
+
+    private fun showDeleteDialog(collectionId: String, name: String) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.lbl_delete)
+            .setMessage(getString(R.string.lng_delete_shippy_playlist, name))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.lbl_delete) { _, _ ->
+                collectionsModel.deletePlaylist(
+                    org.oxycblt.auxio.shippy.domain.LibraryCollectionId(collectionId)
+                )
+            }
+            .show()
+    }
 
     private fun updateSelection(selection: List<Music>) {
         playlistAdapter.setSelected(selection.filterIsInstanceTo(mutableSetOf()))

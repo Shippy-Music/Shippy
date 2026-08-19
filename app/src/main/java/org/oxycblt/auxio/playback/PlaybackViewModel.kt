@@ -310,12 +310,12 @@ constructor(
     }
 
     private fun updateDisplayItem(item: PlaybackDisplayItem?) {
-        val previousTrackId = _displayItem.value?.queueItem?.track?.id
+        val previousQueueItemId = _displayItem.value?.queueItem?.id
         _displayItem.value = item
         if (item == null) {
             lyricsJob?.cancel()
             _lyrics.value = PlaybackLyricsState.None
-        } else if (item.queueItem.track.id != previousTrackId) {
+        } else if (item.queueItem.id != previousQueueItemId) {
             updateLyrics(item, force = false)
         }
     }
@@ -327,6 +327,7 @@ constructor(
         }
         lyricsJob?.cancel()
         _lyrics.value = PlaybackLyricsState.Loading(track.id)
+        val queueItemId = item.queueItem.id
         lyricsJob =
             viewModelScope.launch {
                 val result =
@@ -339,7 +340,9 @@ constructor(
                             durationMs = track.durationMs,
                         )
                     )
-                if (_displayItem.value?.queueItem?.track?.id != track.id) return@launch
+                if (!isCurrentQueueItem(_displayItem.value?.queueItem?.id, queueItemId)) {
+                    return@launch
+                }
                 _lyrics.value =
                     when (result) {
                         is LyricsLookupResult.Found ->
@@ -882,6 +885,9 @@ sealed interface PlaybackDecision {
     /** Navigate to a dialog to determine which [Genre] a [Song] should be played from. */
     class PlayFromGenre(override val song: Song) : PlaybackDecision
 }
+
+internal fun isCurrentQueueItem(currentId: QueueItemId?, expectedId: QueueItemId): Boolean =
+    currentId == expectedId
 
 sealed interface PlaybackLyricsState {
     data object None : PlaybackLyricsState

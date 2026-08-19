@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_batch_remove_playlist"
+        android:icon="@drawable/ic_delete_24"
+        android:title="@string/lbl_remove_from_playlist" />
+    <item
+        android:id="@+id/action_batch_remove_liked"
+        android:icon="@drawable/ic_delete_24"
+        android:title="@string/lbl_remove_from_liked" />
+    <item
+        android:id="@+id/action_batch_remove_downloads"
+        android:icon="@drawable/ic_delete_24"
+        android:title="@string/lbl_remove_downloads" />
+    <item
+        android:id="@+id/action_batch_delete_local"
+        android:icon="@drawable/ic_delete_24"
+        android:title="@string/lbl_delete_from_device" />
+</menu>

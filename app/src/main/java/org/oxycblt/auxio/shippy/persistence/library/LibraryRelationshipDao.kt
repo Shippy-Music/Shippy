@@ -189,6 +189,11 @@ internal abstract class LibraryRelationshipDao {
     }
 
     @Transaction
+    open suspend fun clearLiked(trackIds: List<String>) {
+        trackIds.forEach { trackId -> setLiked(trackId, false) }
+    }
+
+    @Transaction
     open suspend fun setDownloaded(trackId: String, downloaded: Boolean) {
         ensureRelationship(LibraryRelationshipEntity(trackId))
         updateDownloaded(trackId, downloaded)

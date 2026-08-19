@@ -101,12 +101,19 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <TextView
+            <LinearLayout
+                android:id="@+id/home_continue_listening"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_large"
-                android:text="@string/lbl_continue_listening"
-                android:textAppearance="?attr/textAppearanceTitleLarge" />
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_continue_listening"
+                    android:textAppearance="?attr/textAppearanceTitleLarge" />
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/home_current"
@@ -162,10 +169,13 @@
 
                     </LinearLayout>
 
-                    <ImageView
+                    <ImageButton
+                        android:id="@+id/home_current_play_pause"
                         android:layout_width="@dimen/size_touchable_small"
                         android:layout_height="@dimen/size_touchable_small"
+                        android:background="?attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@null"
+                        android:padding="@dimen/spacing_small"
                         android:src="@drawable/ic_play_24"
                         app:tint="?attr/colorOnSurface" />
 
@@ -173,14 +183,17 @@
 
             </com.google.android.material.card.MaterialCardView>
 
-            <TextView
+                <TextView
                 android:id="@+id/home_no_current"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_small"
                 android:text="@string/lng_no_current_music"
                 android:textAppearance="?attr/textAppearanceBodyLarge"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone" />
+
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/home_recently_played"
@@ -199,37 +212,11 @@
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/home_recently_played_tracks"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="220dp"
                     android:layout_marginTop="@dimen/spacing_small"
                     android:nestedScrollingEnabled="false" />
 
             </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_large"
-                android:text="@string/lbl_your_music"
-                android:textAppearance="?attr/textAppearanceTitleLarge" />
-
-            <TextView
-                android:id="@+id/home_library_summary"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_tiny"
-                android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                tools:text="120 songs · 14 albums · 30 artists" />
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/home_library_shortcuts"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_small"
-                android:clipToPadding="false"
-                android:nestedScrollingEnabled="false"
-                tools:itemCount="4"
-                tools:listitem="@layout/item_library_collection" />
 
             <LinearLayout
                 android:id="@+id/home_lastfm"
@@ -242,7 +229,7 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/lbl_lastfm_from_you"
+                    android:text="@string/lbl_lastfm_recommended"
                     android:textAppearance="?attr/textAppearanceTitleLarge" />
 
                 <TextView
@@ -264,34 +251,21 @@
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/home_lastfm_tracks"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="220dp"
                     android:layout_marginTop="@dimen/spacing_small"
                     android:nestedScrollingEnabled="false" />
 
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/home_recent_downloads"
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/home_library_shortcuts"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_large"
-                android:orientation="vertical"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/lbl_recent_downloads"
-                    android:textAppearance="?attr/textAppearanceTitleLarge" />
-
-                <androidx.recyclerview.widget.RecyclerView
-                    android:id="@+id/home_recent_downloads_tracks"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="@dimen/spacing_small"
-                    android:nestedScrollingEnabled="false" />
-
-            </LinearLayout>
+                android:layout_marginTop="@dimen/spacing_small"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                tools:itemCount="4"
+                tools:listitem="@layout/item_library_collection" />
 
         </LinearLayout>
 

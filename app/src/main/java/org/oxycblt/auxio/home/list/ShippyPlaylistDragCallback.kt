@@ -62,5 +62,5 @@ internal class ShippyPlaylistDragCallback(
         if (viewHolder.bindingAdapter === adapter) adapter.finishDrag()?.let(onDragFinished)
     }
 
-    override fun isLongPressDragEnabled() = true
+    override fun isLongPressDragEnabled() = false
 }

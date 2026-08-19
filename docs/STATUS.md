@@ -1,12 +1,23 @@
 # Shippy Live Status
 
-**Updated:** 2026-08-02  
-**Stage:** Beta-readiness implementation; physical acceptance pending  
+**Updated:** 2026-08-19
+**Stage:** Stabilization implementation complete; automated gate passed; physical acceptance pending
 **Canonical audit:** `Shippy_Beta_Readiness_Audit_2026-08-02.md`  
 **Traceability:** `BETA_READINESS_IMPLEMENTATION.md`
+**Current stabilization spec:** `STABILIZATION_SPEC_2026-08-18.md`
 
 Read this file after `PRODUCT_SPEC.md` whenever work resumes. This status is
 evidence-based: source presence is not counted as verified device behavior.
+
+## Reopened from current device feedback
+
+The 2026-08-18 device report reopened playback/metadata identity under playlist
+Play and Shuffle and identified concrete gaps in Continue Listening, Last.fm
+accepted-scrobble handling, Library/playlist workflows, Home density, save
+destinations, lyrics stability, and light-theme icon tint. The bounded
+implementation is now present and the automated gate is green; physical
+acceptance remains open. The acceptance plan is in
+`STABILIZATION_SPEC_2026-08-18.md`.
 
 ## Implemented in the current pass
 
@@ -44,20 +55,48 @@ evidence-based: source presence is not counted as verified device behavior.
   after Media3 commits the actual audio item. Queue order and current index are
   projected atomically, and provider look-ahead follows shuffled traversal rather
   than physical storage order.
+- The stabilization pass makes `QueueItemId` the playback/UI identity and waits
+  for the targeted Media3 item before publishing a new-playback acknowledgement.
+  Debug builds log the committed media ID, queue occurrence, track ID, index,
+  and shuffle state for physical verification.
+- Continue Listening is current-item-first, hides completely without a current
+  item, uses compact horizontal recent/recommendation rows, deduplicates recent
+  tracks, and removes the Home Recent Downloads block.
+- Last.fm scrobbling now parses accepted versus ignored entries, persists a
+  deterministic bounded outbox, retries on network recovery, exposes delivery
+  status, and provides one daily cached/refreshable similar-track row capped at
+  eight items with artwork fallback.
+- Library collection and track workflows now use DiffUtil, explicit playlist
+  order editing, collection action sheets, sort sheets, selection-aware batch
+  actions, and transactional liked/playlist mutations. System collections expose
+  only pin/unpin actions.
+- Save destinations use a guarded bottom sheet keyed by `QueueItemId`. Lyrics
+  preview height is fixed at 304dp in the tall layout, and artwork tone styling
+  uses a bounded LRU cache with a contrast fallback.
+- Home/library strings, light-theme icon tint, and the new playback/library
+  surfaces are formatter-checked and lint-clean for errors.
+- Final review made bulk local deletion iterative and performs one rescan after
+  the batch, avoiding deep recursion and repeated full-library rescans. The
+  existing Crew reconnect test now waits for its asynchronous terminal state,
+  removing a suite-order timing race without changing Crew runtime behavior.
 
 ## Verification state
 
 - Kotlin source and Android/JVM test-source compilation: passed.
-- Focused Crew/cache/provider/profile/recovery and seeded adversarial transport
-  tests: passed.
-- Full non-device gate passed after the final integration edits:
-  `spotlessCheck`, 497 app JVM tests (496 passed, one intentional opt-in live
-  smoke skipped), Musikr JVM tests, Android lint (zero errors), and
-  `compileDebugAndroidTestKotlin`.
-- Focused R15.3 playback regressions passed: 15 tests across raw shuffled
-  identity, queue moves, queue reconciliation, and provider look-ahead (zero
-  failures). Physical reproduction
-  of the reported Liked-playlist mismatch remains pending on the user's device.
+- Focused playback, library, and Last.fm tests: passed.
+- Final non-device gate passed: `spotlessCheck`, `:app:testDebugUnitTest`
+  (507 tests, 0 failures, 1 skipped), and `:app:lintDebug` (0 errors).
+- `:app:assembleDebug` passed. Current debug artifact:
+  `artifacts/Shippy-Alpha-R15.3-Stabilized-20260819.apk` (61,707,279 bytes;
+  SHA-256
+  `768B3DE16C8E17A2CBE580B9DD5CF80BB87A31CFD334F858902DB321C038A0D8`).
+  APK Signature Scheme v2 verification passed, and its debug certificate digest
+  matches the prior R15.3 artifact, so it updates that installed test app in
+  place.
+- `adb devices` currently reports no attached device, so playback sequence,
+  Last.fm delivery against a real account, light/dark theme inspection, 20
+  transition `gfxinfo` sampling, and the 1,000-track performance check remain
+  unverified.
 - Physical two/three-phone, Android 7-16, route-transition, real provider,
   large-file, process-death, and release-install behavior: not yet verified.
 - Accessibility remains explicitly deferred to the dedicated release-hardening
@@ -74,13 +113,14 @@ The R15.3 artifact is a debug-signed alpha package
 (`org.oxycblt.auxio.debug`, version code 86), not a production-signed beta. Do
 not label it beta-complete until the device matrix in
 `DEVICE_TEST_HANDOFF.md` is recorded and passes. Artifact:
-`Shippy-Alpha-R15.3-20260802.apk` (61,694,637 bytes; SHA-256
-`3063BACDE9EE7E107F3A3BE5FB6CF8709D843D24995CA88E96C9C9314BEA83F4`).
+`Shippy-Alpha-R15.3-Stabilized-20260819.apk` (61,707,279 bytes; SHA-256
+`768B3DE16C8E17A2CBE580B9DD5CF80BB87A31CFD334F858902DB321C038A0D8`).
 
 ## Next gate
 
-Install R15.3 and first reproduce the exact Liked/playlist Play, Shuffle, Next,
-Previous, and shuffle-toggle matrix. Then run the wider physical acceptance
-matrix. Any device failure reopens
+Install the current debug artifact and first reproduce the exact Liked/playlist
+Play, Shuffle, Next, Previous, and shuffle-toggle matrix. Then run the wider
+physical acceptance matrix, including Last.fm, themes, lyrics, and performance.
+Any device failure reopens
 the relevant gap; percentages are intentionally omitted because they previously
 obscured missing vertical evidence.

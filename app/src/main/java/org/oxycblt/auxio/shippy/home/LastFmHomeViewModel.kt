@@ -23,15 +23,25 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import org.oxycblt.auxio.shippy.lastfm.LastFmCredentialRepository
 import org.oxycblt.auxio.shippy.lastfm.LastFmOverview
 import org.oxycblt.auxio.shippy.lastfm.LastFmOverviewCache
 import org.oxycblt.auxio.shippy.lastfm.LastFmOverviewClient
 import org.oxycblt.auxio.shippy.lastfm.LastFmOverviewResult
+import org.oxycblt.auxio.shippy.provider.MusicProvider
+import org.oxycblt.auxio.shippy.provider.ProviderCapability
+import org.oxycblt.auxio.shippy.provider.ProviderRegistry
+import org.oxycblt.auxio.shippy.provider.ProviderResult
+import org.oxycblt.auxio.shippy.provider.ProviderSettings
 
 @HiltViewModel
 class LastFmHomeViewModel
@@ -40,6 +50,8 @@ constructor(
     private val credentials: LastFmCredentialRepository,
     private val client: LastFmOverviewClient,
     private val cache: LastFmOverviewCache,
+    private val providers: ProviderRegistry,
+    private val providerSettings: ProviderSettings,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow<LastFmHomeState>(LastFmHomeState.Loading)
     val state: StateFlow<LastFmHomeState> = mutableState.asStateFlow()
@@ -87,12 +99,24 @@ constructor(
 
                 when (val result = client.load(auth)) {
                     is LastFmOverviewResult.Success -> {
+                        val freshOverview = enrichRecommendationArtwork(result.overview)
+                        val cachedRecommendations = cached?.recommendations.orEmpty()
+                        val recommendationsStale =
+                            freshOverview.recommendations.isEmpty() &&
+                                cachedRecommendations.isNotEmpty()
+                        val overview =
+                            if (recommendationsStale) {
+                                freshOverview.copy(recommendations = cachedRecommendations)
+                            } else {
+                                freshOverview
+                            }
                         try {
-                            cache.save(result.overview)
+                            cache.save(overview)
                         } catch (error: Exception) {
                             if (error is CancellationException) throw error
                         }
-                        mutableState.value = LastFmHomeState.Content(result.overview, stale = false)
+                        mutableState.value =
+                            LastFmHomeState.Content(overview, stale = recommendationsStale)
                     }
                     is LastFmOverviewResult.Failure -> {
                         if (cached == null) mutableState.value = LastFmHomeState.Error
@@ -100,6 +124,63 @@ constructor(
                 }
             }
     }
+
+    private suspend fun enrichRecommendationArtwork(overview: LastFmOverview): LastFmOverview {
+        val searchable = providers.supporting(ProviderCapability.SEARCH)
+        val byId = searchable.associateBy { it.descriptor.id }
+        val provider =
+            providerSettings.selection(byId.keys).priority.firstNotNullOfOrNull(byId::get)
+                ?: return overview
+        if (overview.recommendations.none { it.artworkUrl == null }) return overview
+        val gate = Semaphore(2)
+        val recommendations = coroutineScope {
+            overview.recommendations
+                .map { recommendation ->
+                    async {
+                        if (recommendation.artworkUrl != null) return@async recommendation
+                        gate.withPermit {
+                            providerArtwork(provider, recommendation)?.let {
+                                recommendation.copy(artworkUrl = it)
+                            } ?: recommendation
+                        }
+                    }
+                }
+                .awaitAll()
+        }
+        return overview.copy(recommendations = recommendations)
+    }
+
+    private suspend fun providerArtwork(
+        provider: MusicProvider,
+        recommendation: org.oxycblt.auxio.shippy.lastfm.LastFmOverviewTrack,
+    ): String? {
+        val result =
+            try {
+                provider.search("${recommendation.artist} ${recommendation.title}")
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                return null
+            }
+        val tracks =
+            when (result) {
+                is ProviderResult.Success<*> ->
+                    (result.value as? org.oxycblt.auxio.shippy.provider.SearchPage)
+                        ?.tracks
+                        .orEmpty()
+                is ProviderResult.Failure -> emptyList()
+            }
+        val artist = recommendation.artist.normalized()
+        val title = recommendation.title.normalized()
+        return tracks
+            .firstOrNull {
+                it.title.normalized() == title &&
+                    it.artists.any { name -> name.normalized() == artist }
+            }
+            ?.artwork
+            ?.takeIf(String::isNotBlank)
+    }
+
+    private fun String.normalized() = trim().lowercase().replace(Regex("\\s+"), " ")
 }
 
 sealed interface LastFmHomeState {

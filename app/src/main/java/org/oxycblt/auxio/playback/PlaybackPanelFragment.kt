@@ -35,6 +35,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.R as MR
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -57,6 +58,9 @@ import org.oxycblt.auxio.shippy.crew.reaction.ActiveCrewReaction
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntime
 import org.oxycblt.auxio.shippy.crew.runtime.ActiveCrewRuntimeState
 import org.oxycblt.auxio.shippy.crew.settings.CrewSettings
+import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleStatus
+import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleStatusKind
+import org.oxycblt.auxio.shippy.lastfm.LastFmScrobbleTracker
 import org.oxycblt.auxio.shippy.lyrics.PlainLyrics
 import org.oxycblt.auxio.shippy.lyrics.SyncedLyrics
 import org.oxycblt.auxio.shippy.playback.timer.SleepTimerController
@@ -65,6 +69,7 @@ import org.oxycblt.auxio.shippy.provider.ui.ProviderTrackActionsSheet
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.dampen
+import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.recycler
 import org.oxycblt.auxio.util.smoothScrollByPageTo
 import org.oxycblt.auxio.util.systemBarInsetsCompat
@@ -85,9 +90,13 @@ class PlaybackPanelFragment :
     Toolbar.OnMenuItemClickListener,
     StyledSeekBar.Listener,
     StepperOverlay.Listener {
+    private val artworkToneExtractor = ArtworkToneExtractor()
+    private var toneSource: android.graphics.drawable.Drawable? = null
+    private var toneApplied = false
     @Inject lateinit var activeCrewRuntime: ActiveCrewRuntime
     @Inject lateinit var crewSettings: CrewSettings
     @Inject lateinit var sleepTimerController: SleepTimerController
+    @Inject lateinit var lastFmScrobbleTracker: LastFmScrobbleTracker
     private val coverPagerAdapter = CoverPagerAdapter(this)
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
@@ -215,6 +224,24 @@ class PlaybackPanelFragment :
         binding.playbackSleepTimer?.setOnClickListener { showSleepTimerDialog() }
         binding.playbackQueue.setOnClickListener { playbackModel.openQueue() }
 
+        parentFragmentManager.setFragmentResultListener(
+            SavedDestinationsSheet.RESULT,
+            viewLifecycleOwner,
+        ) { _, result ->
+            val expectedId = result.getString("queue_item_id") ?: return@setFragmentResultListener
+            if (playbackModel.displayItem.value?.queueItem?.id?.value != expectedId)
+                return@setFragmentResultListener
+            playerActionsModel.updateSavedDestinations(
+                liked = result.getBoolean(SavedDestinationsSheet.KEY_LIKED),
+                playlistIds =
+                    result.getStringArray(SavedDestinationsSheet.KEY_PLAYLIST_IDS).orEmpty().mapTo(
+                        mutableSetOf()
+                    ) {
+                        org.oxycblt.auxio.shippy.domain.LibraryCollectionId(it)
+                    },
+            )
+        }
+
         // --- VIEWMODEL SETUP --
         collectImmediately(playbackModel.displayItem, ::updateItem)
         collectImmediately(playbackModel.parent, ::updateParent)
@@ -224,6 +251,7 @@ class PlaybackPanelFragment :
         collectImmediately(playbackModel.isShuffled, ::updateShuffled)
         collectImmediately(playbackModel.pagerQueue, ::updatePager)
         collectImmediately(playerActionsModel.state, ::updateActions)
+        collectImmediately(lastFmScrobbleTracker.status, ::updateScrobbleStatus)
         collectImmediately(playbackModel.lyrics, playbackModel.positionDs, ::updateLyrics)
         collectImmediately(activeCrewRuntime.state, ::updateCrewActions)
         viewLifecycleOwner.lifecycleScope.launch {
@@ -446,6 +474,8 @@ class PlaybackPanelFragment :
                 track.album?.takeIf(String::isNotBlank) ?: getString(R.string.lbl_search)
         }
         binding.playbackSeekBar?.durationDs = (track.durationMs ?: 0L).msToDs()
+        toneSource = null
+        toneApplied = false
     }
 
     private fun updateParent(parent: MusicParent?) {
@@ -489,7 +519,7 @@ class PlaybackPanelFragment :
             val isSaved = state.liked || state.playlistIds.isNotEmpty()
             isVisible = state.track != null
             isEnabled = state.track != null
-            setIconResource(if (isSaved) R.drawable.ic_check_24 else R.drawable.ic_add_24)
+            setIconResource(if (isSaved) R.drawable.ic_favorite_24 else R.drawable.ic_add_circle_24)
             contentDescription =
                 getString(
                     if (isSaved) {
@@ -531,6 +561,43 @@ class PlaybackPanelFragment :
         }
     }
 
+    private fun updateScrobbleStatus(status: LastFmScrobbleStatus) {
+        val binding = requireBinding()
+        val currentId = playbackModel.displayItem.value?.queueItem?.id
+        val visible =
+            status.queueItemId != null &&
+                status.queueItemId == currentId &&
+                status.kind != LastFmScrobbleStatusKind.Disabled
+        binding.playbackScrobbleStatus.isVisible = visible
+        if (!visible) return
+        binding.playbackScrobbleStatus.text =
+            status.message
+                ?: getString(
+                    when (status.kind) {
+                        LastFmScrobbleStatusKind.NowPlaying -> R.string.lbl_lastfm_now_playing
+                        LastFmScrobbleStatusKind.Eligible -> R.string.lbl_lastfm_eligible
+                        LastFmScrobbleStatusKind.Queued -> R.string.lbl_lastfm_queued
+                        LastFmScrobbleStatusKind.Scrobbled -> R.string.lbl_lastfm_scrobbled
+                        LastFmScrobbleStatusKind.Retrying -> R.string.lbl_lastfm_retrying
+                        LastFmScrobbleStatusKind.Ignored -> R.string.lbl_lastfm_ignored
+                        LastFmScrobbleStatusKind.ReauthRequired ->
+                            R.string.lbl_lastfm_reauth_required
+                        LastFmScrobbleStatusKind.Disabled -> R.string.lbl_lastfm_disabled
+                    }
+                )
+        val colorAttr =
+            when (status.kind) {
+                LastFmScrobbleStatusKind.Scrobbled -> androidx.appcompat.R.attr.colorPrimary
+                LastFmScrobbleStatusKind.Retrying,
+                LastFmScrobbleStatusKind.Ignored,
+                LastFmScrobbleStatusKind.ReauthRequired -> MR.attr.colorOnErrorContainer
+                else -> android.R.attr.textColorSecondary
+            }
+        binding.playbackScrobbleStatus.setTextColor(
+            requireContext().getAttrColorCompat(colorAttr).defaultColor
+        )
+    }
+
     private fun updateLyrics(state: PlaybackLyricsState, positionDs: Long) {
         val binding = requireBinding()
         val container = binding.playbackLyricsContainer ?: return
@@ -538,6 +605,17 @@ class PlaybackPanelFragment :
         val current = binding.playbackLyricsCurrent ?: return
         val body = binding.playbackLyricsBody ?: return
         val retry = binding.playbackLyricsRetry ?: return
+        val artwork = binding.playbackInfoCover?.loadedArtworkDrawable()
+        if (!toneApplied || artwork !== toneSource) {
+            toneSource = artwork
+            toneApplied = true
+            val surface =
+                requireContext().getAttrColorCompat(MR.attr.colorSurfaceContainerHigh).defaultColor
+            val onSurface = requireContext().getAttrColorCompat(MR.attr.colorOnSurface).defaultColor
+            container.setCardBackgroundColor(
+                artworkToneExtractor.mutedColor(artwork, surface, onSurface)
+            )
+        }
         container.isVisible = state !is PlaybackLyricsState.None
         binding.playbackLyricsHint?.isVisible = state !is PlaybackLyricsState.None
         val stateChanged = state != renderedLyricsState
@@ -619,34 +697,22 @@ class PlaybackPanelFragment :
     }
 
     private fun showSavedDestinations(state: PlayerActionsState) {
+        val queueItemId = playbackModel.displayItem.value?.queueItem?.id?.value ?: return
         val labels = buildList {
             add(getString(R.string.lbl_liked))
             state.playlists.forEach { add(it.displayName) }
         }
         val checked =
             BooleanArray(labels.size) { index ->
-                if (index == 0) {
-                    state.liked
-                } else {
-                    state.playlists[index - 1].id in state.playlistIds
-                }
+                if (index == 0) state.liked else state.playlists[index - 1].id in state.playlistIds
             }
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(R.string.lbl_saved_destinations)
-            .setMultiChoiceItems(labels.toTypedArray(), checked) { _, which, selected ->
-                checked[which] = selected
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                playerActionsModel.updateSavedDestinations(
-                    liked = checked.first(),
-                    playlistIds =
-                        state.playlists
-                            .filterIndexed { index, _ -> checked[index + 1] }
-                            .mapTo(mutableSetOf()) { it.id },
-                )
-            }
-            .show()
+        SavedDestinationsSheet.show(
+            parentFragmentManager,
+            queueItemId,
+            labels.toTypedArray(),
+            checked,
+            state.playlists.map { it.id.value }.toTypedArray(),
+        )
     }
 
     private fun showSleepTimerDialog() {

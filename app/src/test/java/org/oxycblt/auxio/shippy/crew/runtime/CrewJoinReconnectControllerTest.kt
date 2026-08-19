@@ -84,7 +84,11 @@ class CrewJoinReconnectControllerTest {
         )
         fixture.results.send(CrewReconnectDialResult.Expired)
         fixture.controller.start()
-        await { connection.closed && fixture.dialCalls >= 2 }
+        await {
+            connection.closed &&
+                fixture.dialCalls >= 2 &&
+                fixture.controller.state.value == CrewJoinReconnectState.Expired
+        }
         assertEquals(CrewJoinReconnectState.Expired, fixture.controller.state.value)
         fixture.controller.close()
     }

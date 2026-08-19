@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -78,6 +79,8 @@ constructor(
     private val layoutStore: LibraryCollectionLayoutStore,
 ) : ViewModel() {
     private val playbackStarting = MutableStateFlow(false)
+    private val selectedTrackIdsMutable = MutableStateFlow<Set<TrackId>>(emptySet())
+    internal val selectedTrackIds = selectedTrackIdsMutable.asStateFlow()
 
     internal fun observe(collectionId: LibraryCollectionId): Flow<ShippyCollectionDetailState> =
         combine(collectionState(collectionId), playbackStarting, layoutStore.entries) {
@@ -304,6 +307,40 @@ constructor(
         val reorderedTrackIds = reorderPlaylistTrackIds(trackIds, reorderedRows.map { it.track.id })
         if (reorderedTrackIds == trackIds) return
         viewModelScope.launch { repository.replacePlaylistTracks(playlistId, reorderedTrackIds) }
+    }
+
+    internal fun toggleTrackSelection(trackId: TrackId) {
+        selectedTrackIdsMutable.value =
+            selectedTrackIdsMutable.value.toMutableSet().apply {
+                if (!add(trackId)) remove(trackId)
+            }
+    }
+
+    internal fun clearTrackSelection() {
+        selectedTrackIdsMutable.value = emptySet()
+    }
+
+    internal fun removeSelectedFromPlaylist(
+        playlistId: LibraryCollectionId,
+        trackIds: List<TrackId>,
+    ) {
+        if (playlistId.isSystem) return
+        val selected = selectedTrackIdsMutable.value
+        if (selected.isEmpty()) return
+        val remaining = trackIds.filterNot(selected::contains)
+        viewModelScope.launch {
+            repository.replacePlaylistTracks(playlistId, remaining)
+            clearTrackSelection()
+        }
+    }
+
+    internal fun removeSelectedFromLiked() {
+        val selected = selectedTrackIdsMutable.value
+        if (selected.isEmpty()) return
+        viewModelScope.launch {
+            repository.clearLiked(selected)
+            clearTrackSelection()
+        }
     }
 }
 

@@ -18,8 +18,8 @@
 package org.oxycblt.auxio.shippy.lastfm
 
 import java.security.MessageDigest
-import java.util.UUID
 import org.oxycblt.auxio.shippy.domain.QueueItem
+import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleEntity
 
 data class LastFmCredentials(
@@ -81,12 +81,13 @@ object LastFmSigning {
 }
 
 internal fun LastFmTrack.outbox(
+    queueItemId: QueueItemId,
     startedAtEpochSeconds: Long,
     nowEpochMs: Long,
 ): LastFmScrobbleEntity {
     require(startedAtEpochSeconds > 0)
     return LastFmScrobbleEntity(
-        UUID.randomUUID().toString(),
+        "queue-item:${queueItemId.value}",
         artist,
         title,
         album,

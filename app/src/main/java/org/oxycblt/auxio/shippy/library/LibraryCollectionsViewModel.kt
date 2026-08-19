@@ -123,6 +123,28 @@ constructor(
         viewModelScope.launch { repository.replacePlaylistLayout(userPlaylists) }
         return true
     }
+
+    internal fun setPinned(collectionId: LibraryCollectionId, pinned: Boolean) {
+        layoutStore.setPinned(collectionId, pinned)
+        if (!collectionId.isSystem) {
+            viewModelScope.launch { repository.setPlaylistPinned(collectionId, pinned) }
+        }
+    }
+
+    internal fun renamePlaylist(collectionId: LibraryCollectionId, name: String) {
+        if (collectionId.isSystem || name.isBlank()) return
+        viewModelScope.launch { repository.renamePlaylist(collectionId, name.trim()) }
+    }
+
+    internal fun setPlaylistArtwork(collectionId: LibraryCollectionId, artworkUri: String?) {
+        if (collectionId.isSystem) return
+        viewModelScope.launch { repository.setPlaylistArtwork(collectionId, artworkUri) }
+    }
+
+    internal fun deletePlaylist(collectionId: LibraryCollectionId) {
+        if (collectionId.isSystem) return
+        viewModelScope.launch { repository.deletePlaylist(collectionId) }
+    }
 }
 
 internal fun newShippyPlaylistOrNull(

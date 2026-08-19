@@ -51,6 +51,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.music.MusicRepository
@@ -112,6 +113,9 @@ class ExoPlaybackStateHolder(
     private var crossfadeArmJob: Job? = null
     private var preparedStandbyIndex = C.INDEX_UNSET
     private var crossfadePromoting = false
+    /** Hold queue publication until Media3 has committed the replacement media item. */
+    private var pendingNewPlaybackAck: StateAck.NewPlayback? = null
+    private var pendingNewPlaybackMediaId: String? = null
     private var lastErrorMediaId: String? = null
     private var retriedCurrentError = false
     private val failedMediaIds = mutableSetOf<String>()
@@ -131,6 +135,8 @@ class ExoPlaybackStateHolder(
 
     fun release() {
         cancelCrossfade()
+        pendingNewPlaybackAck = null
+        pendingNewPlaybackMediaId = null
         saveJob.cancel()
         locatorLifecycleJob.cancel()
         playbackRequestHeaders.replace(emptyList())
@@ -304,6 +310,7 @@ class ExoPlaybackStateHolder(
         retriedCurrentError = false
         failedMediaIds.clear()
         parent = command.parent
+        pendingNewPlaybackAck = StateAck.NewPlayback
         playbackRequestHeaders.replace(command.queue)
         player.shuffleModeEnabled = command.shuffled
         player.setMediaItems(command.queue.map { it.buildMediaItem() })
@@ -315,10 +322,11 @@ class ExoPlaybackStateHolder(
             player.setShuffleOrder(BetterShuffleOrder(command.queue.size, startIndex ?: -1))
         }
         val target = startIndex ?: player.currentTimeline.getFirstWindowIndex(command.shuffled)
+        check(target in command.queue.indices) { "Playback queue has no selected item" }
+        pendingNewPlaybackMediaId = command.queue[target].item.id.value
         player.seekTo(target, C.TIME_UNSET)
         player.prepare()
         player.play()
-        playbackManager.ack(this, StateAck.NewPlayback)
         refreshProviderLocatorsNearPlayback()
         deferSave()
     }
@@ -464,11 +472,14 @@ class ExoPlaybackStateHolder(
         cancelCrossfade()
         var sendNewPlaybackEvent = false
         var shouldSeek = false
+        val queueChanged = rawQueue != resolveQueue()
         if (this.parent != parent) {
             this.parent = parent
             sendNewPlaybackEvent = true
         }
-        if (rawQueue != resolveQueue()) {
+        if (queueChanged) {
+            pendingNewPlaybackAck = ack
+            pendingNewPlaybackMediaId = ack?.let { rawQueue.heap[rawQueue.heapIndex].item.id.value }
             playbackRequestHeaders.replace(rawQueue.heap)
             player.setMediaItems(rawQueue.heap.map { it.buildMediaItem() })
             if (rawQueue.isShuffled) {
@@ -496,7 +507,11 @@ class ExoPlaybackStateHolder(
         }
 
         if (sendNewPlaybackEvent) {
-            ack?.let { playbackManager.ack(this, it) }
+            if (!queueChanged) {
+                pendingNewPlaybackAck = null
+                pendingNewPlaybackMediaId = null
+                ack?.let { playbackManager.ack(this, it) }
+            }
         }
     }
 
@@ -517,6 +532,8 @@ class ExoPlaybackStateHolder(
 
     override fun reset(ack: StateAck.NewPlayback) {
         cancelCrossfade()
+        pendingNewPlaybackAck = null
+        pendingNewPlaybackMediaId = null
         player.setMediaItems(listOf())
         playbackRequestHeaders.replace(emptyList())
         playbackManager.ack(this, ack)
@@ -575,7 +592,28 @@ class ExoPlaybackStateHolder(
         // after Media3 has committed the transition. This also covers automatic transitions and
         // playlist replacements without pairing new audio with stale title/artwork/lyrics.
         if (mediaItem != null) {
-            playbackManager.ack(this, StateAck.IndexMoved)
+            val pendingAck = pendingNewPlaybackAck
+            if (pendingAck != null) {
+                if (mediaItem.mediaId != pendingNewPlaybackMediaId) {
+                    refreshProviderLocatorsNearPlayback()
+                    return
+                }
+                pendingNewPlaybackAck = null
+                pendingNewPlaybackMediaId = null
+                playbackManager.ack(this, pendingAck)
+            } else {
+                playbackManager.ack(this, StateAck.IndexMoved)
+            }
+            if (BuildConfig.DEBUG) {
+                val rawQueue = resolveQueue()
+                val current = rawQueue.resolveItems().getOrNull(rawQueue.resolveIndex())
+                L.d(
+                    "Media3 transition mediaId=${mediaItem.mediaId}, " +
+                        "queueItemId=${current?.item?.id?.value}, " +
+                        "trackId=${current?.item?.track?.id?.value}, " +
+                        "index=${rawQueue.resolveIndex()}, shuffled=${rawQueue.isShuffled}"
+                )
+            }
             deferSave()
         }
         refreshProviderLocatorsNearPlayback()

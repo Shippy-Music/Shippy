@@ -30,15 +30,38 @@ import org.oxycblt.auxio.shippy.library.ShippyCollectionTrackRow
 internal class ShippyCollectionTrackAdapter(
     private val onClick: (ShippyCollectionTrackRow) -> Unit,
     private val onMenu: (ShippyCollectionTrackRow) -> Unit,
+    private val onLongClick: (ShippyCollectionTrackRow) -> Unit,
 ) : ListAdapter<ShippyCollectionTrackRow, ShippyCollectionTrackAdapter.ViewHolder>(DIFF) {
     private var dragRows: MutableList<ShippyCollectionTrackRow>? = null
     private var dragStartRows: List<ShippyCollectionTrackRow>? = null
+    private var selectedIds = emptySet<org.oxycblt.auxio.shippy.domain.TrackId>()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         ViewHolder(ItemSongBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) =
-        holder.bind(getItem(position), onClick, onMenu)
+        holder.bind(
+            getItem(position),
+            selectedIds.contains(getItem(position).track.id),
+            onClick,
+            onMenu,
+            onLongClick,
+        )
+
+    override fun onBindViewHolder(holder: ViewHolder, position: Int, payloads: MutableList<Any>) {
+        if (payloads.isEmpty()) onBindViewHolder(holder, position)
+        else holder.updateSelection(selectedIds.contains(getItem(position).track.id))
+    }
+
+    fun setSelected(ids: Set<org.oxycblt.auxio.shippy.domain.TrackId>) {
+        val old = selectedIds
+        selectedIds = ids.toSet()
+        currentList.forEachIndexed { index, row ->
+            if (old.contains(row.track.id) xor selectedIds.contains(row.track.id)) {
+                notifyItemChanged(index, PAYLOAD_SELECTION)
+            }
+        }
+    }
 
     fun beginDrag() {
         if (dragRows == null) {
@@ -67,8 +90,10 @@ internal class ShippyCollectionTrackAdapter(
         RecyclerView.ViewHolder(binding.root) {
         fun bind(
             row: ShippyCollectionTrackRow,
+            selected: Boolean,
             onClick: (ShippyCollectionTrackRow) -> Unit,
             onMenu: (ShippyCollectionTrackRow) -> Unit,
+            onLongClick: (ShippyCollectionTrackRow) -> Unit,
         ) {
             binding.songName.text = row.track.title
             binding.songInfo.text = row.track.artists.joinToString()
@@ -83,11 +108,22 @@ internal class ShippyCollectionTrackAdapter(
                 setOnClickListener { onMenu(row) }
             }
             binding.root.setOnClickListener { onClick(row) }
+            binding.root.setOnLongClickListener {
+                onLongClick(row)
+                true
+            }
+            updateSelection(selected)
             binding.root.contentDescription = "${row.track.title}, ${binding.songInfo.text}"
+        }
+
+        fun updateSelection(selected: Boolean) {
+            binding.root.isActivated = selected
         }
     }
 
     private companion object {
+        val PAYLOAD_SELECTION = Any()
+
         val DIFF =
             object : DiffUtil.ItemCallback<ShippyCollectionTrackRow>() {
                 override fun areItemsTheSame(

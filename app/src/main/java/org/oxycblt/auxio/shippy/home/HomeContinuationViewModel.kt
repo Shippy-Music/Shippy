@@ -49,7 +49,8 @@ constructor(
     val state: StateFlow<HomeContinuationState> =
         combine(recentListening.observe(), downloads.observeAvailable()) { recent, available ->
                 HomeContinuationState(
-                    recentlyPlayed = recent.take(HOME_RECENT_LIMIT),
+                    recentlyPlayed =
+                        recent.distinctBy(RecentListeningEntry::trackId).take(HOME_RECENT_LIMIT),
                     recentDownloads =
                         available
                             .sortedByDescending {
@@ -75,6 +76,6 @@ constructor(
     }
 
     private companion object {
-        const val HOME_RECENT_LIMIT = 5
+        const val HOME_RECENT_LIMIT = 6
     }
 }

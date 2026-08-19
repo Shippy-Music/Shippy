@@ -61,7 +61,12 @@ class ProviderEntityDetailFragment : ViewBindingFragment<FragmentProviderEntityD
                     val index = currentState?.rows?.indexOf(row) ?: -1
                     if (index >= 0) model.play(index, shuffled = false)
                 },
-                onMenu = { row -> ProviderTrackActionsSheet.show(parentFragmentManager, row.track) },
+                onMenu = { row ->
+                    ProviderTrackActionsSheet.show(parentFragmentManager, row.track)
+                },
+                onLongClick = { row ->
+                    ProviderTrackActionsSheet.show(parentFragmentManager, row.track)
+                },
             )
 
         binding.providerEntityToolbar.setNavigationOnClickListener {

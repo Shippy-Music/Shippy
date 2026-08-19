@@ -94,11 +94,22 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/spacing_mid_medium"
             android:fallbackLineSpacing="false"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toStartOf="@+id/playback_save"
             app:layout_constraintStart_toEndOf="@+id/playback_info_cover"
             app:layout_constraintTop_toBottomOf="@+id/playback_song"
             tools:text="Artist Name" />
+
+        <TextView
+            android:id="@+id/playback_scrobble_status"
+            style="@style/Widget.Auxio.TextView.Secondary.Compact"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toStartOf="@+id/playback_save"
+            app:layout_constraintStart_toEndOf="@+id/playback_info_cover"
+            app:layout_constraintTop_toBottomOf="@+id/playback_artist"
+            tools:text="Now playing on Last.fm" />
 
         <org.oxycblt.auxio.ui.RippleFixMaterialButton
             android:id="@+id/playback_save"
@@ -106,7 +117,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:contentDescription="@string/desc_save_to_liked"
-            app:icon="@drawable/ic_add_24"
+            app:icon="@drawable/ic_add_circle_24"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
@@ -116,7 +127,7 @@
     <org.oxycblt.auxio.playback.ui.StyledSeekBar
         android:id="@+id/playback_seek_bar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="304dp"
         android:layout_marginTop="@dimen/spacing_small"
         app:layout_constraintBottom_toTopOf="@+id/playback_controls_container"
         app:layout_constraintEnd_toEndOf="parent"
@@ -258,14 +269,13 @@
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/playback_lyrics_container"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="304dp"
         android:layout_marginStart="@dimen/spacing_small"
         android:layout_marginTop="48dp"
         android:layout_marginEnd="@dimen/spacing_small"
         android:layout_marginBottom="@dimen/spacing_medium"
         android:clickable="true"
         android:focusable="true"
-        android:minHeight="264dp"
         android:visibility="gone"
         app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
         app:cardElevation="0dp"
@@ -306,7 +316,7 @@
                 android:alpha="0.52"
                 android:ellipsize="end"
                 android:lineSpacingExtra="@dimen/spacing_small"
-                android:maxLines="5"
+                android:maxLines="4"
                 android:textAppearance="?attr/textAppearanceTitleMedium"
                 android:textColor="?attr/colorOnSurface" />
 

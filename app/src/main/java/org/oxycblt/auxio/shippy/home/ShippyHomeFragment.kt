@@ -48,9 +48,10 @@ import org.oxycblt.auxio.shippy.crew.ui.CrewViewModel
 import org.oxycblt.auxio.shippy.domain.LibraryCollection
 import org.oxycblt.auxio.shippy.domain.LibraryCollectionId
 import org.oxycblt.auxio.shippy.domain.TrackRealm
+import org.oxycblt.auxio.shippy.library.LibraryCollectionListRow
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsState
 import org.oxycblt.auxio.shippy.library.LibraryCollectionsViewModel
-import org.oxycblt.auxio.shippy.library.systemRows
+import org.oxycblt.auxio.shippy.library.collectionRows
 import org.oxycblt.auxio.shippy.persistence.library.SavedProviderEntity
 import org.oxycblt.auxio.shippy.provider.ui.ProviderEntityDetailFragment
 import org.oxycblt.auxio.ui.ViewBindingFragment
@@ -73,11 +74,6 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
     private val recentlyPlayedAdapter = HomeTrackAdapter { row ->
         openSearch("${row.subtitle} ${row.title}")
     }
-    private val recentDownloadsAdapter = HomeTrackAdapter { row ->
-        continuationModel.state.value.recentDownloads
-            .firstOrNull { it.job.id.value == row.key }
-            ?.let(continuationModel::playDownload)
-    }
     private val systemCollectionAdapter = LibrarySystemCollectionAdapter { row ->
         openCollection(LibraryCollection.System(row.kind).id)
     }
@@ -98,6 +94,7 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
         binding.homeScroll.applyBottomContentInset()
         binding.homeToolbar.setOnMenuItemClickListener(::onToolbarItemSelected)
         binding.homeCurrent.setOnClickListener { playbackModel.openPlayback() }
+        binding.homeCurrentPlayPause.setOnClickListener { playbackModel.togglePlaying() }
         binding.homeCrew.setOnClickListener { findNavController().navigate(R.id.crew_fragment) }
         binding.homeLibraryShortcuts.apply {
             layoutManager = LinearLayoutManager(requireContext())
@@ -106,10 +103,9 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
         }
         binding.homeRecentlyPlayedTracks.bindHomeTracks(recentlyPlayedAdapter)
         binding.homeLastfmTracks.bindHomeTracks(lastFmTrackAdapter)
-        binding.homeRecentDownloadsTracks.bindHomeTracks(recentDownloadsAdapter)
 
         collectImmediately(playbackModel.displayItem, ::updateCurrentItem)
-        collectImmediately(musicModel.statistics, ::updateLibrarySummary)
+        collectImmediately(playbackModel.isPlaying, ::updateCurrentPlaying)
         collectImmediately(crewModel.state, ::updateCrew)
         collectImmediately(continuationModel.state, homeModel.songList, ::updateContinuation)
         collectImmediately(lastFmModel.state, ::updateLastFm)
@@ -126,7 +122,6 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
         binding.homeLibraryShortcuts.adapter = null
         binding.homeRecentlyPlayedTracks.adapter = null
         binding.homeLastfmTracks.adapter = null
-        binding.homeRecentDownloadsTracks.adapter = null
         super.onDestroyBinding(binding)
     }
 
@@ -141,8 +136,7 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
 
     private fun updateCurrentItem(item: PlaybackDisplayItem?) {
         val binding = requireBinding()
-        binding.homeCurrent.isVisible = item != null
-        binding.homeNoCurrent.isVisible = item == null
+        binding.homeContinueListening.isVisible = item != null
         if (item == null) return
 
         val context = requireContext()
@@ -159,32 +153,35 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
         }
     }
 
-    private fun updateLibrarySummary(statistics: MusicViewModel.Statistics?) {
-        requireBinding().homeLibrarySummary.text =
-            getString(
-                R.string.fmt_shippy_library_summary,
-                statistics?.songs ?: 0,
-                statistics?.albums ?: 0,
-                statistics?.artists ?: 0,
-            )
+    private fun updateCurrentPlaying(isPlaying: Boolean) {
+        requireBinding().homeCurrentPlayPause.apply {
+            setImageResource(if (isPlaying) R.drawable.ic_pause_24 else R.drawable.ic_play_24)
+            contentDescription =
+                getString(if (isPlaying) R.string.desc_pause else R.string.desc_play)
+        }
     }
 
     private fun updateLastFm(state: LastFmHomeState) {
         val binding = requireBinding()
-        binding.homeLastfm.isVisible = state !is LastFmHomeState.Hidden
         when (state) {
-            LastFmHomeState.Hidden -> Unit
+            LastFmHomeState.Hidden -> {
+                binding.homeLastfm.isVisible = false
+            }
             LastFmHomeState.Loading -> {
+                binding.homeLastfm.isVisible = false
                 binding.homeLastfmSummary.text = ""
                 binding.homeLastfmStatus.setText(R.string.lbl_lastfm_loading)
                 lastFmTrackAdapter.submitList(emptyList())
             }
             LastFmHomeState.Error -> {
+                binding.homeLastfm.isVisible = false
                 binding.homeLastfmSummary.text = ""
                 binding.homeLastfmStatus.setText(R.string.lbl_lastfm_unavailable)
                 lastFmTrackAdapter.submitList(emptyList())
             }
             is LastFmHomeState.Content -> {
+                val recommendations = state.overview.recommendations.take(8)
+                binding.homeLastfm.isVisible = recommendations.isNotEmpty()
                 binding.homeLastfmSummary.text =
                     getString(
                         R.string.fmt_lastfm_play_count,
@@ -192,10 +189,11 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
                         state.overview.playCount,
                     )
                 binding.homeLastfmStatus.setText(
-                    if (state.stale) R.string.lbl_lastfm_cached else R.string.lbl_lastfm_top_tracks
+                    if (state.stale) R.string.lbl_lastfm_cached
+                    else R.string.lbl_lastfm_recommendation_status
                 )
                 lastFmTrackAdapter.submitList(
-                    state.overview.topTracks.map { track ->
+                    recommendations.map { track ->
                         HomeTrackRow(
                             key = "lastfm:${track.artist}:${track.title}",
                             title = track.title,
@@ -212,7 +210,6 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
         val binding = requireBinding()
         val localSongsById = localSongs.associateBy { it.uid.toString() }
         binding.homeRecentlyPlayed.isVisible = state.recentlyPlayed.isNotEmpty()
-        binding.homeRecentDownloads.isVisible = state.recentDownloads.isNotEmpty()
         recentlyPlayedAdapter.submitList(
             state.recentlyPlayed.map { entry ->
                 HomeTrackRow(
@@ -229,22 +226,13 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
                 )
             }
         )
-        recentDownloadsAdapter.submitList(
-            state.recentDownloads.map { download ->
-                HomeTrackRow(
-                    key = download.job.id.value,
-                    title = download.track.title,
-                    subtitle = download.track.artists.joinToString(", "),
-                    artwork = download.track.artwork,
-                )
-            }
-        )
     }
 
     private fun RecyclerView.bindHomeTracks(homeAdapter: HomeTrackAdapter) {
-        layoutManager = LinearLayoutManager(requireContext())
+        layoutManager = LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false)
         adapter = homeAdapter
         isNestedScrollingEnabled = false
+        setHasFixedSize(true)
     }
 
     private fun openSearch(query: String) {
@@ -301,13 +289,19 @@ class ShippyHomeFragment : ViewBindingFragment<FragmentShippyHomeBinding>() {
         statistics: MusicViewModel.Statistics?,
         indexingState: IndexingState?,
     ) {
+        val pinnedRows =
+            state
+                .collectionRows(
+                    localSongCount = statistics?.songs ?: 0,
+                    isLocalIndexing = indexingState is IndexingState.Indexing,
+                )
+                .filter { it.isPinned }
         systemCollectionAdapter.submitList(
-            state.systemRows(
-                localSongCount = statistics?.songs ?: 0,
-                isLocalIndexing = indexingState is IndexingState.Indexing,
-            )
+            pinnedRows.filterIsInstance<LibraryCollectionListRow.System>().map { it.collection }
         )
-        pinnedPlaylistAdapter.update(state.userPlaylists.filter { it.isPinned })
+        pinnedPlaylistAdapter.update(
+            pinnedRows.filterIsInstance<LibraryCollectionListRow.Playlist>().map { it.playlist }
+        )
         pinnedProviderAdapter.submitList(state.savedProviderEntities.filter { it.isPinned })
     }
 

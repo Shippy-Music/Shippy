@@ -46,6 +46,19 @@ class LastFmOverviewJsonTest {
     }
 
     @Test
+    fun similar_tracks_reject_placeholder_artwork_and_cap_results() {
+        val tracks =
+            (1..10).joinToString(",") {
+                """{"name":"t$it","artist":{"name":"a$it"},"image":[{"#text":"https://last.fm/placeholder-$it"}]}"""
+            }
+        val result =
+            LastFmOverviewJson.similar("""{"similartracks":{"track":[$tracks]}}""".toByteArray())
+        val recommendations = (result as LastFmOverviewResult.Success).overview.recommendations
+        assertEquals(8, recommendations.size)
+        assertEquals(null, recommendations.first().artworkUrl)
+    }
+
+    @Test
     fun malformed_and_oversize_bodies_fail_closed() {
         assertEquals(
             LastFmOverviewResult.Failure.Malformed,
@@ -60,7 +73,12 @@ class LastFmOverviewJsonTest {
     @Test
     fun cache_codec_round_trips_and_rejects_too_many_tracks() {
         val value =
-            LastFmOverview("alice", 2, listOf(LastFmOverviewTrack("song", "artist", null, null, 1)))
+            LastFmOverview(
+                "alice",
+                2,
+                listOf(LastFmOverviewTrack("song", "artist", null, null, 1)),
+                listOf(LastFmOverviewTrack("similar", "artist", null, null, null)),
+            )
         assertEquals(value, LastFmOverviewCacheCodec.decode(LastFmOverviewCacheCodec.encode(value)))
         val tracks = (1..9).joinToString(",") { """{"n":"n","a":"a"}""" }
         val tooMany = """{"v":1,"u":"a","p":0,"t":[$tracks]}"""

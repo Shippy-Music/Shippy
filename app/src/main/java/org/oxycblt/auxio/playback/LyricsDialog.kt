@@ -57,6 +57,9 @@ class LyricsDialog :
     private val playerActionsModel: PlayerActionsViewModel by viewModels()
     private var renderedState: PlaybackLyricsState = PlaybackLyricsState.None
     private var renderedLineIndex = Int.MIN_VALUE
+    private val artworkToneExtractor = ArtworkToneExtractor()
+    private var toneSource: android.graphics.drawable.Drawable? = null
+    private var toneApplied = false
 
     override fun onCreateBinding(inflater: LayoutInflater) = DialogLyricsBinding.inflate(inflater)
 
@@ -90,6 +93,8 @@ class LyricsDialog :
         binding.lyricsSeekBar.listener = null
         renderedState = PlaybackLyricsState.None
         renderedLineIndex = Int.MIN_VALUE
+        toneSource = null
+        toneApplied = false
         super.onDestroyBinding(binding)
     }
 
@@ -105,6 +110,9 @@ class LyricsDialog :
         binding.lyricsTrackArtist.text = track?.artists?.joinToString(", ").orEmpty()
         binding.lyricsSeekBar.durationDs = (track?.durationMs ?: 0L).msToDs()
         binding.lyricsMore.isVisible = track != null
+        binding.lyricsArtwork.bindArtwork(track?.artwork, track?.title.orEmpty())
+        toneSource = null
+        toneApplied = false
     }
 
     private fun updatePlaying(isPlaying: Boolean) {
@@ -149,6 +157,17 @@ class LyricsDialog :
 
     private fun updateLyrics(state: PlaybackLyricsState, positionDs: Long) {
         val binding = requireBinding()
+        val artwork = binding.lyricsArtwork.loadedArtworkDrawable()
+        if (!toneApplied || artwork !== toneSource) {
+            toneSource = artwork
+            toneApplied = true
+            val surface =
+                requireContext().getAttrColorCompat(MR.attr.colorSurfaceContainerHigh).defaultColor
+            val onSurface = requireContext().getAttrColorCompat(MR.attr.colorOnSurface).defaultColor
+            binding.root.setBackgroundColor(
+                artworkToneExtractor.mutedColor(artwork, surface, onSurface)
+            )
+        }
         binding.lyricsSeekBar.positionDs = positionDs
         val stateChanged = state != renderedState
         if (stateChanged) {

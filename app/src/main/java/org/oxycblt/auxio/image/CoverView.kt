@@ -482,6 +482,9 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     fun bindArtwork(data: Any?, desc: String) =
         bindImpl({ data }, desc, R.drawable.ic_album_24, squareishShapeAppearance)
 
+    /** Returns the currently loaded artwork drawable, if Coil has resolved one. */
+    fun loadedArtworkDrawable(): Drawable? = image.drawable
+
     private fun bindImpl(
         img: (Size) -> Any?,
         desc: String,

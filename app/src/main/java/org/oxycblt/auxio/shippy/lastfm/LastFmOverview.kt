@@ -37,11 +37,13 @@ data class LastFmOverview(
     val username: String,
     val playCount: Long,
     val topTracks: List<LastFmOverviewTrack>,
+    val recommendations: List<LastFmOverviewTrack> = emptyList(),
 ) {
     init {
         require(username.isBoundedText())
         require(playCount >= 0)
         require(topTracks.size <= MAX_TRACKS)
+        require(recommendations.size <= MAX_TRACKS)
     }
 
     companion object {
@@ -59,7 +61,7 @@ data class LastFmOverviewTrack(
     init {
         require(title.isBoundedText() && artist.isBoundedText())
         require(album == null || album.isBoundedText())
-        require(artworkUrl == null || artworkUrl.isHttpsUrl())
+        require(artworkUrl == null || artworkUrl.isUsableArtworkUrl())
         require(playCount == null || playCount >= 0)
     }
 }
@@ -97,21 +99,58 @@ class LastFmOverviewClient @Inject constructor(private val transport: ProviderHt
         val topTracks =
             (tracksEnvelope as? LastFmOverviewJson.Envelope.Ok)?.tracks
                 ?: return LastFmOverviewResult.Failure.Malformed
+        val seed = dailySeed(profile.username, topTracks)
+        val recommendations =
+            seed
+                ?.let { track ->
+                    val similar =
+                        request(
+                            "track.getSimilar",
+                            credentials,
+                            mapOf(
+                                "artist" to track.artist,
+                                "track" to track.title,
+                                "autocorrect" to "1",
+                            ),
+                        )
+                    val similarTracks =
+                        (similar?.let(LastFmOverviewJson::envelope)
+                                as? LastFmOverviewJson.Envelope.Ok)
+                            ?.similar
+                            .orEmpty()
+                    similarTracks
+                        .asSequence()
+                        .filterNot { normalizeRecommendation(it) == normalizeRecommendation(track) }
+                        .distinctBy(::normalizeRecommendation)
+                        .take(LastFmOverview.MAX_TRACKS)
+                        .toList()
+                }
+                .orEmpty()
         return LastFmOverviewResult.Success(
-            LastFmOverview(profile.username, profile.playCount, topTracks)
+            LastFmOverview(profile.username, profile.playCount, topTracks, recommendations)
         )
     }
 
     private suspend fun request(
         method: String,
         credentials: LastFmCredentials,
+        extra: Map<String, String> = emptyMap(),
     ): ProviderHttpResponse? =
         try {
+            val params = buildMap {
+                put("method", method)
+                put("api_key", credentials.apiKey)
+                if (method.startsWith("user.")) put("user", credentials.username)
+                put("limit", LastFmOverview.MAX_TRACKS.toString())
+                putAll(extra)
+                put("format", "json")
+            }
             transport.execute(
                 ProviderHttpRequest(
-                    "$API_URL?method=$method&api_key=${encode(credentials.apiKey)}" +
-                        "&user=${encode(credentials.username)}" +
-                        "&limit=${LastFmOverview.MAX_TRACKS}&format=json",
+                    "$API_URL?" +
+                        params.entries.joinToString("&") {
+                            "${encode(it.key)}=${encode(it.value)}"
+                        },
                     ProviderHttpMethod.GET,
                     headers =
                         mapOf("Accept" to "application/json", "User-Agent" to LAST_FM_USER_AGENT),
@@ -120,6 +159,19 @@ class LastFmOverviewClient @Inject constructor(private val transport: ProviderHt
         } catch (_: IOException) {
             null
         }
+
+    private fun dailySeed(
+        username: String,
+        tracks: List<LastFmOverviewTrack>,
+    ): LastFmOverviewTrack? {
+        if (tracks.isEmpty()) return null
+        val day = java.time.LocalDate.now().toString()
+        val index = ("$username:$day".hashCode() and Int.MAX_VALUE) % tracks.size
+        return tracks[index]
+    }
+
+    private fun normalizeRecommendation(track: LastFmOverviewTrack) =
+        "${track.artist.normalized()}\u0000${track.title.normalized()}"
 
     private companion object {
         const val API_URL = "https://ws.audioscrobbler.com/2.0/"
@@ -135,8 +187,11 @@ internal object LastFmOverviewJson {
     data class Profile(val username: String, val playCount: Long)
 
     sealed interface Envelope {
-        data class Ok(val profile: Profile? = null, val tracks: List<LastFmOverviewTrack>? = null) :
-            Envelope
+        data class Ok(
+            val profile: Profile? = null,
+            val tracks: List<LastFmOverviewTrack>? = null,
+            val similar: List<LastFmOverviewTrack>? = null,
+        ) : Envelope
 
         data class Api(val failure: LastFmOverviewResult.Failure.Api) : Envelope
 
@@ -162,6 +217,16 @@ internal object LastFmOverviewJson {
             is Envelope.Ok ->
                 parsed.tracks?.let { LastFmOverviewResult.Success(LastFmOverview("cache", 0, it)) }
                     ?: LastFmOverviewResult.Failure.Malformed
+        }
+
+    fun similar(body: ByteArray): LastFmOverviewResult =
+        when (val parsed = parse(body)) {
+            is Envelope.Api -> parsed.failure
+            is Envelope.Malformed -> LastFmOverviewResult.Failure.Malformed
+            is Envelope.Ok ->
+                parsed.similar?.let {
+                    LastFmOverviewResult.Success(LastFmOverview("cache", 0, emptyList(), it))
+                } ?: LastFmOverviewResult.Failure.Malformed
         }
 
     fun envelope(response: ProviderHttpResponse): Envelope = parse(response.body)
@@ -195,9 +260,13 @@ internal object LastFmOverviewJson {
                 Envelope.Ok(profile = Profile(username, plays))
             else Envelope.Malformed
         }
-        val tracks =
-            root.optJSONObject("toptracks")?.optJSONArray("track") ?: return Envelope.Malformed
-        return Envelope.Ok(tracks = parseTracks(tracks) ?: return Envelope.Malformed)
+        val tracks = root.optJSONObject("toptracks")?.optJSONArray("track")
+        if (tracks != null) {
+            return Envelope.Ok(tracks = parseTracks(tracks) ?: return Envelope.Malformed)
+        }
+        val similar =
+            root.optJSONObject("similartracks")?.optJSONArray("track") ?: return Envelope.Malformed
+        return Envelope.Ok(similar = parseTracks(similar) ?: return Envelope.Malformed)
     }
 
     private fun parseTracks(array: JSONArray): List<LastFmOverviewTrack>? = buildList {
@@ -217,7 +286,7 @@ internal object LastFmOverviewJson {
                     (0 until images.length())
                         .mapNotNull(images::optJSONObject)
                         .map { it.optString("#text").trim() }
-                        .lastOrNull(String::isHttpsUrl)
+                        .lastOrNull(String::isUsableArtworkUrl)
                 }
             val plays = item.optString("playcount").toLongOrNull()?.takeIf { it >= 0 }
             add(LastFmOverviewTrack(title, artist, album, image, plays))
@@ -273,7 +342,7 @@ class AtomicLastFmOverviewCache @Inject constructor(@ApplicationContext context:
 
 internal object LastFmOverviewCacheCodec {
     const val MAX_CACHE_BYTES = 32 * 1024
-    private const val VERSION = 1
+    private const val VERSION = 2
 
     fun encode(value: LastFmOverview): ByteArray =
         JSONObject()
@@ -295,6 +364,21 @@ internal object LastFmOverviewCacheCodec {
                     }
                 },
             )
+            .put(
+                "r",
+                JSONArray().apply {
+                    value.recommendations.forEach {
+                        put(
+                            JSONObject()
+                                .put("n", it.title)
+                                .put("a", it.artist)
+                                .put("l", it.album)
+                                .put("i", it.artworkUrl)
+                                .put("p", it.playCount)
+                        )
+                    }
+                },
+            )
             .toString()
             .toByteArray(Charsets.UTF_8)
             .also { require(it.size <= MAX_CACHE_BYTES) }
@@ -302,29 +386,46 @@ internal object LastFmOverviewCacheCodec {
     fun decode(bytes: ByteArray): LastFmOverview {
         require(bytes.isNotEmpty() && bytes.size <= MAX_CACHE_BYTES)
         val root = JSONObject(bytes.toString(Charsets.UTF_8))
-        require(root.optInt("v") == VERSION)
+        val version = root.optInt("v")
+        require(version == 1 || version == VERSION)
         val username = root.getString("u")
         val plays = root.getLong("p")
         val tracks = root.getJSONArray("t")
         require(tracks.length() <= LastFmOverview.MAX_TRACKS)
+        val recommendations =
+            root
+                .optJSONArray("r")
+                ?.let { values ->
+                    require(values.length() <= LastFmOverview.MAX_TRACKS)
+                    List(values.length()) { index -> decodeTrack(values.getJSONObject(index)) }
+                }
+                .orEmpty()
         return LastFmOverview(
             username,
             plays,
-            List(tracks.length()) { index ->
-                tracks.getJSONObject(index).let {
-                    LastFmOverviewTrack(
-                        it.getString("n"),
-                        it.getString("a"),
-                        it.optString("l").takeIf(String::isNotBlank),
-                        it.optString("i").takeIf(String::isHttpsUrl),
-                        it.optString("p").toLongOrNull(),
-                    )
-                }
-            },
+            List(tracks.length()) { index -> decodeTrack(tracks.getJSONObject(index)) },
+            recommendations,
         )
     }
+
+    private fun decodeTrack(value: JSONObject) =
+        LastFmOverviewTrack(
+            value.getString("n"),
+            value.getString("a"),
+            value.optString("l").takeIf(String::isNotBlank),
+            value.optString("i").takeIf(String::isUsableArtworkUrl),
+            value.optString("p").toLongOrNull(),
+        )
 }
 
 private fun String.isBoundedText() = isNotBlank() && length <= 256 && none(Char::isISOControl)
 
 private fun String.isHttpsUrl() = startsWith("https://") && length <= 2048
+
+private fun String.isUsableArtworkUrl() =
+    isHttpsUrl() &&
+        !contains("2a96cbd8b46e442fc41c2b86b821562f", ignoreCase = true) &&
+        !contains("noimage", ignoreCase = true) &&
+        !contains("placeholder", ignoreCase = true)
+
+private fun String.normalized() = trim().lowercase().replace(Regex("\\s+"), " ")

@@ -155,11 +155,14 @@ internal class LibrarySystemCollectionAdapter(
  * dragged row's pin state; the rest of the list keeps its state and order.
  */
 internal class UnifiedLibraryCollectionAdapter(
-    private val onClick: (LibraryCollectionListRow) -> Unit
+    private val onClick: (LibraryCollectionListRow) -> Unit,
+    private val onLongClick: (LibraryCollectionListRow) -> Unit,
 ) : RecyclerView.Adapter<UnifiedLibraryCollectionAdapter.ViewHolder>() {
     private var rows = mutableListOf<LibraryCollectionListRow>()
     private var dragStartRows: List<LibraryCollectionListRow>? = null
     private var pendingRows: List<LibraryCollectionListRow>? = null
+    private var editStartRows: List<LibraryCollectionListRow>? = null
+    private var editing = false
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
         ViewHolder(
@@ -167,7 +170,7 @@ internal class UnifiedLibraryCollectionAdapter(
         )
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) =
-        holder.bind(rows[position], onClick)
+        holder.bind(rows[position], editing, onClick, onLongClick)
 
     override fun getItemCount() = rows.size
 
@@ -178,8 +181,7 @@ internal class UnifiedLibraryCollectionAdapter(
         ) {
             dragStartRows = null
             pendingRows = null
-            rows = newRows.toMutableList()
-            notifyDataSetChanged()
+            applyRows(newRows)
             return
         }
         if (activeDrag != null) return
@@ -191,12 +193,42 @@ internal class UnifiedLibraryCollectionAdapter(
         } else if (pending != null) {
             pendingRows = null
         }
-        rows = newRows.toMutableList()
-        notifyDataSetChanged()
+        applyRows(newRows)
     }
 
     fun beginDrag() {
         if (dragStartRows == null) dragStartRows = rows.toList()
+    }
+
+    fun setEditMode(enabled: Boolean) {
+        if (editing == enabled) return
+        editing = enabled
+        if (enabled) editStartRows = rows.toList()
+        else {
+            dragStartRows = null
+            editStartRows = null
+        }
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount, PAYLOAD_EDIT_MODE)
+    }
+
+    fun cancelEdit() {
+        val original = editStartRows
+        dragStartRows = null
+        pendingRows = null
+        editStartRows = null
+        editing = false
+        if (original != null) applyRows(original)
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount, PAYLOAD_EDIT_MODE)
+    }
+
+    fun finishEdit(): List<LibraryCollectionListRow>? {
+        val changed = rows.takeIf { editStartRows != null && it != editStartRows }
+        dragStartRows = null
+        pendingRows = null
+        editStartRows = null
+        editing = false
+        if (itemCount > 0) notifyItemRangeChanged(0, itemCount, PAYLOAD_EDIT_MODE)
+        return changed
     }
 
     fun move(fromPosition: Int, toPosition: Int): Boolean {
@@ -221,13 +253,36 @@ internal class UnifiedLibraryCollectionAdapter(
     fun rejectPending(newRows: List<LibraryCollectionListRow>) {
         dragStartRows = null
         pendingRows = null
+        applyRows(newRows)
+    }
+
+    private fun applyRows(newRows: List<LibraryCollectionListRow>) {
+        val oldRows = rows.toList()
         rows = newRows.toMutableList()
-        notifyDataSetChanged()
+        DiffUtil.calculateDiff(
+                object : DiffUtil.Callback() {
+                    override fun getOldListSize() = oldRows.size
+
+                    override fun getNewListSize() = newRows.size
+
+                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int) =
+                        oldRows[oldItemPosition].id == newRows[newItemPosition].id
+
+                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) =
+                        oldRows[oldItemPosition] == newRows[newItemPosition]
+                }
+            )
+            .dispatchUpdatesTo(this)
     }
 
     internal class ViewHolder(private val binding: ItemLibraryCollectionBinding) :
         RecyclerView.ViewHolder(binding.root) {
-        fun bind(row: LibraryCollectionListRow, onClick: (LibraryCollectionListRow) -> Unit) {
+        fun bind(
+            row: LibraryCollectionListRow,
+            editing: Boolean,
+            onClick: (LibraryCollectionListRow) -> Unit,
+            onLongClick: (LibraryCollectionListRow) -> Unit,
+        ) {
             when (row) {
                 is LibraryCollectionListRow.System -> bindSystem(row)
                 is LibraryCollectionListRow.Playlist -> bindPlaylist(row)
@@ -242,7 +297,15 @@ internal class UnifiedLibraryCollectionAdapter(
                         binding.collectionSummary.text,
                     )
                 setOnClickListener { onClick(row) }
+                setOnLongClickListener {
+                    if (editing) false
+                    else {
+                        onLongClick(row)
+                        true
+                    }
+                }
             }
+            binding.collectionEditHandle.isVisible = editing
         }
 
         private fun bindSystem(row: LibraryCollectionListRow.System) {
@@ -300,6 +363,10 @@ internal class UnifiedLibraryCollectionAdapter(
             binding.collectionPin.isVisible = row.isPinned
             binding.collectionSummary.setText(R.string.lng_shippy_playlist)
         }
+    }
+
+    private companion object {
+        const val PAYLOAD_EDIT_MODE = "edit_mode"
     }
 }
 
@@ -444,13 +511,13 @@ internal class ShippyPlaylistProjectionAdapter(
         playlists: List<LibraryCollection.Playlist>,
         artworkByPlaylist: Map<LibraryCollectionId, String> = emptyMap(),
     ) {
+        val previousArtwork = this.artworkByPlaylist
         this.artworkByPlaylist = artworkByPlaylist
         val startRows = dragStartRows
         if (startRows != null && !hasSamePlaylistGroups(startRows, playlists)) {
             dragStartRows = null
             pendingOrder = null
-            rows = playlists.toMutableList()
-            notifyDataSetChanged()
+            applyRows(playlists, previousArtwork, artworkByPlaylist)
             return
         }
         if (startRows != null) return
@@ -465,8 +532,7 @@ internal class ShippyPlaylistProjectionAdapter(
         } else if (pending != null) {
             pendingOrder = null
         }
-        rows = playlists.toMutableList()
-        notifyDataSetChanged()
+        applyRows(playlists, previousArtwork, artworkByPlaylist)
     }
 
     fun beginDrag() {
@@ -496,8 +562,32 @@ internal class ShippyPlaylistProjectionAdapter(
     fun rejectPending(playlists: List<LibraryCollection.Playlist>) {
         dragStartRows = null
         pendingOrder = null
-        rows = playlists.toMutableList()
-        notifyDataSetChanged()
+        applyRows(playlists, artworkByPlaylist, artworkByPlaylist)
+    }
+
+    private fun applyRows(
+        newRows: List<LibraryCollection.Playlist>,
+        previousArtwork: Map<LibraryCollectionId, String>,
+        newArtwork: Map<LibraryCollectionId, String>,
+    ) {
+        val oldRows = rows.toList()
+        rows = newRows.toMutableList()
+        DiffUtil.calculateDiff(
+                object : DiffUtil.Callback() {
+                    override fun getOldListSize() = oldRows.size
+
+                    override fun getNewListSize() = newRows.size
+
+                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int) =
+                        oldRows[oldItemPosition].id == newRows[newItemPosition].id
+
+                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) =
+                        oldRows[oldItemPosition] == newRows[newItemPosition] &&
+                            previousArtwork[oldRows[oldItemPosition].id] ==
+                                newArtwork[newRows[newItemPosition].id]
+                }
+            )
+            .dispatchUpdatesTo(this)
     }
 
     internal class ViewHolder(private val binding: ItemLibraryCollectionBinding) :

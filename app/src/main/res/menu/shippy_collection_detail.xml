@@ -14,6 +14,18 @@
         android:title="@string/lbl_sort"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_batch_actions"
+        android:icon="@drawable/ic_more_24"
+        android:title="@string/lbl_batch_actions"
+        android:visible="false"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_edit_order"
+        android:icon="@drawable/ic_sort_24"
+        android:title="@string/lbl_edit_order"
+        android:visible="false"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_rename"
         android:title="@string/lbl_rename"
         android:visible="false"

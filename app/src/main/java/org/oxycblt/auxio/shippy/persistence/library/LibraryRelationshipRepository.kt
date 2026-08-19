@@ -47,6 +47,8 @@ interface LibraryRelationshipRepository {
 
     suspend fun setLiked(track: Track, liked: Boolean)
 
+    suspend fun clearLiked(trackIds: Set<TrackId>)
+
     suspend fun setDownloaded(trackId: TrackId, downloaded: Boolean)
 
     suspend fun createPlaylist(playlist: LibraryCollection.Playlist)
@@ -130,6 +132,11 @@ constructor(
     override suspend fun setLiked(track: Track, liked: Boolean) {
         metadata.upsert(track)
         setLiked(track.id, liked)
+    }
+
+    override suspend fun clearLiked(trackIds: Set<TrackId>) {
+        if (trackIds.isEmpty()) return
+        dao.clearLiked(trackIds.map(TrackId::value))
     }
 
     override suspend fun setDownloaded(trackId: TrackId, downloaded: Boolean) {
