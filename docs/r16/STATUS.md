@@ -1,7 +1,7 @@
 # Shippy R16 Status
 
 **Updated:** 2026-08-19  
-**Active phase:** Phase 2 — Pure Core Model  
+**Active phase:** Phase 3 — R16 Database and Importer  
 **Authority:** `../Shippy_R16_Master_Architecture_and_Implementation_Spec.md`
 
 ## Execution mandate
@@ -87,6 +87,11 @@ avoid checklist theatre.
   hints, external identifiers, and public HTTPS artwork. Their types reject
   local/download/cache/Crew source namespaces and obvious device-private
   locators.
+- The immutable playback reducer now separates intended queue selection from
+  engine-committed current identity. Queue replacement advances generation,
+  every mutation advances revision, source and engine work is tagged, stale
+  results are ignored, and only a matching QueueEntryId engine commit publishes
+  current playback state.
 
 ## Current blockers
 
@@ -99,8 +104,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add the immutable playback snapshot/reducer and its generation/identity
-   invariants, then close the pure-core phase before database scaffolding.
+1. Scaffold `:shippy-data`, define the normalized R16 schema and constraints,
+   and prove empty creation/migration wiring without switching production reads.
 
 ## Verification level
 
@@ -111,6 +116,6 @@ playback identity/transition suites pass (11 tests). The Last.fm suite passes
 presentation suites (10 tests). The bounded pager projection suite passes (4
 tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
-focused-unit-tested. `:shippy-core:check` passes independently (19 tests plus its
-forbidden-import gate). No R16 code has been instrumented,
+focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (22
+tests plus its forbidden-import gate). No R16 code has been instrumented,
 device-tested, or performance-tested.
