@@ -29,6 +29,8 @@ import androidx.room.Transaction
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import org.oxycblt.auxio.shippy.domain.CandidateAvailability
 import org.oxycblt.auxio.shippy.domain.CandidateId
@@ -45,6 +47,8 @@ import timber.log.Timber as L
 /** Durable canonical metadata for relationship-backed library rows, independent of downloads. */
 interface CanonicalTrackMetadataRepository {
     fun observeAll(): Flow<List<Track>>
+
+    fun observeByIds(ids: List<TrackId>): Flow<List<Track>>
 
     suspend fun getByIds(ids: List<TrackId>): Map<TrackId, Track>
 
@@ -110,6 +114,10 @@ internal abstract class CanonicalTrackMetadataDao {
 
     @androidx.room.Transaction
     @Query("SELECT * FROM canonical_track WHERE trackId IN (:trackIds)")
+    abstract fun observeByIds(trackIds: List<String>): Flow<List<StoredCanonicalTrack>>
+
+    @androidx.room.Transaction
+    @Query("SELECT * FROM canonical_track WHERE trackId IN (:trackIds)")
     abstract suspend fun getByIds(trackIds: List<String>): List<StoredCanonicalTrack>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -138,6 +146,17 @@ internal class RoomCanonicalTrackMetadataRepository
 constructor(private val dao: CanonicalTrackMetadataDao) : CanonicalTrackMetadataRepository {
     override fun observeAll(): Flow<List<Track>> =
         dao.observeAll().map { stored -> stored.mapNotNull(StoredCanonicalTrack::toDomainOrNull) }
+
+    override fun observeByIds(ids: List<TrackId>): Flow<List<Track>> {
+        val chunks = ids.distinct().chunked(ROOM_QUERY_ID_CHUNK_SIZE)
+        if (chunks.isEmpty()) return flowOf(emptyList())
+        return combine(chunks.map { chunk -> dao.observeByIds(chunk.map(TrackId::value)) }) {
+            storedChunks ->
+            storedChunks
+                .flatMap { stored -> stored.mapNotNull(StoredCanonicalTrack::toDomainOrNull) }
+                .distinctBy(Track::id)
+        }
+    }
 
     override suspend fun getByIds(ids: List<TrackId>): Map<TrackId, Track> =
         ids.distinct()

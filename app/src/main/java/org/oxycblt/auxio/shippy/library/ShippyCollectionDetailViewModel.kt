@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -64,6 +65,7 @@ import org.oxycblt.auxio.shippy.provider.ProviderRegistry
  * canonical metadata cache can resolve each ID, the UI must not pretend those IDs are playable song
  * rows. The state therefore reports a count and an honest unresolved status instead.
  */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ShippyCollectionDetailViewModel
 @Inject
@@ -114,27 +116,22 @@ constructor(
                     flowOf(ShippyCollectionDetailState.Missing)
                 } else {
                     combine(
-                        repository.observeUserPlaylist(collectionId),
-                        repository.observePlaylistTrackIds(collectionId),
-                        metadata.observeAll(),
-                        downloads.observeAll(),
-                    ) { playlist, trackIds, tracks, storedDownloads ->
-                        playlist?.let {
-                            val rows =
-                                trackIds.resolveRows(
-                                    tracks.toTrackDownloads(
-                                        storedDownloads,
-                                        downloadableProviderIds(),
+                            repository.observeUserPlaylist(collectionId),
+                            repository.observePlaylistTrackIds(collectionId),
+                            ::Pair,
+                        )
+                        .flatMapLatest { (playlist, trackIds) ->
+                            playlist?.let {
+                                scopedRows(trackIds).map { rows ->
+                                    ShippyCollectionDetailState.Playlist(
+                                        playlist = it,
+                                        trackIds = trackIds,
+                                        rows = rows.rows,
+                                        unresolvedTrackCount = rows.unresolvedCount,
                                     )
-                                )
-                            ShippyCollectionDetailState.Playlist(
-                                playlist = it,
-                                trackIds = trackIds,
-                                rows = rows.rows,
-                                unresolvedTrackCount = rows.unresolvedCount,
-                            )
-                        } ?: ShippyCollectionDetailState.Missing
-                    }
+                                }
+                            } ?: flowOf(ShippyCollectionDetailState.Missing)
+                        }
                 }
         }
 
@@ -184,13 +181,19 @@ constructor(
         title: String,
         trackIds: Flow<List<TrackId>>,
     ): Flow<ShippyCollectionDetailState> =
-        combine(trackIds, metadata.observeAll(), downloads.observeAll()) {
-            ids,
+        trackIds.flatMapLatest { ids ->
+            scopedRows(ids).map { rows ->
+                ShippyCollectionDetailState.System(title, rows.rows, rows.unresolvedCount)
+            }
+        }
+
+    private fun scopedRows(trackIds: List<TrackId>): Flow<ResolvedRows> =
+        combine(metadata.observeByIds(trackIds), downloads.observeForTracks(trackIds)) {
             tracks,
             storedDownloads ->
-            val rows =
-                ids.resolveRows(tracks.toTrackDownloads(storedDownloads, downloadableProviderIds()))
-            ShippyCollectionDetailState.System(title, rows.rows, rows.unresolvedCount)
+            trackIds.resolveRows(
+                tracks.toTrackDownloads(storedDownloads, downloadableProviderIds())
+            )
         }
 
     internal fun play(

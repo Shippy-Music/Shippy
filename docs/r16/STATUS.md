@@ -45,6 +45,8 @@ avoid checklist theatre.
 - The service-owned Last.fm observer samples the monotonic playback progression
   each second, counts only advancing position deltas, and refreshes its canonical
   queue snapshot after reorder or shuffle changes.
+- Collection detail now observes only its referenced track metadata and download
+  jobs, with duplicate-safe ID queries chunked below SQLite's bind limit.
 
 ## Current blockers
 
@@ -57,13 +59,14 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Bound collection composition, queue display projection, and managed-download
-   rediscovery before establishing `:shippy-core`.
+1. Bound queue display projection and managed-download rediscovery before
+   establishing `:shippy-core`.
 
 ## Verification level
 
 Baseline preservation is checksum-verified. Changed app Kotlin and Android
 resources compile. `R16LayoutRegressionTest` passes (2 tests), and the focused
 playback identity/transition suites pass (11 tests). The Last.fm suite passes
-(23 tests). No R16 code has been instrumented, device-tested, or
-performance-tested.
+(23 tests). Scoped collection composition passes its focused repository and
+presentation suites (10 tests). No R16 code has been instrumented,
+device-tested, or performance-tested.

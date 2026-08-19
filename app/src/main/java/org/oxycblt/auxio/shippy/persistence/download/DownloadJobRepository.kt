@@ -20,6 +20,8 @@ package org.oxycblt.auxio.shippy.persistence.download
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -57,6 +59,8 @@ interface DownloadJobRepository {
     fun observeAvailable(): Flow<List<PersistedDownload>>
 
     fun observeForTrack(trackId: TrackId): Flow<List<PersistedDownload>>
+
+    fun observeForTracks(trackIds: List<TrackId>): Flow<List<PersistedDownload>>
 
     suspend fun getAll(): List<PersistedDownload>
 
@@ -102,6 +106,17 @@ internal class RoomDownloadJobRepository @Inject constructor(private val dao: Do
 
     override fun observeForTrack(trackId: TrackId): Flow<List<PersistedDownload>> =
         dao.observeForTrack(trackId.value).map { jobs -> jobs.map(StoredDownloadJob::toDomain) }
+
+    override fun observeForTracks(trackIds: List<TrackId>): Flow<List<PersistedDownload>> {
+        val chunks = trackIds.distinct().chunked(ROOM_QUERY_ID_CHUNK_SIZE)
+        if (chunks.isEmpty()) return flowOf(emptyList())
+        return combine(chunks.map { chunk -> dao.observeForTracks(chunk.map(TrackId::value)) }) {
+            storedChunks ->
+            storedChunks
+                .flatMap { jobs -> jobs.map(StoredDownloadJob::toDomain) }
+                .distinctBy { it.job.id }
+        }
+    }
 
     override suspend fun getAll(): List<PersistedDownload> =
         dao.getAll().map(StoredDownloadJob::toDomain)
@@ -181,6 +196,9 @@ internal class RoomDownloadJobRepository @Inject constructor(private val dao: Do
         check(dao.delete(jobId.value) == 1) { "Download job does not exist" }
     }
 }
+
+// Android SQLite historically limits one statement to 999 bind parameters.
+private const val ROOM_QUERY_ID_CHUNK_SIZE = 900
 
 internal fun StoredDownloadJob.toDomain(): PersistedDownload =
     PersistedDownload(
