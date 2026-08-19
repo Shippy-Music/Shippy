@@ -69,6 +69,7 @@ enum class PlaybackCommandRejection {
     EMPTY_QUEUE,
     ENTRY_NOT_FOUND,
     INVALID_QUEUE_MUTATION,
+    SERVICE_NOT_ATTACHED,
     COORDINATOR_RELEASED,
 }
 

@@ -52,6 +52,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
+interface R16PlaybackAuthority : PlaybackCommandRouter {
+    val snapshots: StateFlow<PlaybackSnapshot>
+
+    fun checkpoint(): PlaybackCheckpoint
+
+    suspend fun restore(
+        checkpoint: PlaybackCheckpoint,
+        allowResume: Boolean = false,
+    ): PlaybackCommandResult
+
+    suspend fun release()
+}
+
 /** Inactive R16 playback authority. It is not wired to the production Media3 service yet. */
 class PlaybackCoordinator(
     parentScope: CoroutineScope,
@@ -67,12 +80,12 @@ class PlaybackCoordinator(
     private val listeningSessionIdFactory: ListeningSessionIdFactory =
         RandomListeningSessionIdFactory,
     private val listeningTickIntervalMs: Long = DEFAULT_LISTENING_TICK_INTERVAL_MS,
-) : PlaybackCommandRouter {
+) : R16PlaybackAuthority {
     private val coordinatorJob = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + coordinatorJob)
     private val events = Channel<CoordinatorEvent>(Channel.UNLIMITED)
     private val mutableSnapshot = MutableStateFlow(PlaybackSnapshot.Empty)
-    val snapshots: StateFlow<PlaybackSnapshot> = mutableSnapshot.asStateFlow()
+    override val snapshots: StateFlow<PlaybackSnapshot> = mutableSnapshot.asStateFlow()
 
     private val lifecycleLock = Any()
     private var preparationJob: Job? = null
@@ -110,7 +123,7 @@ class PlaybackCoordinator(
         return reply.await()
     }
 
-    suspend fun release() {
+    override suspend fun release() {
         val firstRelease =
             synchronized(lifecycleLock) {
                 if (!released.compareAndSet(false, true)) {
@@ -144,11 +157,12 @@ class PlaybackCoordinator(
         }
     }
 
-    fun checkpoint(): PlaybackCheckpoint = PlaybackCheckpoint.capture(mutableSnapshot.value)
+    override fun checkpoint(): PlaybackCheckpoint =
+        PlaybackCheckpoint.capture(mutableSnapshot.value)
 
-    suspend fun restore(
+    override suspend fun restore(
         checkpoint: PlaybackCheckpoint,
-        allowResume: Boolean = false,
+        allowResume: Boolean,
     ): PlaybackCommandResult {
         val reply = CompletableDeferred<PlaybackCommandResult>()
         val accepted =

@@ -60,4 +60,19 @@ class BoundedPlaybackTraceRecorder(private val capacity: Int = 256) : PlaybackTr
     }
 
     fun snapshot(): List<PlaybackTraceEvent> = synchronized(events) { events.toList() }
+
+    /** Deterministic, locator-free diagnostics suitable for an owner-visible export surface. */
+    fun exportText(): String =
+        snapshot().joinToString(separator = "\n") { event ->
+            listOf(
+                    event.sequence,
+                    event.generation,
+                    event.queueRevision,
+                    event.kind,
+                    event.detail,
+                    event.queueEntryId?.value.orEmpty(),
+                    event.ignored,
+                )
+                .joinToString(separator = "|")
+        }
 }

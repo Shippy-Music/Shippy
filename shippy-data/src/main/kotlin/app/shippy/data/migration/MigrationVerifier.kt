@@ -21,6 +21,7 @@ import androidx.room.withTransaction
 import androidx.sqlite.db.SupportSQLiteDatabase
 import app.shippy.data.db.ShippyR16Database
 import app.shippy.data.db.dao.StoredPlaybackCheckpoint
+import app.shippy.data.playback.PlaybackCheckpointIntegrity
 import java.security.MessageDigest
 import org.json.JSONArray
 import org.json.JSONObject

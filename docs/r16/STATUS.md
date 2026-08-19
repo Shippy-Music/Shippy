@@ -335,6 +335,17 @@ avoid checklist theatre.
   bounded process-local registry, projects cache/header keys without persisting
   private URLs, and permits one generation-safe retry/fallback per occurrence.
   Media3 observations are delivered through a non-lossy callback channel.
+- The Room-backed R16 checkpoint repository now round-trips source-neutral queue
+  occurrence intent through the existing playback tables. Exact checksums, a
+  10,000-entry bound, and corruption refusal protect restore; transient provider
+  locators and headers never enter the checkpoint. A corrupt checkpoint is not
+  silently cleared merely because the service attaches to an empty queue.
+- The inactive process-scoped `R16PlaybackServiceRuntime` exposes one canonical
+  snapshot/command endpoint, restores paused by default, debounces durable writes,
+  owns orderly authority release, applies the mature foreground-retention policy,
+  and exports bounded locator-free traces. It accepts one already-composed R16
+  authority and has no production caller, so it neither creates a second player
+  nor changes R15.3 authority.
 
 ## Current blockers
 
@@ -347,10 +358,11 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add the process-scoped R16 playback service/runtime and canonical
-   command/snapshot bridge behind an explicit inactive cutover boundary. Preserve
-   the proven service, audio-focus, and MediaSession infrastructure; do not create
-   a second player or switch R15.3 authority before the service/system gates pass.
+1. Build the canonical system-presentation read model and inactive adapters for
+   MediaSession, notification, widget, headset/Bluetooth, and Quick Settings.
+   Every surface must render the R16 snapshot and route commands through the
+   canonical router while preserving mature Android behavior. Do not activate or
+   cut over before the actual single-player composition and system gates pass.
 
 ## Verification level
 
@@ -411,6 +423,11 @@ cleanup, runtime protection, and the shared 60-day default add 2 passing tests
 Transactional playback source options add one passing test covering verified
 assets, linked providers, and rejection of unavailable or unverified assets (38
 total data-module tests).
+Exact R16 checkpoint round-trip and checksum-tamper refusal add 2 passing tests
+(40 total data-module tests). The inactive service runtime adds 2 app tests for
+safe paused restore, pre-attach rejection, central command routing, foreground
+policy, locator-free trace export, debounced persistence, corrupt-checkpoint
+preservation, and exactly-once release.
 `:shippy-sources:check` passes its forbidden-import gate and 10 focused
 source, managed-asset, ingestion, and enrichment tests. The app compiles with the
 inactive Musikr/data bridge; its exact observation-mapping test and
@@ -422,7 +439,7 @@ The inactive Phase 5 path now covers the coordinator, bounded engine window,
 checkpoint/restore, listening, trace, QueueEntryId Media3 projection, expiring
 locator materialization, request headers/cache keys, and one bounded source
 fallback. The current full cached gate passes `spotlessCheck`, 26 core tests, 10
-source tests, 38 data tests, 541 app tests (1 skipped), `:app:lintDebug`, and
+source tests, 40 data tests, 543 app tests (1 skipped), `:app:lintDebug`, and
 `:app:assembleDebug`. The R16 runtime still has no production authority; M12 and
 provider discovery have explicit callable seams but are not invoked by production
 or recorded complete in bootstrap state. None of this work is instrumented,
