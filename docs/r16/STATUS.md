@@ -346,6 +346,15 @@ avoid checklist theatre.
   and exports bounded locator-free traces. It accepts one already-composed R16
   authority and has no production caller, so it neither creates a second player
   nor changes R15.3 authority.
+- The existing canonical Library view now feeds a source-neutral playback
+  presentation repository. Large unique-recording sets are observed in bounded
+  SQLite query batches, so a 10,000-entry queue cannot overflow one `IN` binding.
+- An inactive shared system bridge derives traversal, selected/committed occurrence,
+  metadata, queue, playback state, notification/widget content, and Quick Settings
+  state from one `PlaybackSnapshot`. MediaSession callbacks and system actions submit
+  only `PlaybackCommand`; these adapters import neither `Song` nor the legacy manager.
+  The retained R15.3 Android surfaces remain active until their lifecycle wrappers
+  and the single-player cutover gate are complete.
 
 ## Current blockers
 
@@ -358,11 +367,10 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Build the canonical system-presentation read model and inactive adapters for
-   MediaSession, notification, widget, headset/Bluetooth, and Quick Settings.
-   Every surface must render the R16 snapshot and route commands through the
-   canonical router while preserving mature Android behavior. Do not activate or
-   cut over before the actual single-player composition and system gates pass.
+1. Bind the inactive system bridge into wrappers around the retained MediaSession,
+   notification, foreground, artwork, widget, receiver, and Quick Settings behavior.
+   Prove attach/release/recreation and occurrence agreement behind the cutover
+   selector; do not activate R16 or create a second player yet.
 
 ## Verification level
 
@@ -428,6 +436,12 @@ Exact R16 checkpoint round-trip and checksum-tamper refusal add 2 passing tests
 safe paused restore, pre-attach rejection, central command routing, foreground
 policy, locator-free trace export, debounced persistence, corrupt-checkpoint
 preservation, and exactly-once release.
+Canonical playback presentation adds 2 focused data tests for identity projection,
+missing rows, empty requests, and bounded 1,001-ID lookup. Shared system projection
+adds 2 focused app tests for duplicate Recording occurrences, shuffled traversal,
+exact QueueEntryId presentation, Quick Settings agreement, and central command
+routing. Android MediaSession types compile, but the inactive bridge is not yet
+attached to a real service or device surface.
 `:shippy-sources:check` passes its forbidden-import gate and 10 focused
 source, managed-asset, ingestion, and enrichment tests. The app compiles with the
 inactive Musikr/data bridge; its exact observation-mapping test and
@@ -439,7 +453,7 @@ The inactive Phase 5 path now covers the coordinator, bounded engine window,
 checkpoint/restore, listening, trace, QueueEntryId Media3 projection, expiring
 locator materialization, request headers/cache keys, and one bounded source
 fallback. The current full cached gate passes `spotlessCheck`, 26 core tests, 10
-source tests, 40 data tests, 543 app tests (1 skipped), `:app:lintDebug`, and
+source tests, 42 data tests, 545 app tests (1 skipped), `:app:lintDebug`, and
 `:app:assembleDebug`. The R16 runtime still has no production authority; M12 and
 provider discovery have explicit callable seams but are not invoked by production
 or recorded complete in bootstrap state. None of this work is instrumented,

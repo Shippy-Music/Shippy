@@ -27,8 +27,10 @@ import app.shippy.data.maintenance.RoomR16CatalogueMaintenance
 import app.shippy.data.migration.R16LocalReindexAudit
 import app.shippy.data.migration.RoomR16LocalReindexAudit
 import app.shippy.data.playback.R16PlaybackCheckpointRepository
+import app.shippy.data.playback.R16PlaybackPresentationRepository
 import app.shippy.data.playback.R16PlaybackSourceRepository
 import app.shippy.data.playback.RoomR16PlaybackCheckpointRepository
+import app.shippy.data.playback.RoomR16PlaybackPresentationRepository
 import app.shippy.data.playback.RoomR16PlaybackSourceRepository
 import app.shippy.data.source.R16SourceStateRepository
 import app.shippy.data.source.RoomR16SourceStateRepository
@@ -41,6 +43,8 @@ class R16DataRuntime private constructor(private val database: ShippyR16Database
     val sources: R16SourceStateRepository = RoomR16SourceStateRepository(database)
     val playbackCheckpoints: R16PlaybackCheckpointRepository =
         RoomR16PlaybackCheckpointRepository(database)
+    val playbackPresentations: R16PlaybackPresentationRepository =
+        RoomR16PlaybackPresentationRepository(database)
     val playbackSources: R16PlaybackSourceRepository = RoomR16PlaybackSourceRepository(database)
     val catalogueMaintenance: R16CatalogueMaintenance = RoomR16CatalogueMaintenance(database)
 
