@@ -1,7 +1,7 @@
 # Shippy R16 Status
 
 **Updated:** 2026-08-19  
-**Active phase:** Phase 3 — R16 Database and Importer  
+**Active phase:** Phase 4 — Source Ingestion and Managed Assets  
 **Authority:** `../Shippy_R16_Master_Architecture_and_Implementation_Spec.md`
 
 ## Execution mandate
@@ -12,6 +12,10 @@ owner decision that the master specification explicitly marks as blocking.
 
 Build and Gradle caches must be retained between builds. Clear them only after a
 specific cache-corruption diagnosis.
+
+All R16 work remains local for owner testing. Local commits may preserve
+coherent checkpoints, but no GitHub push, pull request, release, or other
+publication is authorized until the owner explicitly requests it.
 
 Treat the master specification as a compass, not a literal transcription task:
 its invariants, data-safety rules, authority boundaries, and required outcomes
@@ -229,6 +233,14 @@ avoid checklist theatre.
   completed phases are an irreversible ordered prefix; backup/hash requirements
   gate import, verification, and cutover; corrupt state is reported rather than
   silently reset. The store is not wired into production selection yet.
+- `:shippy-sources` now establishes the Phase 4 boundary without changing the
+  active app: Android/Musikr-free source observations and local-engine contracts
+  depend only on `:shippy-core`, provider observations cannot carry durable
+  device locators, and the module has a forbidden-import gate.
+- The first managed-asset registry classifies exact URI/document/MediaStore/job
+  ownership before verified move-recovery evidence. Unrelated files remain
+  ordinary Local candidates, while ambiguous checksum/fingerprint matches are
+  surfaced for review rather than silently merged.
 
 ## Current blockers
 
@@ -241,9 +253,12 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete sanitized `ShippyBackupV1` database export/restore orchestration,
-   then build the Phase 4 ingestion seam that unlocks M5/M12. Production remains
-   on legacy v10.
+1. Implement the idempotent `RecordingIngestor` transaction boundary and the
+   concrete app-side Musikr wrapper, then feed real local scan observations
+   through managed-asset classification to unlock M5/M12. Production remains on
+   legacy v10. The sanitized backup exporter/restore adapter follows once these
+   asset and merge semantics are stable enough to avoid exporting private
+   locators or promising a false restore.
 
 ## Verification level
 
@@ -294,3 +309,6 @@ total data-module tests).
 Checksum-protected atomic bootstrap state, legal transition checks, stale-writer
 rejection, corruption refusal, and premature-verification refusal add 2 passing
 focused tests (31 total data-module tests).
+`:shippy-sources:check` passes its forbidden-import gate and 2 focused
+managed-asset tests. The new source contracts and registry are not yet connected
+to Musikr, Room, the production app, instrumentation, or a physical device.
