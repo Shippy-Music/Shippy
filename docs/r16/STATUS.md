@@ -224,6 +224,11 @@ avoid checklist theatre.
   duplicate exact source keys and asset locations, and revalidates playback
   order/current/checksum identity. It cannot report ready while any M0-M12 phase
   is missing; therefore M5/M12 still block cutover instead of being papered over.
+- Migration authority now has a small checksum-protected `AtomicFile` state
+  outside both databases. Revision compare-and-set prevents stale writers;
+  completed phases are an irreversible ordered prefix; backup/hash requirements
+  gate import, verification, and cutover; corrupt state is reported rather than
+  silently reset. The store is not wired into production selection yet.
 
 ## Current blockers
 
@@ -236,9 +241,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete sanitized `ShippyBackupV1` database export/restore orchestration and
-   durable bootstrap migration-state handling, then build the Phase 4 ingestion
-   seam that unlocks M5/M12. Production remains on legacy v10.
+1. Complete sanitized `ShippyBackupV1` database export/restore orchestration,
+   then build the Phase 4 ingestion seam that unlocks M5/M12. Production remains
+   on legacy v10.
 
 ## Verification level
 
@@ -286,3 +291,6 @@ passing focused test (27 total data-module tests).
 M11 bounded Crew-checkpoint inspection/expiry and M13 phase/count/reference/
 redirect/uniqueness/checkpoint verification add 2 passing focused tests (29
 total data-module tests).
+Checksum-protected atomic bootstrap state, legal transition checks, stale-writer
+rejection, corruption refusal, and premature-verification refusal add 2 passing
+focused tests (31 total data-module tests).
