@@ -62,6 +62,28 @@ internal data class LegacyCanonicalCandidateRow(
     val contentLength: Long?,
 )
 
+internal data class LegacyLibraryRelationshipRow(
+    val trackId: String,
+    val liked: Boolean,
+    val downloaded: Boolean,
+)
+
+internal data class LegacyUserPlaylistRow(
+    val playlistId: String,
+    val name: String,
+    val pinned: Boolean,
+    val position: Int,
+    val artworkUri: String?,
+    val orderOrdinal: Long,
+)
+
+internal data class LegacyPlaylistMembershipRow(
+    val trackId: String,
+    val playlistId: String,
+    val position: Int,
+    val orderOrdinal: Long,
+)
+
 internal class LegacyDatabaseReader private constructor(private val database: SQLiteDatabase) :
     Closeable {
     init {
@@ -193,6 +215,173 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
             }
     }
 
+    fun libraryRelationships(
+        afterTrackId: String?,
+        limit: Int,
+    ): List<LegacyLibraryRelationshipRow> {
+        requirePageSize(limit)
+        val selection = if (afterTrackId == null) "" else "WHERE trackId > ?"
+        val arguments = afterTrackId?.let { arrayOf(it) } ?: emptyArray()
+        return database
+            .rawQuery(
+                """
+                SELECT trackId, liked, downloaded
+                FROM library_relationship
+                $selection
+                ORDER BY trackId
+                LIMIT $limit
+                """
+                    .trimIndent(),
+                arguments,
+            )
+            .useRows { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            LegacyLibraryRelationshipRow(
+                                trackId = cursor.getString(0),
+                                liked = cursor.getInt(1) != 0,
+                                downloaded = cursor.getInt(2) != 0,
+                            )
+                        )
+                    }
+                }
+            }
+    }
+
+    fun userPlaylists(
+        afterPosition: Int?,
+        afterPlaylistId: String?,
+        limit: Int,
+    ): List<LegacyUserPlaylistRow> {
+        requirePageSize(limit)
+        require((afterPosition == null) == (afterPlaylistId == null)) {
+            "Legacy playlist checkpoint must contain both key parts"
+        }
+        val selection =
+            if (afterPosition == null) {
+                ""
+            } else {
+                "WHERE playlist.position > ? OR (playlist.position = ? AND playlist.playlistId > ?)"
+            }
+        val arguments =
+            if (afterPosition == null) {
+                emptyArray()
+            } else {
+                arrayOf(
+                    afterPosition.toString(),
+                    afterPosition.toString(),
+                    checkNotNull(afterPlaylistId),
+                )
+            }
+        return database
+            .rawQuery(
+                """
+                SELECT playlist.playlistId, playlist.name, playlist.pinned, playlist.position,
+                       playlist.artworkUri,
+                       (
+                           SELECT COUNT(*) FROM user_playlist AS preceding
+                           WHERE preceding.position < playlist.position
+                              OR (preceding.position = playlist.position
+                                  AND preceding.playlistId < playlist.playlistId)
+                       ) AS orderOrdinal
+                FROM user_playlist AS playlist
+                $selection
+                ORDER BY playlist.position, playlist.playlistId
+                LIMIT $limit
+                """
+                    .trimIndent(),
+                arguments,
+            )
+            .useRows { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            LegacyUserPlaylistRow(
+                                playlistId = cursor.getString(0),
+                                name = cursor.getString(1),
+                                pinned = cursor.getInt(2) != 0,
+                                position = cursor.getInt(3),
+                                artworkUri = cursor.stringOrNull(4),
+                                orderOrdinal = cursor.getLong(5),
+                            )
+                        )
+                    }
+                }
+            }
+    }
+
+    fun playlistMemberships(
+        afterPlaylistId: String?,
+        afterPosition: Int?,
+        afterTrackId: String?,
+        limit: Int,
+    ): List<LegacyPlaylistMembershipRow> {
+        requirePageSize(limit)
+        val checkpointParts = listOf(afterPlaylistId, afterPosition, afterTrackId)
+        require(checkpointParts.all { it == null } || checkpointParts.all { it != null }) {
+            "Legacy playlist-membership checkpoint must contain all key parts"
+        }
+        val selection =
+            if (afterPlaylistId == null) {
+                ""
+            } else {
+                """
+                WHERE membership.playlistId > ?
+                   OR (membership.playlistId = ? AND membership.position > ?)
+                   OR (membership.playlistId = ? AND membership.position = ?
+                       AND membership.trackId > ?)
+                """
+                    .trimIndent()
+            }
+        val arguments =
+            if (afterPlaylistId == null) {
+                emptyArray()
+            } else {
+                arrayOf(
+                    afterPlaylistId,
+                    afterPlaylistId,
+                    checkNotNull(afterPosition).toString(),
+                    afterPlaylistId,
+                    afterPosition.toString(),
+                    checkNotNull(afterTrackId),
+                )
+            }
+        return database
+            .rawQuery(
+                """
+                SELECT membership.trackId, membership.playlistId, membership.position,
+                       (
+                           SELECT COUNT(*) FROM playlist_membership AS preceding
+                           WHERE preceding.playlistId = membership.playlistId
+                             AND (preceding.position < membership.position
+                                  OR (preceding.position = membership.position
+                                      AND preceding.trackId < membership.trackId))
+                       ) AS orderOrdinal
+                FROM playlist_membership AS membership
+                $selection
+                ORDER BY membership.playlistId, membership.position, membership.trackId
+                LIMIT $limit
+                """
+                    .trimIndent(),
+                arguments,
+            )
+            .useRows { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            LegacyPlaylistMembershipRow(
+                                trackId = cursor.getString(0),
+                                playlistId = cursor.getString(1),
+                                position = cursor.getInt(2),
+                                orderOrdinal = cursor.getLong(3),
+                            )
+                        )
+                    }
+                }
+            }
+    }
+
     override fun close() {
         database.close()
     }
@@ -202,6 +391,12 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
         return database.rawQuery("SELECT COUNT(*) FROM `$table`", emptyArray()).useRows { cursor ->
             check(cursor.moveToFirst()) { "Legacy count query returned no row" }
             cursor.getLong(0)
+        }
+    }
+
+    private fun requirePageSize(limit: Int) {
+        require(limit in 1..MAX_PAGE_SIZE) {
+            "Legacy page size must be between 1 and $MAX_PAGE_SIZE"
         }
     }
 

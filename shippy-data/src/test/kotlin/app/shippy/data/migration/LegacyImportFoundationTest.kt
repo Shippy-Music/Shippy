@@ -96,6 +96,34 @@ class LegacyImportFoundationTest {
             assertEquals("candidate-a", firstCandidate.single().candidateId)
             assertEquals("track-b", secondCandidate.single().trackId)
             assertEquals("candidate-b", secondCandidate.single().candidateId)
+
+            val relationships = reader.libraryRelationships(afterTrackId = null, limit = 2)
+            assertEquals(listOf("track-a", "track-b"), relationships.map { it.trackId })
+            assertTrue(relationships.first().liked)
+            assertTrue(relationships.last().downloaded)
+
+            val playlists =
+                reader.userPlaylists(afterPosition = null, afterPlaylistId = null, limit = 2)
+            assertEquals(listOf("playlist-a", "playlist-b"), playlists.map { it.playlistId })
+            assertEquals(listOf(0L, 1L), playlists.map { it.orderOrdinal })
+
+            val firstMembership =
+                reader.playlistMemberships(
+                    afterPlaylistId = null,
+                    afterPosition = null,
+                    afterTrackId = null,
+                    limit = 1,
+                )
+            val secondMembership =
+                reader.playlistMemberships(
+                    afterPlaylistId = firstMembership.single().playlistId,
+                    afterPosition = firstMembership.single().position,
+                    afterTrackId = firstMembership.single().trackId,
+                    limit = 1,
+                )
+            assertEquals("track-b", firstMembership.single().trackId)
+            assertEquals("track-a", secondMembership.single().trackId)
+            assertEquals(1L, secondMembership.single().orderOrdinal)
         }
     }
 
@@ -250,11 +278,121 @@ class LegacyImportFoundationTest {
             assertEquals(1L, database.legacyImportDao().assetCount())
         }
 
+    @Test
+    fun `M3 and M4 preserve Library ownership playlists and sparse order`() =
+        kotlinx.coroutines.runBlocking {
+            startAudit("migration-3")
+            LegacyCanonicalTrackImporter(database)
+                .importPage(
+                    "migration-3",
+                    listOf(
+                        legacyTrack("track-a", "Alpha", "6:Artist", null),
+                        legacyTrack("track-b", "Beta", "6:Artist", null),
+                    ),
+                    1_000,
+                )
+
+            val libraryResult =
+                LegacyLibraryRelationshipImporter(database)
+                    .importPage(
+                        "migration-3",
+                        listOf(
+                            LegacyLibraryRelationshipRow(
+                                "track-a",
+                                liked = true,
+                                downloaded = false,
+                            ),
+                            LegacyLibraryRelationshipRow(
+                                "track-b",
+                                liked = false,
+                                downloaded = true,
+                            ),
+                        ),
+                        2_000,
+                    )
+
+            assertEquals(2, libraryResult.importedCount)
+            assertEquals(1, libraryResult.pendingDownloadVerificationCount)
+            val recordingA = LegacyIdMapper.recording("track-a").value
+            val recordingB = LegacyIdMapper.recording("track-b").value
+            assertTrue(
+                checkNotNull(database.legacyImportDao().libraryRelationship(recordingA)).liked
+            )
+            assertEquals(
+                "DURABLE",
+                checkNotNull(database.recordingDao().get(recordingB)).retentionKind,
+            )
+
+            val importer = LegacyPlaylistImporter(database)
+            val playlistRows =
+                listOf(
+                    LegacyUserPlaylistRow(
+                        playlistId = "playlist-a",
+                        name = "Mix",
+                        pinned = true,
+                        position = 0,
+                        artworkUri = "content://art/mix",
+                        orderOrdinal = 0,
+                    ),
+                    LegacyUserPlaylistRow(
+                        playlistId = "playlist-b",
+                        name = "  ",
+                        pinned = false,
+                        position = 0,
+                        artworkUri = null,
+                        orderOrdinal = 1,
+                    ),
+                )
+            val playlistResult = importer.importPlaylistPage("migration-3", playlistRows, 3_000)
+            val playlistA = LegacyIdMapper.playlist("playlist-a").value
+            val playlistB = LegacyIdMapper.playlist("playlist-b").value
+            assertEquals(2, playlistResult.importedCount)
+            assertEquals("Mix", checkNotNull(database.legacyImportDao().playlist(playlistA)).name)
+            assertEquals(
+                "Untitled",
+                checkNotNull(database.legacyImportDao().playlist(playlistB)).name,
+            )
+            assertEquals(
+                1_024L,
+                checkNotNull(database.legacyImportDao().libraryLayout("PLAYLIST", playlistA))
+                    .orderKey,
+            )
+
+            val membershipRows =
+                listOf(
+                    LegacyPlaylistMembershipRow("track-a", "playlist-a", 0, 0),
+                    LegacyPlaylistMembershipRow("track-b", "playlist-a", 0, 1),
+                    LegacyPlaylistMembershipRow("track-a", "playlist-b", 0, 0),
+                )
+            importer.importMembershipPage("migration-3", membershipRows, 4_000)
+            assertEquals(
+                listOf(recordingA, recordingB),
+                database.playlistDao().entries(playlistA).map { it.recordingId },
+            )
+            assertEquals(
+                listOf(1_024L, 2_048L),
+                database.playlistDao().entries(playlistA).map { it.orderKey },
+            )
+
+            importer.importPlaylistPage("migration-3", playlistRows, 3_000)
+            importer.importMembershipPage("migration-3", membershipRows, 4_000)
+            assertEquals(2L, database.legacyImportDao().playlistCount())
+            assertEquals(3L, database.legacyImportDao().playlistEntryCount())
+        }
+
     private fun createLegacyDatabase() {
         SQLiteDatabase.openOrCreateDatabase(legacyFile, null).use { database ->
             database.version = LEGACY_SCHEMA_VERSION
             for (table in LEGACY_TABLES) {
-                if (table == "canonical_track" || table == "canonical_track_candidate") continue
+                if (
+                    table == "canonical_track" ||
+                        table == "canonical_track_candidate" ||
+                        table == "library_relationship" ||
+                        table == "user_playlist" ||
+                        table == "playlist_membership"
+                ) {
+                    continue
+                }
                 database.execSQL("CREATE TABLE `$table` (`id` TEXT)")
             }
             database.execSQL(
@@ -388,7 +526,65 @@ class LegacyImportFoundationTest {
                     321,
                 ),
             )
+            createLegacyLibraryTables(database)
         }
+    }
+
+    private fun createLegacyLibraryTables(database: SQLiteDatabase) {
+        database.execSQL(
+            """
+            CREATE TABLE library_relationship (
+                trackId TEXT NOT NULL PRIMARY KEY,
+                liked INTEGER NOT NULL,
+                downloaded INTEGER NOT NULL
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO library_relationship (trackId, liked, downloaded)
+            VALUES ('track-b', 0, 1), ('track-a', 1, 0)
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            CREATE TABLE user_playlist (
+                playlistId TEXT NOT NULL PRIMARY KEY,
+                name TEXT NOT NULL,
+                pinned INTEGER NOT NULL,
+                position INTEGER NOT NULL,
+                artworkUri TEXT
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO user_playlist (playlistId, name, pinned, position, artworkUri)
+            VALUES ('playlist-b', 'B', 0, 0, NULL), ('playlist-a', 'A', 1, 0, NULL)
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            CREATE TABLE playlist_membership (
+                trackId TEXT NOT NULL,
+                playlistId TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                PRIMARY KEY(trackId, playlistId)
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO playlist_membership (trackId, playlistId, position)
+            VALUES ('track-a', 'playlist-a', 1), ('track-b', 'playlist-a', 0)
+            """
+                .trimIndent()
+        )
     }
 
     private suspend fun startAudit(migrationId: String) {

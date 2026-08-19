@@ -167,6 +167,18 @@ avoid checklist theatre.
   downgraded. Temporary Crew candidates remain raw audit observations only and
   never become permanent sources. Retry is idempotent, and an exact source or
   asset-location conflict is reported rather than reassigned.
+- M3 now pages legacy Library relationships by TrackId, preserves Liked as an
+  explicit R16 relationship, supplies migration-time provenance for the absent
+  first-added timestamp, and promotes every user-owned relationship Recording
+  from transient to durable. Legacy downloaded flags remain evidence for M6;
+  they do not manufacture an available asset before file verification.
+- M4 pages playlists and memberships by stable composite keys. Correlated
+  source ordinals normalize duplicate/broken legacy positions into deterministic
+  1024-spaced order keys across page boundaries. Playlist identity, name, pin,
+  artwork, and Library layout are preserved; entries map to deterministic
+  occurrence IDs and make their Recordings durable. Retry is idempotent. The
+  v10 `(trackId, playlistId)` key could not represent duplicate occurrences, so
+  migration preserves its exact expressible data without inventing duplicates.
 
 ## Current blockers
 
@@ -179,8 +191,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add bounded M3 Library-relationship and M4 playlist import, preserving user
-   ownership and sparse occurrence ordering; production remains on legacy v10.
+1. Establish the M5 Musikr/device-playlist import boundary, then add bounded M6
+   download job reads and exact artifact verification; production remains on
+   legacy v10.
 
 ## Verification level
 
@@ -212,3 +225,6 @@ data-module tests).
 M2 composite paging, exact source import, verified asset publication, URL
 discard, Crew-temporary exclusion, and retry behavior add 1 passing focused test
 (23 total data-module tests).
+M3/M4 Library ownership, playlist/layout preservation, deterministic sparse
+ordering, stable paging, and retry behavior add 1 passing focused test (24 total
+data-module tests).

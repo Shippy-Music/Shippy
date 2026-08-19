@@ -22,7 +22,11 @@ import androidx.room.Query
 import androidx.room.Upsert
 import app.shippy.data.db.entity.ArtistEntity
 import app.shippy.data.db.entity.CanonicalFieldProvenanceEntity
+import app.shippy.data.db.entity.LibraryLayoutEntryEntity
+import app.shippy.data.db.entity.LibraryRecordingEntity
 import app.shippy.data.db.entity.MetadataObservationEntity
+import app.shippy.data.db.entity.PlaylistEntity
+import app.shippy.data.db.entity.PlaylistEntryEntity
 import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.entity.ReleaseEntity
@@ -52,6 +56,46 @@ internal interface LegacyImportDao {
     @Query("SELECT COUNT(*) FROM source_reference") suspend fun sourceCount(): Long
 
     @Query("SELECT COUNT(*) FROM media_asset") suspend fun assetCount(): Long
+
+    @Query("SELECT COUNT(*) FROM library_recording") suspend fun libraryRecordingCount(): Long
+
+    @Query("SELECT COUNT(*) FROM playlist") suspend fun playlistCount(): Long
+
+    @Query("SELECT COUNT(*) FROM playlist_entry") suspend fun playlistEntryCount(): Long
+
+    @Query("SELECT * FROM library_recording WHERE recording_id = :recordingId")
+    suspend fun libraryRelationship(recordingId: String): LibraryRecordingEntity?
+
+    @Upsert suspend fun upsertLibraryRelationship(entity: LibraryRecordingEntity)
+
+    @Query(
+        """
+        UPDATE recording SET retention_kind = 'DURABLE', retained_until_epoch_ms = NULL,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE recording_id = :recordingId
+        """
+    )
+    suspend fun makeRecordingDurable(recordingId: String, updatedAtEpochMs: Long): Int
+
+    @Query("SELECT * FROM playlist WHERE playlist_id = :playlistId")
+    suspend fun playlist(playlistId: String): PlaylistEntity?
+
+    @Upsert suspend fun upsertPlaylist(entity: PlaylistEntity)
+
+    @Upsert suspend fun upsertLibraryLayout(entity: LibraryLayoutEntryEntity)
+
+    @Query(
+        """
+        SELECT * FROM library_layout_entry
+        WHERE target_type = :targetType AND target_id = :targetId
+        """
+    )
+    suspend fun libraryLayout(targetType: String, targetId: String): LibraryLayoutEntryEntity?
+
+    @Query("SELECT * FROM playlist_entry WHERE playlist_entry_id = :playlistEntryId")
+    suspend fun playlistEntry(playlistEntryId: String): PlaylistEntryEntity?
+
+    @Upsert suspend fun upsertPlaylistEntry(entity: PlaylistEntryEntity)
 
     @Query("SELECT * FROM release WHERE release_id = :releaseId")
     suspend fun release(releaseId: String): ReleaseEntity?
