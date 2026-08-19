@@ -26,6 +26,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import app.shippy.data.db.entity.PlaylistEntity
 import app.shippy.data.db.entity.PlaylistEntryEntity
+import app.shippy.data.db.util.SparseOrderKey
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -62,6 +63,18 @@ internal abstract class PlaylistDao {
 
     @Update protected abstract suspend fun updateEntries(entities: List<PlaylistEntryEntity>)
 
+    @Query(
+        """
+        UPDATE playlist_entry SET order_key = :orderKey
+        WHERE playlist_id = :playlistId AND playlist_entry_id = :playlistEntryId
+        """
+    )
+    protected abstract suspend fun updateOrderKey(
+        playlistId: String,
+        playlistEntryId: String,
+        orderKey: Long,
+    ): Int
+
     @Delete abstract suspend fun deleteEntries(entities: List<PlaylistEntryEntity>)
 
     @Query("DELETE FROM playlist WHERE playlist_id = :playlistId")
@@ -92,5 +105,67 @@ internal abstract class PlaylistDao {
             "Reorder must contain every current playlist occurrence exactly once"
         }
         updateEntries(orderedEntries)
+    }
+
+    @Transaction
+    open suspend fun moveBetween(
+        playlistId: String,
+        playlistEntryId: String,
+        beforeEntryId: String?,
+        afterEntryId: String?,
+    ) {
+        require(playlistEntryId != beforeEntryId && playlistEntryId != afterEntryId) {
+            "Moved occurrence cannot be its own anchor"
+        }
+        val current = entries(playlistId)
+        val moving =
+            current.singleOrNull { it.playlistEntryId == playlistEntryId }
+                ?: error("Playlist occurrence is missing")
+        val remaining = current.filterNot { it.playlistEntryId == playlistEntryId }
+        val insertionIndex = insertionIndex(remaining, beforeEntryId, afterEntryId)
+        val before = remaining.getOrNull(insertionIndex - 1)
+        val after = remaining.getOrNull(insertionIndex)
+        val sparseKey = SparseOrderKey.between(before?.orderKey, after?.orderKey)
+        if (sparseKey != null) {
+            check(updateOrderKey(playlistId, playlistEntryId, sparseKey) == 1) {
+                "Playlist occurrence disappeared during move"
+            }
+            return
+        }
+
+        val reordered = remaining.toMutableList().apply { add(insertionIndex, moving) }
+        val keys = SparseOrderKey.rebalancedKeys(reordered.size)
+        updateEntries(reordered.mapIndexed { index, entry -> entry.copy(orderKey = keys[index]) })
+    }
+
+    private fun insertionIndex(
+        remaining: List<PlaylistEntryEntity>,
+        beforeEntryId: String?,
+        afterEntryId: String?,
+    ): Int {
+        if (remaining.isEmpty()) {
+            require(beforeEntryId == null && afterEntryId == null) {
+                "An empty playlist move cannot have anchors"
+            }
+            return 0
+        }
+        if (beforeEntryId == null) {
+            require(afterEntryId == remaining.first().playlistEntryId) {
+                "Start move must anchor the current first occurrence"
+            }
+            return 0
+        }
+        if (afterEntryId == null) {
+            require(beforeEntryId == remaining.last().playlistEntryId) {
+                "End move must anchor the current last occurrence"
+            }
+            return remaining.size
+        }
+        val beforeIndex = remaining.indexOfFirst { it.playlistEntryId == beforeEntryId }
+        val afterIndex = remaining.indexOfFirst { it.playlistEntryId == afterEntryId }
+        require(beforeIndex >= 0 && afterIndex == beforeIndex + 1) {
+            "Move anchors must be adjacent playlist occurrences"
+        }
+        return afterIndex
     }
 }

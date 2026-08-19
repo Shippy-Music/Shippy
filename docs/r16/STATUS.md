@@ -130,6 +130,13 @@ avoid checklist theatre.
   guarded single completion with target counts and checksum. Bootstrap cutover
   state remains intentionally outside this mutable database, and no importer or
   production switch is claimed yet.
+- Library songs, Liked, Local, Downloads, playlist detail, scoped Library and
+  playlist FTS, and local play history now expose Room-backed PagingSources with
+  a 50-row consumer default rather than full-table hydration. UI/domain repository
+  adapters are still intentionally absent.
+- Playlist occurrence moves use sparse 64-bit order keys and normally update one
+  row. Only an exhausted/overflowed anchor gap triggers a deterministic complete
+  rebalance, while duplicate recordings remain distinct by PlaylistEntryId.
 
 ## Current blockers
 
@@ -142,9 +149,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add bounded Paging read queries and sparse playlist order maintenance, then
-   implement the versioned backup/import foundation; production remains on
-   legacy v10.
+1. Implement the versioned backup format and read-only legacy import foundation
+   with deterministic ID mapping; production remains on legacy v10.
 
 ## Verification level
 
@@ -166,3 +172,5 @@ identity hash `a492bff168b76a611f7a9dfb6d8b665b`. The durable identity/history/c
 DAO suite adds 3 passing focused tests (9 total data-module tests).
 The download/integration/migration ledger suite adds 3 passing focused tests
 (12 total data-module tests).
+Paging and sparse-order coverage adds 3 passing focused tests (15 total
+data-module tests).

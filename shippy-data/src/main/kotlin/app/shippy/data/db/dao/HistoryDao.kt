@@ -17,6 +17,7 @@
  */
 package app.shippy.data.db.dao
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Upsert
@@ -52,6 +53,14 @@ internal abstract class HistoryDao {
         """
     )
     abstract suspend fun totalActiveListenedMs(recordingId: String): Long
+
+    @Query(
+        """
+        SELECT * FROM play_history
+        ORDER BY started_at_epoch_ms DESC, listening_session_id DESC
+        """
+    )
+    abstract fun page(): PagingSource<Int, PlayHistoryEntity>
 
     open suspend fun save(entity: PlayHistoryEntity) {
         require(entity.activeListenedMs >= 0) { "Active listening time cannot be negative" }

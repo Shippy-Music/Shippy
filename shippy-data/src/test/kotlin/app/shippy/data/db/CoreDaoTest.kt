@@ -149,6 +149,29 @@ class CoreDaoTest {
         }
 
     @Test
+    fun `sparse playlist move rebalances only when adjacent keys are exhausted`() = runBlocking {
+        insertRecording("recording-1")
+        val playlist = playlist("playlist-1")
+        val first = playlistEntry("entry-1", 0)
+        val second = playlistEntry("entry-2", 1)
+        val third = playlistEntry("entry-3", 2)
+        database.playlistDao().create(playlist, listOf(first, second, third))
+
+        database
+            .playlistDao()
+            .moveBetween(
+                playlistId = playlist.playlistId,
+                playlistEntryId = third.playlistEntryId,
+                beforeEntryId = first.playlistEntryId,
+                afterEntryId = second.playlistEntryId,
+            )
+
+        val reordered = database.playlistDao().entries(playlist.playlistId)
+        assertEquals(listOf("entry-1", "entry-3", "entry-2"), reordered.map { it.playlistEntryId })
+        assertEquals(listOf(1_024L, 2_048L, 3_072L), reordered.map { it.orderKey })
+    }
+
+    @Test
     fun `read views and FTS project one canonical identity`() = runBlocking {
         insertRecording("recording-1")
         database.assetDao().upsert(asset("asset-1", "recording-1"))
