@@ -47,6 +47,10 @@ avoid checklist theatre.
   queue snapshot after reorder or shuffle changes.
 - Collection detail now observes only its referenced track metadata and download
   jobs, with duplicate-safe ID queries chunked below SQLite's bind limit.
+- Now Playing projects at most the current queue item and its two adjacent
+  items into artwork display models, then recenters that bounded window after a
+  transition; the full canonical queue remains owned by playback and the queue
+  screen.
 
 ## Current blockers
 
@@ -59,8 +63,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Bound queue display projection and managed-download rediscovery before
-   establishing `:shippy-core`.
+1. Prevent Shippy-managed downloads from being rediscovered as Local duplicates
+   before establishing `:shippy-core`.
 
 ## Verification level
 
@@ -68,5 +72,6 @@ Baseline preservation is checksum-verified. Changed app Kotlin and Android
 resources compile. `R16LayoutRegressionTest` passes (2 tests), and the focused
 playback identity/transition suites pass (11 tests). The Last.fm suite passes
 (23 tests). Scoped collection composition passes its focused repository and
-presentation suites (10 tests). No R16 code has been instrumented,
+presentation suites (10 tests). The bounded pager projection suite passes (4
+tests). No R16 code has been instrumented,
 device-tested, or performance-tested.

@@ -163,28 +163,16 @@ constructor(
         L.d("Index moved, updating current song")
         _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()
         _song.value = playbackManager.currentSong
-        val resolvedItem = playbackManager.resolvedQueue.getOrNull(index)
+        val queue = playbackManager.resolvedQueue
+        val resolvedItem = queue.getOrNull(index)
         updateDisplayItem(resolvedItem?.let(playbackDisplayMapper::map))
-
-        val pagerIndex =
-            resolvedItem?.let { current ->
-                _pagerQueue.value.queue.indexOfFirst { it.queueItem.id == current.item.id }
-            } ?: -1
-        if (pagerIndex >= 0) {
-            _pagerQueue.value =
-                _pagerQueue.value.copy(
-                    index = pagerIndex,
-                    command = PagerCommand(update = null, scroll = pagerIndex),
-                )
-        } else {
-            // The pager can still be mapping an older queue. Replace it from the same canonical
-            // snapshot instead of pairing a new playback index with stale artwork.
-            updatePagerQueueAsync(
-                playbackManager.resolvedQueue,
-                index,
-                PagerCommand(update = UpdateInstructions.Replace(0), scroll = index),
-            )
-        }
+        // Recenter the bounded artwork window after every transition so repeated swipes remain
+        // possible without projecting the rest of the canonical queue into display models.
+        updatePagerQueueAsync(
+            queue,
+            index,
+            PagerCommand(update = UpdateInstructions.Replace(0), scroll = index),
+        )
     }
 
     override fun onQueueChanged(queue: List<Song>, index: Int, change: QueueChange) {
@@ -265,23 +253,30 @@ constructor(
         // identity of the intended item so artwork and metadata can never be paired by a stale
         // numeric position.
         val currentItemId = queue.getOrNull(index)?.item?.id
+        val window = projectPagerWindow(queue, index)
         queueMappingJob?.cancel()
         queueMappingJob =
             viewModelScope.launch {
                 val displayQueue =
-                    withContext(Dispatchers.Default) { queue.map(playbackDisplayMapper::map) }
+                    withContext(Dispatchers.Default) {
+                        window.items.map(playbackDisplayMapper::map)
+                    }
                 currentCoroutineContext().ensureActive()
                 val currentIndex =
                     resolvePagerIndex(
                         queueItemIds = displayQueue.map { it.queueItem.id },
                         currentItemId = currentItemId,
-                        fallbackIndex = index,
+                        fallbackIndex = window.currentIndex,
                     )
                 _pagerQueue.value =
                     PagerQueue(
                         queue = displayQueue,
                         index = currentIndex,
-                        command = command.copy(scroll = command.scroll?.let { currentIndex }),
+                        command =
+                            command.copy(
+                                update = UpdateInstructions.Replace(0),
+                                scroll = command.scroll?.let { currentIndex },
+                            ),
                     )
             }
     }
@@ -839,6 +834,20 @@ data class PagerQueue(
 )
 
 data class PagerCommand(val update: UpdateInstructions?, val scroll: Int?)
+
+internal data class PagerWindow<T>(val items: List<T>, val currentIndex: Int)
+
+/** Keep Now Playing artwork projection to the current item and one neighbor on either side. */
+internal fun <T> projectPagerWindow(queue: List<T>, currentIndex: Int): PagerWindow<T> {
+    if (queue.isEmpty()) return PagerWindow(emptyList(), 0)
+    val safeIndex = currentIndex.coerceIn(queue.indices)
+    val firstIndex = (safeIndex - 1).coerceAtLeast(0)
+    val lastIndex = (safeIndex + 1).coerceAtMost(queue.lastIndex)
+    return PagerWindow(
+        items = queue.subList(firstIndex, lastIndex + 1),
+        currentIndex = safeIndex - firstIndex,
+    )
+}
 
 /**
  * Resolve the visible pager item by canonical queue identity, never by a potentially stale slot.
