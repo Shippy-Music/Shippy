@@ -113,6 +113,14 @@ avoid checklist theatre.
   refresh the affected FTS row inside the same Room transaction. Repeated exact
   sources retain their original source identity while refreshed provider titles
   become searchable without an inconsistent intermediate state.
+- Identity decisions and negative matches now have scoped persistence, while a
+  bounded redirect resolver records only direct canonical redirects, rejects
+  conflicting/non-canonical targets, and reverses each redirect through its exact
+  merge audit. Full relationship-moving merge/unmerge remains a later transaction.
+- Local play history is keyed independently by listening session and canonical
+  recording. Source-neutral playback checkpoints replace their header and ordered
+  occurrence rows atomically, preserve duplicate recordings by queue-entry ID,
+  and reject incomplete or inconsistent occurrence sets before writing.
 
 ## Current blockers
 
@@ -125,9 +133,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete redirect/audit, history/checkpoint, download/integration, and
-   migration DAOs with focused transaction tests; production remains on legacy
-   v10.
+1. Complete download publication, Last.fm/lyrics/saved-source, and migration
+   audit DAOs with focused transaction tests; production remains on legacy v10.
 
 ## Verification level
 
@@ -145,4 +152,5 @@ schema/DAO tests, including duplicate playlist occurrences, orphan rejection,
 exact-source uniqueness/idempotence, asset/Library scoping, and complete-order
 playlist writes, plus canonical Library/playlist read projection and FTS lookup.
 The exported schema contains version 1, 30 entities including FTS, 2 views, and
-identity hash `a492bff168b76a611f7a9dfb6d8b665b`.
+identity hash `a492bff168b76a611f7a9dfb6d8b665b`. The durable identity/history/checkpoint
+DAO suite adds 3 passing focused tests (9 total data-module tests).

@@ -20,7 +20,10 @@ package app.shippy.data.db
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import app.shippy.data.db.dao.AssetDao
+import app.shippy.data.db.dao.HistoryDao
+import app.shippy.data.db.dao.IdentityDao
 import app.shippy.data.db.dao.LibraryDao
+import app.shippy.data.db.dao.PlaybackCheckpointDao
 import app.shippy.data.db.dao.PlaylistDao
 import app.shippy.data.db.dao.ReadModelDao
 import app.shippy.data.db.dao.RecordingDao
@@ -111,6 +114,12 @@ internal abstract class ShippyR16Database : RoomDatabase() {
     abstract fun readModelDao(): ReadModelDao
 
     abstract fun searchDao(): SearchDao
+
+    abstract fun identityDao(): IdentityDao
+
+    abstract fun historyDao(): HistoryDao
+
+    abstract fun playbackCheckpointDao(): PlaybackCheckpointDao
 
     companion object {
         const val DATABASE_NAME = "shippy-r16.db"
