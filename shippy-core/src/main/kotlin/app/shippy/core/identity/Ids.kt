@@ -88,6 +88,13 @@ value class ListeningSessionId(val value: String) {
 }
 
 @JvmInline
+value class PortableRecordingId(val value: String) {
+    init {
+        requireCanonicalUuid(value, "PortableRecordingId")
+    }
+}
+
+@JvmInline
 value class IdentityDecisionId(val value: String) {
     init {
         requireCanonicalUuid(value, "IdentityDecisionId")

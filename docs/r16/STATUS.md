@@ -75,6 +75,18 @@ avoid checklist theatre.
   keeps the current occurrence across shuffle toggles, supports explicit
   add-next/add-end/remove behavior, and rejects stale identity anchors rather
   than applying index-based moves.
+- Pure redirect rules now resolve chains, reject cycles/conflicting reassignment,
+  choose merge survivors deterministically, and retain exact moved-reference
+  data for unmerge. Redirect compaction is deliberately deferred to the audited
+  transactional data layer.
+- Listening sessions now accumulate only monotonic audible intervals, account
+  for playback speed, exclude stopped/buffering time by construction, discard
+  process-local anchors on restore, and apply the half-duration/four-minute
+  Last.fm threshold only to recordings longer than 30 seconds.
+- Crew recording descriptors now carry only portable metadata, stable provider
+  hints, external identifiers, and public HTTPS artwork. Their types reject
+  local/download/cache/Crew source namespaces and obvious device-private
+  locators.
 
 ## Current blockers
 
@@ -87,8 +99,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete the remaining pure-core policies: merge redirects, listening
-   thresholds, and portable Crew descriptors.
+1. Add the immutable playback snapshot/reducer and its generation/identity
+   invariants, then close the pure-core phase before database scaffolding.
 
 ## Verification level
 
@@ -99,6 +111,6 @@ playback identity/transition suites pass (11 tests). The Last.fm suite passes
 presentation suites (10 tests). The bounded pager projection suite passes (4
 tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
-focused-unit-tested. `:shippy-core:check` passes independently (14 tests plus its
+focused-unit-tested. `:shippy-core:check` passes independently (19 tests plus its
 forbidden-import gate). No R16 code has been instrumented,
 device-tested, or performance-tested.
