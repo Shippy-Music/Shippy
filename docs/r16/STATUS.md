@@ -137,6 +137,16 @@ avoid checklist theatre.
 - Playlist occurrence moves use sparse 64-bit order keys and normally update one
   row. Only an exhausted/overflowed anchor gap triggers a deterministic complete
   rebalance, while duplicate recordings remain distinct by PlaylistEntryId.
+- The migration foundation now owns a fixed UUIDv5 namespace and typed,
+  domain-separated mappings for legacy recordings, sources, assets, observations,
+  playlists, playlist occurrences, and queue occurrences. Retry therefore maps
+  the same old identity to the same R16 identity without embedding legacy data in
+  the new ID.
+- A dedicated v10 reader opens only a read-only SQLite handle, inventories the 13
+  expected legacy tables with row counts/missing-table truth, and pages canonical
+  tracks by stable key in batches of at most 500. The explicit M0-M14 plan retains
+  safe cancellation before cutover; importer writes and backup are not implemented
+  or claimed in this slice.
 
 ## Current blockers
 
@@ -149,8 +159,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Implement the versioned backup format and read-only legacy import foundation
-   with deterministic ID mapping; production remains on legacy v10.
+1. Implement `ShippyBackupV1` and resumable, page-atomic M1 canonical-track
+   import with audit/checkpoint evidence; production remains on legacy v10.
 
 ## Verification level
 
@@ -174,3 +184,5 @@ The download/integration/migration ledger suite adds 3 passing focused tests
 (12 total data-module tests).
 Paging and sparse-order coverage adds 3 passing focused tests (15 total
 data-module tests).
+The read-only legacy reader, deterministic mapping, and import-plan suite adds 3
+passing focused tests (18 total data-module tests).
