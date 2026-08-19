@@ -70,6 +70,11 @@ avoid checklist theatre.
   downloads, linked local assets, complete cache, providers, and Crew peers.
   Exact source-key linking is idempotent and reports conflicts instead of
   silently reassigning a source to another recording.
+- The pure queue reducer now separates base order from traversal order, owns a
+  stable seed-based shuffle, preserves duplicate recordings by QueueEntryId,
+  keeps the current occurrence across shuffle toggles, supports explicit
+  add-next/add-end/remove behavior, and rejects stale identity anchors rather
+  than applying index-based moves.
 
 ## Current blockers
 
@@ -82,8 +87,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete the remaining pure-core policies: queue/shuffle reduction, merge
-   redirects, listening thresholds, and portable Crew descriptors.
+1. Complete the remaining pure-core policies: merge redirects, listening
+   thresholds, and portable Crew descriptors.
 
 ## Verification level
 
@@ -94,6 +99,6 @@ playback identity/transition suites pass (11 tests). The Last.fm suite passes
 presentation suites (10 tests). The bounded pager projection suite passes (4
 tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
-focused-unit-tested. `:shippy-core:check` passes independently (10 tests plus its
+focused-unit-tested. `:shippy-core:check` passes independently (14 tests plus its
 forbidden-import gate). No R16 code has been instrumented,
 device-tested, or performance-tested.
