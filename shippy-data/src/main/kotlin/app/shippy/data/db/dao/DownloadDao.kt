@@ -41,6 +41,14 @@ internal abstract class DownloadDao {
 
     @Query(
         """
+        SELECT COUNT(*) FROM download_job
+        WHERE state = 'AVAILABLE' AND published_asset_id IS NOT NULL
+        """
+    )
+    abstract suspend fun availablePublishedCount(): Long
+
+    @Query(
+        """
         SELECT * FROM download_job
         WHERE state IN (:states)
         ORDER BY updated_at_epoch_ms, job_id

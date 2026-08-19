@@ -179,6 +179,17 @@ avoid checklist theatre.
   occurrence IDs and make their Recordings durable. Retry is idempotent. The
   v10 `(trackId, playlistId)` key could not represent duplicate occurrences, so
   migration preserves its exact expressible data without inventing duplicates.
+- M5 remains an explicit runtime dependency on the later Musikr/local-ingestion
+  mapping; no placeholder device-playlist importer pretends those UIDs already
+  resolve. The import plan still prevents cutover from skipping this phase.
+- M6 now pages legacy download jobs by stable JobId and joins only the requested
+  candidate identity. Artifact/SAF verification completes before the Room page
+  transaction. Verified jobs publish through the same managed-download
+  transaction and reuse an existing exact managed asset location; stale
+  `AVAILABLE` rows become retryable, interrupted work restarts safely, and
+  identity/location/length conflicts remain warnings rather than reassignment.
+  Raw artifact, pending, provider-stream, and failure-message locators are not
+  copied into R16 durable state.
 
 ## Current blockers
 
@@ -191,9 +202,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Establish the M5 Musikr/device-playlist import boundary, then add bounded M6
-   download job reads and exact artifact verification; production remains on
-   legacy v10.
+1. Add bounded M7 lyrics and M8 Last.fm outbox migration while retaining the M5
+   Musikr/local-ingestion dependency before any runnable cutover; production
+   remains on legacy v10.
 
 ## Verification level
 
@@ -228,3 +239,6 @@ discard, Crew-temporary exclusion, and retry behavior add 1 passing focused test
 M3/M4 Library ownership, playlist/layout preservation, deterministic sparse
 ordering, stable paging, and retry behavior add 1 passing focused test (24 total
 data-module tests).
+M6 download paging, source mapping, exact artifact verification, managed-asset
+reuse, stale-availability repair, locator discard, and retry behavior add 1
+passing focused test (25 total data-module tests).

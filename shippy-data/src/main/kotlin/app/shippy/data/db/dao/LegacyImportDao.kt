@@ -31,6 +31,7 @@ import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.entity.ReleaseEntity
 import app.shippy.data.db.entity.ReleaseTrackEntity
+import app.shippy.data.db.entity.SourceReferenceEntity
 
 @Dao
 internal interface LegacyImportDao {
@@ -62,6 +63,11 @@ internal interface LegacyImportDao {
     @Query("SELECT COUNT(*) FROM playlist") suspend fun playlistCount(): Long
 
     @Query("SELECT COUNT(*) FROM playlist_entry") suspend fun playlistEntryCount(): Long
+
+    @Query("SELECT COUNT(*) FROM download_job") suspend fun downloadJobCount(): Long
+
+    @Query("SELECT * FROM source_reference WHERE source_reference_id = :sourceReferenceId")
+    suspend fun source(sourceReferenceId: String): SourceReferenceEntity?
 
     @Query("SELECT * FROM library_recording WHERE recording_id = :recordingId")
     suspend fun libraryRelationship(recordingId: String): LibraryRecordingEntity?

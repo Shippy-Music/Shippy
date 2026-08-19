@@ -124,6 +124,11 @@ class LegacyImportFoundationTest {
             assertEquals("track-b", firstMembership.single().trackId)
             assertEquals("track-a", secondMembership.single().trackId)
             assertEquals(1L, secondMembership.single().orderOrdinal)
+
+            val download = reader.downloadJobs(afterJobId = null, limit = 1).single()
+            assertEquals("job-a", download.jobId)
+            assertEquals("candidate-a", download.requestedCandidateId)
+            assertEquals("provider-item", download.requestedSourceItemId)
         }
     }
 
@@ -380,6 +385,76 @@ class LegacyImportFoundationTest {
             assertEquals(3L, database.legacyImportDao().playlistEntryCount())
         }
 
+    @Test
+    fun `M6 verifies managed downloads reuses exact assets and repairs stale availability`() =
+        kotlinx.coroutines.runBlocking {
+            startAudit("migration-6")
+            LegacyCanonicalTrackImporter(database)
+                .importPage(
+                    "migration-6",
+                    listOf(legacyTrack("track-a", "Alpha", "6:Artist", null)),
+                    1_000,
+                )
+            LegacyCandidateImporter(database, LegacyAssetVerifier { null })
+                .importPage(
+                    "migration-6",
+                    listOf(
+                        legacyCandidate(
+                            candidateId = "candidate-a",
+                            kind = "PROVIDER",
+                            sourceId = "provider",
+                            sourceItemId = "provider-item",
+                            providerId = "provider",
+                        )
+                    ),
+                    2_000,
+                )
+            val rows =
+                listOf(
+                    legacyDownload("job-a", artifactUri = "content://legacy/download-a"),
+                    legacyDownload("job-b", artifactUri = "content://legacy/download-b"),
+                    legacyDownload("job-c", artifactUri = null),
+                )
+            val importer =
+                LegacyDownloadImporter(
+                    database,
+                    LegacyDownloadArtifactVerifier { row ->
+                        if (row.artifactUri == null) {
+                            null
+                        } else {
+                            VerifiedLegacyAsset(
+                                locationType = "CONTENT_URI",
+                                location = "content://verified/download",
+                                displayName = "download.mp3",
+                                contentLength = 321,
+                                contentChecksum = "sha256:verified",
+                            )
+                        }
+                    },
+                )
+
+            val result = importer.importPage("migration-6", rows, 3_000)
+
+            assertEquals(3, result.importedCount)
+            assertEquals(2, result.verifiedArtifactCount)
+            assertEquals(3L, database.legacyImportDao().downloadJobCount())
+            assertEquals(2L, database.downloadDao().availablePublishedCount())
+            assertEquals(1L, database.legacyImportDao().assetCount())
+            val jobA = checkNotNull(database.downloadDao().get(LegacyIdMapper.downloadJob("job-a")))
+            val jobB = checkNotNull(database.downloadDao().get(LegacyIdMapper.downloadJob("job-b")))
+            val jobC = checkNotNull(database.downloadDao().get(LegacyIdMapper.downloadJob("job-c")))
+            assertEquals("AVAILABLE", jobA.state)
+            assertEquals(jobA.publishedAssetId, jobB.publishedAssetId)
+            assertEquals("FAILED_RETRYABLE", jobC.state)
+            assertEquals("LEGACY_ARTIFACT_UNAVAILABLE", jobC.failureKind)
+            assertEquals(null, jobA.pendingLocation)
+            assertFalse(jobA.displayFallbackJson.contains("content://legacy"))
+
+            importer.importPage("migration-6", rows, 3_000)
+            assertEquals(3L, database.legacyImportDao().downloadJobCount())
+            assertEquals(1L, database.legacyImportDao().assetCount())
+        }
+
     private fun createLegacyDatabase() {
         SQLiteDatabase.openOrCreateDatabase(legacyFile, null).use { database ->
             database.version = LEGACY_SCHEMA_VERSION
@@ -389,7 +464,9 @@ class LegacyImportFoundationTest {
                         table == "canonical_track_candidate" ||
                         table == "library_relationship" ||
                         table == "user_playlist" ||
-                        table == "playlist_membership"
+                        table == "playlist_membership" ||
+                        table == "download_job" ||
+                        table == "download_candidate"
                 ) {
                     continue
                 }
@@ -527,6 +604,7 @@ class LegacyImportFoundationTest {
                 ),
             )
             createLegacyLibraryTables(database)
+            createLegacyDownloadTables(database)
         }
     }
 
@@ -582,6 +660,75 @@ class LegacyImportFoundationTest {
             """
             INSERT INTO playlist_membership (trackId, playlistId, position)
             VALUES ('track-a', 'playlist-a', 1), ('track-b', 'playlist-a', 0)
+            """
+                .trimIndent()
+        )
+    }
+
+    private fun createLegacyDownloadTables(database: SQLiteDatabase) {
+        database.execSQL(
+            """
+            CREATE TABLE download_job (
+                jobId TEXT NOT NULL PRIMARY KEY,
+                trackId TEXT NOT NULL,
+                requestedCandidateId TEXT NOT NULL,
+                trackRealm TEXT NOT NULL,
+                title TEXT NOT NULL,
+                artists TEXT NOT NULL,
+                album TEXT,
+                durationMs INTEGER,
+                state TEXT NOT NULL,
+                bytesTransferred INTEGER NOT NULL,
+                expectedBytes INTEGER,
+                failureCode TEXT,
+                failureMessage TEXT,
+                artifactUri TEXT,
+                artifactLength INTEGER,
+                artifactMimeType TEXT,
+                artifactVerifiedAtEpochMs INTEGER,
+                pendingUri TEXT,
+                pendingDisplayName TEXT,
+                pendingMimeType TEXT,
+                createdAtEpochMs INTEGER NOT NULL,
+                updatedAtEpochMs INTEGER NOT NULL
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO download_job
+            (jobId, trackId, requestedCandidateId, trackRealm, title, artists, album,
+             durationMs, state, bytesTransferred, expectedBytes, failureCode,
+             failureMessage, artifactUri, artifactLength, artifactMimeType,
+             artifactVerifiedAtEpochMs, pendingUri, pendingDisplayName, pendingMimeType,
+             createdAtEpochMs, updatedAtEpochMs)
+            VALUES ('job-a', 'track-a', 'candidate-a', 'PROVIDER', 'Alpha', 'Artist', NULL,
+                    120000, 'AVAILABLE', 321, 321, NULL, NULL,
+                    'content://legacy/download', 321, 'audio/mpeg', 1000,
+                    NULL, NULL, NULL, 100, 1000)
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            CREATE TABLE download_candidate (
+                jobId TEXT NOT NULL,
+                candidateId TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                sourceId TEXT NOT NULL,
+                sourceItemId TEXT NOT NULL,
+                providerId TEXT,
+                PRIMARY KEY(jobId, candidateId)
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO download_candidate
+            (jobId, candidateId, kind, sourceId, sourceItemId, providerId)
+            VALUES ('job-a', 'candidate-a', 'PROVIDER', 'provider', 'provider-item', 'provider')
             """
                 .trimIndent()
         )
@@ -644,6 +791,36 @@ class LegacyImportFoundationTest {
             container = "mp3",
             bitrateBps = 192_000,
             contentLength = contentLength,
+        )
+
+    private fun legacyDownload(jobId: String, artifactUri: String?) =
+        LegacyDownloadJobRow(
+            jobId = jobId,
+            trackId = "track-a",
+            requestedCandidateId = "candidate-a",
+            trackRealm = "PROVIDER",
+            title = "Alpha",
+            artists = "6:Artist",
+            album = null,
+            durationMs = 120_000,
+            state = "AVAILABLE",
+            bytesTransferred = 321,
+            expectedBytes = 321,
+            failureCode = null,
+            failureMessage = null,
+            artifactUri = artifactUri,
+            artifactLength = artifactUri?.let { 321 },
+            artifactMimeType = "audio/mpeg",
+            artifactVerifiedAtEpochMs = artifactUri?.let { 2_000 },
+            pendingUri = null,
+            pendingDisplayName = null,
+            pendingMimeType = null,
+            createdAtEpochMs = 100,
+            updatedAtEpochMs = 2_000,
+            requestedKind = "PROVIDER",
+            requestedSourceId = "provider",
+            requestedSourceItemId = "provider-item",
+            requestedProviderId = "provider",
         )
 
     private companion object {

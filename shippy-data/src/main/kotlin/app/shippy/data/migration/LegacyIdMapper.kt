@@ -43,6 +43,11 @@ internal object LegacyIdMapper {
     fun asset(oldTrackId: String, oldCandidateId: String): MediaAssetId =
         MediaAssetId(mapped("asset", oldTrackId, oldCandidateId))
 
+    fun downloadJob(oldJobId: String): String = mapped("download-job", oldJobId)
+
+    fun downloadAsset(oldJobId: String): MediaAssetId =
+        MediaAssetId(mapped("download-asset", oldJobId))
+
     fun observation(oldTrackId: String): MetadataObservationId =
         MetadataObservationId(mapped("observation", oldTrackId))
 

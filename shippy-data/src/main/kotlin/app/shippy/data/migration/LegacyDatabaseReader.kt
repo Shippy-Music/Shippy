@@ -84,6 +84,35 @@ internal data class LegacyPlaylistMembershipRow(
     val orderOrdinal: Long,
 )
 
+internal data class LegacyDownloadJobRow(
+    val jobId: String,
+    val trackId: String,
+    val requestedCandidateId: String,
+    val trackRealm: String,
+    val title: String,
+    val artists: String,
+    val album: String?,
+    val durationMs: Long?,
+    val state: String,
+    val bytesTransferred: Long,
+    val expectedBytes: Long?,
+    val failureCode: String?,
+    val failureMessage: String?,
+    val artifactUri: String?,
+    val artifactLength: Long?,
+    val artifactMimeType: String?,
+    val artifactVerifiedAtEpochMs: Long?,
+    val pendingUri: String?,
+    val pendingDisplayName: String?,
+    val pendingMimeType: String?,
+    val createdAtEpochMs: Long,
+    val updatedAtEpochMs: Long,
+    val requestedKind: String?,
+    val requestedSourceId: String?,
+    val requestedSourceItemId: String?,
+    val requestedProviderId: String?,
+)
+
 internal class LegacyDatabaseReader private constructor(private val database: SQLiteDatabase) :
     Closeable {
     init {
@@ -375,6 +404,70 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
                                 playlistId = cursor.getString(1),
                                 position = cursor.getInt(2),
                                 orderOrdinal = cursor.getLong(3),
+                            )
+                        )
+                    }
+                }
+            }
+    }
+
+    fun downloadJobs(afterJobId: String?, limit: Int): List<LegacyDownloadJobRow> {
+        requirePageSize(limit)
+        val selection = if (afterJobId == null) "" else "WHERE job.jobId > ?"
+        val arguments = afterJobId?.let { arrayOf(it) } ?: emptyArray()
+        return database
+            .rawQuery(
+                """
+                SELECT job.jobId, job.trackId, job.requestedCandidateId, job.trackRealm,
+                       job.title, job.artists, job.album, job.durationMs, job.state,
+                       job.bytesTransferred, job.expectedBytes, job.failureCode,
+                       job.failureMessage, job.artifactUri, job.artifactLength,
+                       job.artifactMimeType, job.artifactVerifiedAtEpochMs, job.pendingUri,
+                       job.pendingDisplayName, job.pendingMimeType, job.createdAtEpochMs,
+                       job.updatedAtEpochMs, candidate.kind, candidate.sourceId,
+                       candidate.sourceItemId, candidate.providerId
+                FROM download_job AS job
+                LEFT JOIN download_candidate AS candidate
+                  ON candidate.jobId = job.jobId
+                 AND candidate.candidateId = job.requestedCandidateId
+                $selection
+                ORDER BY job.jobId
+                LIMIT $limit
+                """
+                    .trimIndent(),
+                arguments,
+            )
+            .useRows { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            LegacyDownloadJobRow(
+                                jobId = cursor.getString(0),
+                                trackId = cursor.getString(1),
+                                requestedCandidateId = cursor.getString(2),
+                                trackRealm = cursor.getString(3),
+                                title = cursor.getString(4),
+                                artists = cursor.getString(5),
+                                album = cursor.stringOrNull(6),
+                                durationMs = cursor.longOrNull(7),
+                                state = cursor.getString(8),
+                                bytesTransferred = cursor.getLong(9),
+                                expectedBytes = cursor.longOrNull(10),
+                                failureCode = cursor.stringOrNull(11),
+                                failureMessage = cursor.stringOrNull(12),
+                                artifactUri = cursor.stringOrNull(13),
+                                artifactLength = cursor.longOrNull(14),
+                                artifactMimeType = cursor.stringOrNull(15),
+                                artifactVerifiedAtEpochMs = cursor.longOrNull(16),
+                                pendingUri = cursor.stringOrNull(17),
+                                pendingDisplayName = cursor.stringOrNull(18),
+                                pendingMimeType = cursor.stringOrNull(19),
+                                createdAtEpochMs = cursor.getLong(20),
+                                updatedAtEpochMs = cursor.getLong(21),
+                                requestedKind = cursor.stringOrNull(22),
+                                requestedSourceId = cursor.stringOrNull(23),
+                                requestedSourceItemId = cursor.stringOrNull(24),
+                                requestedProviderId = cursor.stringOrNull(25),
                             )
                         )
                     }
