@@ -238,7 +238,8 @@ internal class LegacyPlaybackCheckpointImporter(private val database: ShippyR16D
         return ConvertedPlaybackCheckpoint(
             checkpoint =
                 checkpointWithoutChecksum.copy(
-                    checksum = checkpointChecksum(checkpointWithoutChecksum, entries)
+                    checksum =
+                        PlaybackCheckpointIntegrity.checksum(checkpointWithoutChecksum, entries)
                 ),
             entries = entries,
         )
@@ -261,38 +262,40 @@ private data class ConvertedPlaybackCheckpoint(
 private fun String.parseMapping(): List<Int>? =
     if (isEmpty()) emptyList() else runCatching { split(',').map(String::toInt) }.getOrNull()
 
-private fun checkpointChecksum(
-    checkpoint: PlaybackCheckpointEntity,
-    entries: List<PlaybackCheckpointEntryEntity>,
-): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    fun add(value: String?) {
-        val bytes = value?.toByteArray(StandardCharsets.UTF_8) ?: byteArrayOf()
-        digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(bytes.size).array())
-        digest.update(bytes)
+internal object PlaybackCheckpointIntegrity {
+    fun checksum(
+        checkpoint: PlaybackCheckpointEntity,
+        entries: List<PlaybackCheckpointEntryEntity>,
+    ): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        fun add(value: String?) {
+            val bytes = value?.toByteArray(StandardCharsets.UTF_8) ?: byteArrayOf()
+            digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(bytes.size).array())
+            digest.update(bytes)
+        }
+        add(checkpoint.slot)
+        add(checkpoint.checkpointVersion.toString())
+        add(checkpoint.sessionId)
+        add(checkpoint.currentQueueEntryId)
+        add(checkpoint.positionMs.toString())
+        add(checkpoint.playingIntent.toString())
+        add(checkpoint.repeatMode)
+        add(checkpoint.shuffleEnabled.toString())
+        add(checkpoint.shuffleSeed?.toString())
+        add(checkpoint.baseOrderJson)
+        add(checkpoint.traversalOrderJson)
+        add(checkpoint.updatedAtEpochMs.toString())
+        for (entry in entries.sortedBy(PlaybackCheckpointEntryEntity::position)) {
+            add(entry.slot)
+            add(entry.queueEntryId)
+            add(entry.position.toString())
+            add(entry.recordingId)
+            add(entry.originJson)
+            add(entry.contributorId)
+            add(entry.presentationFallbackJson)
+        }
+        return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     }
-    add(checkpoint.slot)
-    add(checkpoint.checkpointVersion.toString())
-    add(checkpoint.sessionId)
-    add(checkpoint.currentQueueEntryId)
-    add(checkpoint.positionMs.toString())
-    add(checkpoint.playingIntent.toString())
-    add(checkpoint.repeatMode)
-    add(checkpoint.shuffleEnabled.toString())
-    add(checkpoint.shuffleSeed?.toString())
-    add(checkpoint.baseOrderJson)
-    add(checkpoint.traversalOrderJson)
-    add(checkpoint.updatedAtEpochMs.toString())
-    for (entry in entries.sortedBy(PlaybackCheckpointEntryEntity::position)) {
-        add(entry.slot)
-        add(entry.queueEntryId)
-        add(entry.position.toString())
-        add(entry.recordingId)
-        add(entry.originJson)
-        add(entry.contributorId)
-        add(entry.presentationFallbackJson)
-    }
-    return digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 }
 
 private fun appendPlaybackWarnings(existingJson: String, additions: List<String>): String {

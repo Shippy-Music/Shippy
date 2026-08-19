@@ -144,6 +144,10 @@ class LegacyImportFoundationTest {
             assertEquals("TRACK", checkpoint.repeatMode)
             assertEquals("queue-1", checkpoint.items.single().queueItemId)
 
+            val crewCheckpoint = checkNotNull(reader.crewActiveCheckpoint())
+            assertEquals(3, crewCheckpoint.protocolVersion)
+            assertTrue(crewCheckpoint.payloadChecksumValid)
+
             val firstSaved = reader.savedProviderEntities(null, null, null, limit = 1).single()
             val secondSaved =
                 reader
@@ -628,6 +632,73 @@ class LegacyImportFoundationTest {
             savedImporter.importPage("migration-10", savedRows, 3_000)
             assertEquals(2, database.playbackCheckpointDao().load("active")?.entries?.size)
             assertEquals(2, database.savedSourceDao().library(10).size)
+            val verification =
+                MigrationVerifier(database)
+                    .verify(
+                        migrationId = "migration-10",
+                        expected = MigrationExpectedCounts(0, 0, 0, 2, 0, 2, 0),
+                        completedPhases =
+                            LegacyImportPhase.entries
+                                .filter { it.ordinal < LegacyImportPhase.VERIFY.ordinal }
+                                .toSet(),
+                    )
+            assertTrue(verification.passed)
+        }
+
+    @Test
+    fun `M11 expires incompatible Crew checkpoint without copying payload`() =
+        kotlinx.coroutines.runBlocking {
+            createLegacyDatabase()
+            val legacyCheckpoint =
+                LegacyDatabaseReader.openReadOnly(legacyFile).use { it.crewActiveCheckpoint() }
+            startAudit("migration-11")
+
+            val result =
+                LegacyCrewCheckpointDispositionRecorder(database)
+                    .record("migration-11", legacyCheckpoint)
+
+            assertEquals(LegacyCrewCheckpointDisposition.EXPIRE_INCOMPATIBLE, result.disposition)
+            assertEquals(3, result.legacyProtocolVersion)
+            assertTrue(result.requiresLegacyLeaseExpiry)
+            val audit = checkNotNull(database.migrationAuditDao().get("migration-11"))
+            assertTrue(audit.targetCountsJson?.contains("EXPIRE_INCOMPATIBLE") == true)
+            assertFalse(audit.targetCountsJson?.contains("session-legacy") == true)
+        }
+
+    @Test
+    fun `M13 blocks missing phases then verifies counts and invariants`() =
+        kotlinx.coroutines.runBlocking {
+            startAudit("migration-13")
+            val expected = MigrationExpectedCounts(0, 0, 0, 0, 0, 0, 0)
+            val verifier = MigrationVerifier(database)
+
+            val blocked =
+                verifier.verify(
+                    migrationId = "migration-13",
+                    expected = expected,
+                    completedPhases =
+                        setOf(LegacyImportPhase.PREFLIGHT, LegacyImportPhase.CANONICAL_TRACKS),
+                )
+            assertFalse(blocked.passed)
+            assertTrue(blocked.issues.any { it.code == "MISSING_PHASE_M5" })
+            assertTrue(blocked.issues.any { it.code == "MISSING_PHASE_M12" })
+
+            val verified =
+                verifier.verify(
+                    migrationId = "migration-13",
+                    expected = expected,
+                    completedPhases =
+                        LegacyImportPhase.entries
+                            .filter { it.ordinal < LegacyImportPhase.VERIFY.ordinal }
+                            .toSet(),
+                )
+            assertTrue(verified.passed)
+            assertEquals(0L, verified.foreignKeyViolations)
+            assertEquals(0L, verified.unresolvedReferences)
+            assertEquals(
+                "READY_TO_SWITCH",
+                database.migrationAuditDao().get("migration-13")?.status,
+            )
         }
 
     private fun createLegacyDatabase() {
@@ -643,6 +714,7 @@ class LegacyImportFoundationTest {
                         table == "download_job" ||
                         table == "download_candidate" ||
                         table == "lyrics_cache" ||
+                        table == "crew_active_checkpoint" ||
                         table == "lastfm_scrobble_outbox" ||
                         table == "playback_checkpoint" ||
                         table == "playback_checkpoint_item" ||
@@ -916,6 +988,41 @@ class LegacyImportFoundationTest {
     }
 
     private fun createLegacyIntegrationTables(database: SQLiteDatabase) {
+        database.execSQL(
+            """
+            CREATE TABLE crew_active_checkpoint (
+                slot TEXT NOT NULL PRIMARY KEY,
+                sessionId TEXT NOT NULL,
+                protocolVersion INTEGER NOT NULL,
+                coordinatorTerm INTEGER NOT NULL,
+                eventSequence INTEGER NOT NULL,
+                snapshotPayload BLOB NOT NULL,
+                payloadSha256 BLOB NOT NULL,
+                updatedAtEpochMs INTEGER NOT NULL
+            )
+            """
+                .trimIndent()
+        )
+        val crewPayload = byteArrayOf(1, 2, 3, 4)
+        database.execSQL(
+            """
+            INSERT INTO crew_active_checkpoint
+            (slot, sessionId, protocolVersion, coordinatorTerm, eventSequence,
+             snapshotPayload, payloadSha256, updatedAtEpochMs)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """
+                .trimIndent(),
+            arrayOf<Any>(
+                "active",
+                "session-legacy",
+                3,
+                1,
+                5,
+                crewPayload,
+                java.security.MessageDigest.getInstance("SHA-256").digest(crewPayload),
+                1_000,
+            ),
+        )
         database.execSQL(
             """
             CREATE TABLE lyrics_cache (

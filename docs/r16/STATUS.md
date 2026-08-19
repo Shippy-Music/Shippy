@@ -214,6 +214,16 @@ avoid checklist theatre.
   public-shaped HTTPS artwork/original links cross the migration boundary;
   private or device locators are discarded with bounded audit warnings. Retry
   is idempotent.
+- M11 now reads only bounded legacy Crew checkpoint metadata plus checksum
+  validity. The pre-R16 payload is never copied into the R16 database: its Track
+  identity cannot safely become R16 portable Recording/QueueEntry identity, so
+  the audit records local expiry/rejoin and required legacy-lease expiry. The
+  old database remains untouched for rollback.
+- The M13 verifier foundation compares all required user-owned/verified counts,
+  checks logical references and SQLite foreign keys, detects redirect cycles,
+  duplicate exact source keys and asset locations, and revalidates playback
+  order/current/checksum identity. It cannot report ready while any M0-M12 phase
+  is missing; therefore M5/M12 still block cutover instead of being papered over.
 
 ## Current blockers
 
@@ -226,9 +236,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add the M11 Crew compatibility/expiry decision and M13 audit verifier
-   foundation, while retaining M5/M12 as explicit Musikr/local-ingestion
-   dependencies before any runnable cutover; production remains on legacy v10.
+1. Complete sanitized `ShippyBackupV1` database export/restore orchestration and
+   durable bootstrap migration-state handling, then build the Phase 4 ingestion
+   seam that unlocks M5/M12. Production remains on legacy v10.
 
 ## Verification level
 
@@ -273,3 +283,6 @@ M9/M10 source-neutral checkpoint conversion, invalid-entry compaction, duplicate
 Recording occurrences, current/traversal preservation, checksum generation,
 exact saved-source paging, private-locator discard, and retry behavior add 1
 passing focused test (27 total data-module tests).
+M11 bounded Crew-checkpoint inspection/expiry and M13 phase/count/reference/
+redirect/uniqueness/checkpoint verification add 2 passing focused tests (29
+total data-module tests).

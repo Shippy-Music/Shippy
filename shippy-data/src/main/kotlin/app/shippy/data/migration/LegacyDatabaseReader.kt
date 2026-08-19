@@ -21,6 +21,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import java.io.Closeable
 import java.io.File
+import java.security.MessageDigest
 
 internal data class LegacySchemaSnapshot(
     val version: Int,
@@ -166,6 +167,17 @@ internal data class LegacySavedProviderEntityRow(
     val originalUrl: String?,
     val pinned: Boolean,
     val savedAtEpochMs: Long,
+)
+
+internal data class LegacyCrewCheckpointRow(
+    val slot: String,
+    val sessionId: String,
+    val protocolVersion: Int,
+    val coordinatorTerm: Long,
+    val eventSequence: Long,
+    val payloadLengthBytes: Int,
+    val payloadChecksumValid: Boolean,
+    val updatedAtEpochMs: Long,
 )
 
 internal class LegacyDatabaseReader private constructor(private val database: SQLiteDatabase) :
@@ -714,6 +726,70 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
         return header.copy(items = items)
     }
 
+    fun crewActiveCheckpoint(): LegacyCrewCheckpointRow? {
+        val header =
+            database
+                .rawQuery(
+                    """
+                    SELECT slot, sessionId, protocolVersion, coordinatorTerm, eventSequence,
+                           length(snapshotPayload), payloadSha256, updatedAtEpochMs
+                    FROM crew_active_checkpoint
+                    WHERE slot = 'active'
+                    LIMIT 1
+                    """
+                        .trimIndent(),
+                    emptyArray(),
+                )
+                .useRows { cursor ->
+                    if (!cursor.moveToFirst()) {
+                        null
+                    } else {
+                        LegacyCrewCheckpointHeader(
+                            slot = cursor.getString(0),
+                            sessionId = cursor.getString(1),
+                            protocolVersion = cursor.getInt(2),
+                            coordinatorTerm = cursor.getLong(3),
+                            eventSequence = cursor.getLong(4),
+                            payloadLengthBytes = cursor.getInt(5),
+                            payloadSha256 = cursor.getBlob(6),
+                            updatedAtEpochMs = cursor.getLong(7),
+                        )
+                    }
+                } ?: return null
+        val payload =
+            if (header.payloadLengthBytes in 1..MAX_CREW_CHECKPOINT_PAYLOAD_BYTES) {
+                database
+                    .rawQuery(
+                        """
+                        SELECT snapshotPayload FROM crew_active_checkpoint
+                        WHERE slot = 'active' AND sessionId = ? AND updatedAtEpochMs = ?
+                        LIMIT 1
+                        """
+                            .trimIndent(),
+                        arrayOf(header.sessionId, header.updatedAtEpochMs.toString()),
+                    )
+                    .useRows { cursor -> if (cursor.moveToFirst()) cursor.getBlob(0) else null }
+            } else {
+                null
+            }
+        return LegacyCrewCheckpointRow(
+            slot = header.slot,
+            sessionId = header.sessionId,
+            protocolVersion = header.protocolVersion,
+            coordinatorTerm = header.coordinatorTerm,
+            eventSequence = header.eventSequence,
+            payloadLengthBytes = header.payloadLengthBytes,
+            payloadChecksumValid =
+                payload != null &&
+                    header.payloadSha256.size == SHA256_BYTES &&
+                    MessageDigest.isEqual(
+                        MessageDigest.getInstance("SHA-256").digest(payload),
+                        header.payloadSha256,
+                    ),
+            updatedAtEpochMs = header.updatedAtEpochMs,
+        )
+    }
+
     fun savedProviderEntities(
         afterProviderId: String?,
         afterEntityType: String?,
@@ -819,6 +895,17 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
 
 private inline fun <Result> Cursor.useRows(block: (Cursor) -> Result): Result = use(block)
 
+private data class LegacyCrewCheckpointHeader(
+    val slot: String,
+    val sessionId: String,
+    val protocolVersion: Int,
+    val coordinatorTerm: Long,
+    val eventSequence: Long,
+    val payloadLengthBytes: Int,
+    val payloadSha256: ByteArray,
+    val updatedAtEpochMs: Long,
+)
+
 private fun Cursor.stringOrNull(column: Int): String? =
     if (isNull(column)) null else getString(column)
 
@@ -832,6 +919,8 @@ private fun Cursor.booleanOrNull(column: Int): Boolean? =
 internal const val LEGACY_SCHEMA_VERSION = 10
 private const val MAX_PAGE_SIZE = 500
 private const val MAX_PLAYBACK_CHECKPOINT_ITEMS = 10_000
+private const val MAX_CREW_CHECKPOINT_PAYLOAD_BYTES = 4 * 1024 * 1024
+private const val SHA256_BYTES = 32
 private val REQUIRED_TABLES =
     setOf(
         "library_relationship",
