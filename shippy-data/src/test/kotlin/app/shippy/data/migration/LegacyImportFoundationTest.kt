@@ -19,7 +19,10 @@ package app.shippy.data.migration
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import app.shippy.data.db.ShippyR16Database
+import app.shippy.data.db.entity.MigrationAuditEntity
 import java.io.File
 import java.util.UUID
 import org.junit.After
@@ -35,15 +38,21 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class LegacyImportFoundationTest {
     private lateinit var legacyFile: File
+    private lateinit var database: ShippyR16Database
 
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         legacyFile = File(context.cacheDir, "legacy-${UUID.randomUUID()}.db")
+        database =
+            Room.inMemoryDatabaseBuilder(context, ShippyR16Database::class.java)
+                .allowMainThreadQueries()
+                .build()
     }
 
     @After
     fun tearDown() {
+        database.close()
         legacyFile.delete()
     }
 
@@ -90,6 +99,60 @@ class LegacyImportFoundationTest {
         assertFalse(R15ToR16ImportPlan.mayCancelSafelyBefore(LegacyImportPhase.CUTOVER))
         LegacyImportCheckpoint("migration-1", LegacyImportPhase.CANONICAL_TRACKS, "track-a")
     }
+
+    @Test
+    fun `M1 imports one ordered page with provenance search and audit checkpoint`() =
+        kotlinx.coroutines.runBlocking {
+            startAudit("migration-1")
+            val rows =
+                listOf(
+                    legacyTrack("track-a", "Alpha", "5:First6:Second", "Album"),
+                    legacyTrack("track-b", "Beta", "6:Artist", null),
+                )
+
+            val result =
+                LegacyCanonicalTrackImporter(database).importPage("migration-1", rows, 1_000)
+
+            assertEquals(2, result.importedCount)
+            assertEquals("track-b", result.lastTrackId)
+            val recordingId = LegacyIdMapper.recording("track-a").value
+            val recording = checkNotNull(database.recordingDao().get(recordingId))
+            assertEquals("Alpha", recording.canonicalTitle)
+            assertEquals(2, database.recordingDao().artistCredits(recordingId).size)
+            assertEquals(
+                "Album",
+                database
+                    .legacyImportDao()
+                    .release(checkNotNull(recording.preferredReleaseId))
+                    ?.canonicalTitle,
+            )
+            assertEquals(7, database.legacyImportDao().provenance(recordingId).size)
+            assertEquals(listOf(recordingId), database.searchDao().searchRecordingIds("Alpha*", 10))
+            val audit = checkNotNull(database.migrationAuditDao().get("migration-1"))
+            assertTrue(checkNotNull(audit.targetCountsJson).contains("track-b"))
+            LegacyCanonicalTrackImporter(database).importPage("migration-1", rows, 1_000)
+            assertEquals(2L, database.legacyImportDao().recordingCount())
+        }
+
+    @Test
+    fun `M1 page rolls back when audit evidence cannot advance`() =
+        kotlinx.coroutines.runBlocking {
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                kotlinx.coroutines.runBlocking {
+                    LegacyCanonicalTrackImporter(database)
+                        .importPage(
+                            "missing-audit",
+                            listOf(legacyTrack("track-a", "Alpha", "6:Artist", null)),
+                            1_000,
+                        )
+                }
+            }
+            assertEquals(
+                null,
+                database.recordingDao().get(LegacyIdMapper.recording("track-a").value),
+            )
+            Unit
+        }
 
     private fun createLegacyDatabase() {
         SQLiteDatabase.openOrCreateDatabase(legacyFile, null).use { database ->
@@ -162,6 +225,40 @@ class LegacyImportFoundationTest {
             )
         }
     }
+
+    private suspend fun startAudit(migrationId: String) {
+        database
+            .migrationAuditDao()
+            .start(
+                MigrationAuditEntity(
+                    migrationId = migrationId,
+                    sourceVersion = 10,
+                    targetVersion = 1,
+                    startedAtEpochMs = 1,
+                    completedAtEpochMs = null,
+                    sourceCountsJson = "{}",
+                    targetCountsJson = null,
+                    warningsJson = "[]",
+                    checksum = null,
+                    status = "IMPORTING",
+                )
+            )
+    }
+
+    private fun legacyTrack(trackId: String, title: String, artists: String, album: String?) =
+        LegacyCanonicalTrackRow(
+            trackId = trackId,
+            realm = "PROVIDER",
+            title = title,
+            artists = artists,
+            album = album,
+            durationMs = 120_000,
+            versionLabel = null,
+            explicit = null,
+            live = false,
+            remix = false,
+            artwork = null,
+        )
 
     private companion object {
         val LEGACY_TABLES =

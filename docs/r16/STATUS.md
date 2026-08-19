@@ -145,8 +145,13 @@ avoid checklist theatre.
 - A dedicated v10 reader opens only a read-only SQLite handle, inventories the 13
   expected legacy tables with row counts/missing-table truth, and pages canonical
   tracks by stable key in batches of at most 500. The explicit M0-M14 plan retains
-  safe cancellation before cutover; importer writes and backup are not implemented
-  or claimed in this slice.
+  safe cancellation before cutover.
+- M1 canonical-track import now commits one ordered page atomically: deterministic
+  Recording/Artist/Release identities, raw legacy observation, field provenance,
+  canonical rows, FTS refresh, and the audit checkpoint advance either all commit
+  or all roll back. A retry is idempotent, performs no fuzzy cross-track merge, and
+  leaves imported identities transient until later relationship/asset phases make
+  durability explicit. Backup, later phases, verification, and cutover remain open.
 
 ## Current blockers
 
@@ -159,8 +164,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Implement `ShippyBackupV1` and resumable, page-atomic M1 canonical-track
-   import with audit/checkpoint evidence; production remains on legacy v10.
+1. Implement the checksum-verified `ShippyBackupV1` archive contract, then add
+   bounded M2 candidate reads/import; production remains on legacy v10.
 
 ## Verification level
 
@@ -185,4 +190,5 @@ The download/integration/migration ledger suite adds 3 passing focused tests
 Paging and sparse-order coverage adds 3 passing focused tests (15 total
 data-module tests).
 The read-only legacy reader, deterministic mapping, and import-plan suite adds 3
-passing focused tests (18 total data-module tests).
+passing focused tests. M1 atomic import/rollback/idempotence adds 2 more (20 total
+data-module tests).

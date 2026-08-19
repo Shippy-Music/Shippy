@@ -17,12 +17,14 @@
  */
 package app.shippy.data.migration
 
+import app.shippy.core.identity.ArtistId
 import app.shippy.core.identity.MediaAssetId
 import app.shippy.core.identity.MetadataObservationId
 import app.shippy.core.identity.PlaylistEntryId
 import app.shippy.core.identity.PlaylistId
 import app.shippy.core.identity.QueueEntryId
 import app.shippy.core.identity.RecordingId
+import app.shippy.core.identity.ReleaseId
 import app.shippy.core.identity.SourceReferenceId
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -43,6 +45,12 @@ internal object LegacyIdMapper {
 
     fun observation(oldTrackId: String): MetadataObservationId =
         MetadataObservationId(mapped("observation", oldTrackId))
+
+    fun artist(oldTrackId: String, position: Int, name: String): ArtistId =
+        ArtistId(mapped("track-artist", oldTrackId, position.toString(), name))
+
+    fun release(oldTrackId: String, title: String): ReleaseId =
+        ReleaseId(mapped("track-release", oldTrackId, title))
 
     fun playlist(oldPlaylistId: String): PlaylistId = PlaylistId(mapped("playlist", oldPlaylistId))
 

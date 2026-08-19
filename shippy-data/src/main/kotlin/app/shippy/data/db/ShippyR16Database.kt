@@ -24,6 +24,7 @@ import app.shippy.data.db.dao.DownloadDao
 import app.shippy.data.db.dao.HistoryDao
 import app.shippy.data.db.dao.IdentityDao
 import app.shippy.data.db.dao.LastFmOutboxDao
+import app.shippy.data.db.dao.LegacyImportDao
 import app.shippy.data.db.dao.LibraryDao
 import app.shippy.data.db.dao.LyricsDao
 import app.shippy.data.db.dao.MigrationAuditDao
@@ -135,6 +136,8 @@ internal abstract class ShippyR16Database : RoomDatabase() {
     abstract fun savedSourceDao(): SavedSourceDao
 
     abstract fun migrationAuditDao(): MigrationAuditDao
+
+    abstract fun legacyImportDao(): LegacyImportDao
 
     companion object {
         const val DATABASE_NAME = "shippy-r16.db"
