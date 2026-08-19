@@ -99,6 +99,11 @@ avoid checklist theatre.
   duplicate playlist occurrences, ownership, checksum, and referential
   constraints are exercised in-memory; `:app` does not depend on or read this
   database yet.
+- The first five internal DAOs are scoped by canonical identity: transactional
+  recording/artist graphs, idempotent exact-source observation ingestion,
+  verified assets, per-recording Library relationships, and duplicate-safe
+  playlist creation/reorder. Source refresh cannot silently reassign recording
+  identity, and playlist reorder must contain every current occurrence.
 
 ## Current blockers
 
@@ -111,9 +116,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add scoped DAOs and atomic transactions for canonical identity/source/asset
-   and Library/playlist writes, then introduce critical read views and FTS;
-   production remains on legacy v10.
+1. Add critical Library/playlist read views plus transactional FTS maintenance,
+   then complete the audit/history/checkpoint/integration DAOs; production
+   remains on legacy v10.
 
 ## Verification level
 
@@ -126,7 +131,8 @@ tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
 focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (22
 tests plus its forbidden-import gate). No R16 code has been instrumented,
-device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes 2
-schema tests, including duplicate playlist occurrences, orphan rejection, and
-exact-source uniqueness. The exported schema contains version 1, 29 entities,
-zero views, and identity hash `901060a547b0b5607bd180bf3e8741d7`.
+device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes 5
+schema/DAO tests, including duplicate playlist occurrences, orphan rejection,
+exact-source uniqueness/idempotence, asset/Library scoping, and complete-order
+playlist writes. The exported schema contains version 1, 29 entities, zero
+views, and identity hash `901060a547b0b5607bd180bf3e8741d7`.

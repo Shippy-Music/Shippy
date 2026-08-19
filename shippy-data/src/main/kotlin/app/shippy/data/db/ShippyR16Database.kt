@@ -19,6 +19,11 @@ package app.shippy.data.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import app.shippy.data.db.dao.AssetDao
+import app.shippy.data.db.dao.LibraryDao
+import app.shippy.data.db.dao.PlaylistDao
+import app.shippy.data.db.dao.RecordingDao
+import app.shippy.data.db.dao.SourceDao
 import app.shippy.data.db.entity.ArtistEntity
 import app.shippy.data.db.entity.ArtworkReferenceEntity
 import app.shippy.data.db.entity.AudioFingerprintEntity
@@ -85,7 +90,17 @@ import app.shippy.data.db.entity.UserMetadataOverrideEntity
     version = ShippyR16Database.SCHEMA_VERSION,
     exportSchema = true,
 )
-abstract class ShippyR16Database : RoomDatabase() {
+internal abstract class ShippyR16Database : RoomDatabase() {
+    abstract fun recordingDao(): RecordingDao
+
+    abstract fun sourceDao(): SourceDao
+
+    abstract fun assetDao(): AssetDao
+
+    abstract fun libraryDao(): LibraryDao
+
+    abstract fun playlistDao(): PlaylistDao
+
     companion object {
         const val DATABASE_NAME = "shippy-r16.db"
         const val SCHEMA_VERSION = 1
