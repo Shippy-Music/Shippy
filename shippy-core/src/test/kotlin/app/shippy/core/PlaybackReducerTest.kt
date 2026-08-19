@@ -23,6 +23,7 @@ import app.shippy.core.identity.SourceReferenceId
 import app.shippy.core.playback.CommittedEnginePhase
 import app.shippy.core.playback.PlaybackCoreEvent
 import app.shippy.core.playback.PlaybackEffect
+import app.shippy.core.playback.PlaybackError
 import app.shippy.core.playback.PlaybackPhase
 import app.shippy.core.playback.PlaybackReducer
 import app.shippy.core.playback.PlaybackSnapshot
@@ -135,6 +136,54 @@ class PlaybackReducerTest {
         assertNull(changed.snapshot.committedQueueEntryId)
         assertEquals(PlaybackPhase.Preparing(queueEntryId(3)), changed.snapshot.phase)
         assertTrue(staleCallback.snapshot === changed.snapshot)
+    }
+
+    @Test
+    fun `explicit selection invalidates the prior commit and scopes engine failure to its tag`() {
+        val queue = queueReducer.replace(listOf(entry(1), entry(2)), queueEntryId(1))
+        val replacing =
+            playbackReducer.reduce(
+                PlaybackSnapshot.Empty,
+                PlaybackCoreEvent.ReplaceContext(queue, queueEntryId(1), true),
+            )
+        val firstTag = (replacing.effects.single() as PlaybackEffect.PrepareSource).tag
+        val firstPrepared =
+            playbackReducer.reduce(
+                replacing.snapshot,
+                PlaybackCoreEvent.SourceReady(firstTag, source(1)),
+            )
+        val firstCommitted =
+            playbackReducer.reduce(
+                firstPrepared.snapshot,
+                PlaybackCoreEvent.EngineCommitted(firstTag),
+            )
+        val selecting =
+            playbackReducer.reduce(
+                firstCommitted.snapshot,
+                PlaybackCoreEvent.SelectEntry(queueEntryId(2)),
+            )
+        val secondTag = (selecting.effects.single() as PlaybackEffect.PrepareSource).tag
+        val secondPrepared =
+            playbackReducer.reduce(
+                selecting.snapshot,
+                PlaybackCoreEvent.SourceReady(secondTag, source(2)),
+            )
+        val error = PlaybackError("ENGINE", retryable = true)
+        val staleFailure =
+            playbackReducer.reduce(
+                secondPrepared.snapshot,
+                PlaybackCoreEvent.EngineFailed(firstTag.generation, firstTag.queueEntryId, error),
+            )
+        val currentFailure =
+            playbackReducer.reduce(
+                secondPrepared.snapshot,
+                PlaybackCoreEvent.EngineFailed(secondTag.generation, secondTag.queueEntryId, error),
+            )
+
+        assertNull(selecting.snapshot.committedQueueEntryId)
+        assertEquals(PlaybackPhase.Preparing(queueEntryId(2)), selecting.snapshot.phase)
+        assertTrue(staleFailure.snapshot === secondPrepared.snapshot)
+        assertEquals(PlaybackPhase.Failed(queueEntryId(2), error), currentFailure.snapshot.phase)
     }
 
     private fun entry(value: Int) =

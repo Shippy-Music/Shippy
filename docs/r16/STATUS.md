@@ -312,6 +312,20 @@ avoid checklist theatre.
   observable. Search rendering and interactive manual Identify are deliberately
   absent from this background path; an Android WorkManager executor remains a
   later activation step rather than a no-op worker.
+- Phase 5 now has an inactive serialized `PlaybackCoordinator` implementing the
+  ordinary `PlaybackCommandRouter` path over the existing pure queue/playback
+  reducers. Commands address QueueEntryId occurrences, queue replacement bumps
+  generation, navigation bumps revision, and cancelled or late preparation and
+  engine callbacks cannot commit over newer intent.
+- The new narrow `PlayerEngine` and `PlaybackSourcePreparer` contracts contain no
+  Media3 types. A `PlayerTransaction` with expected QueueEntryId and generation
+  exists before engine mutation, closing the R15 early-transition race. The first
+  engine window intentionally contains only the selected prepared occurrence;
+  bounded neighbor prefetch/expansion remains the next Phase 5 slice.
+- `PositionAnchor` now carries positive playback speed and advancing state while
+  retaining a monotonic timestamp. Engine failures are accepted only for the
+  pending/committed generation and occurrence; source/engine exceptions become
+  typed retryable playback failures without changing Recording identity.
 
 ## Current blockers
 
@@ -324,11 +338,11 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Start Phase 5 behind the inactive R16 boundary: implement the process-scoped
-   playback coordinator and fake engine around immutable snapshots, QueueEntryId
-   occurrence identity, deterministic shuffle, generation-safe preparation, and
-   restore semantics. Do not project to Media3 or switch legacy playback authority
-   until the pure state machine is proven.
+1. Continue Phase 5 behind the inactive R16 boundary: add the bounded neighbor
+   engine-window planner, source fallback/recovery transitions, source-neutral
+   checkpoint/restore, listening-session integration, trace events, and long
+   deterministic/randomized fake-engine runs. Do not project to Media3 or switch
+   legacy playback authority until the pure state machine exit gate is proven.
 
 ## Verification level
 
@@ -339,7 +353,7 @@ playback identity/transition suites pass (11 tests). The Last.fm suite passes
 presentation suites (10 tests). The bounded pager projection suite passes (4
 tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
-focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (22
+focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (23
 tests plus its forbidden-import gate). No R16 code has been instrumented,
 device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes 6
 schema/DAO tests, including duplicate playlist occurrences, orphan rejection,
@@ -387,11 +401,17 @@ Bounded transient collection, complete durable-reference protection, derived-row
 cleanup, runtime protection, and the shared 60-day default add 2 passing tests
 (37 total data-module tests).
 `:shippy-sources:check` passes its forbidden-import gate and 10 focused
-source, managed-asset, ingestion, and enrichment tests. The app compiles with the inactive Musikr/data
-bridge; its exact observation-mapping test and interrupted/resumed/changed-snapshot
+source, managed-asset, ingestion, and enrichment tests. The app compiles with the
+inactive Musikr/data bridge; its exact observation-mapping test and
+interrupted/resumed/changed-snapshot
 M12 test pass. The provider observation adapter adds 3 passing tests for stable
 repeated source keys, shared YouTube/YouTube Music video identity, locator/artwork
-sanitization, scoped partial failure, and cancellation propagation. Root
+sanitization, scoped partial failure, and cancellation propagation.
+The inactive Phase 5 coordinator adds 3 passing fake-engine tests for inline
+commit ordering, duplicate-Recording occurrence identity, stale-generation
+commit rejection, and deterministic shuffle preservation. Its reducer adds one
+focused selection/failure-scoping test. The first window is current-only and is
+not yet the required bounded neighbor window or a Media3 integration. Root
 `spotlessCheck` also passes. M12 and provider discovery have explicit callable
 seams but are not invoked by production or recorded complete in bootstrap state;
 none of this work is instrumented, physical-device tested, or

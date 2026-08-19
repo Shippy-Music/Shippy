@@ -58,10 +58,18 @@ sealed interface PlaybackPhase {
     data object Ended : PlaybackPhase
 }
 
-data class PositionAnchor(val positionMs: Long, val sampledElapsedRealtimeMs: Long) {
+data class PositionAnchor(
+    val positionMs: Long,
+    val sampledElapsedRealtimeMs: Long,
+    val playbackSpeed: Double = 1.0,
+    val advancing: Boolean = false,
+) {
     init {
         require(positionMs >= 0) { "Playback position cannot be negative" }
         require(sampledElapsedRealtimeMs >= 0) { "Monotonic sample cannot be negative" }
+        require(playbackSpeed.isFinite() && playbackSpeed > 0) {
+            "Playback speed must be finite and positive"
+        }
     }
 }
 
@@ -157,6 +165,8 @@ sealed interface PlaybackCoreEvent {
 
     data class QueueChanged(val queue: QueueState) : PlaybackCoreEvent
 
+    data class SelectEntry(val queueEntryId: QueueEntryId) : PlaybackCoreEvent
+
     data class SourceReady(val tag: PlaybackRequestTag, val source: PlaybackSourceHandle) :
         PlaybackCoreEvent
 
@@ -175,6 +185,12 @@ sealed interface PlaybackCoreEvent {
         val generation: Long,
         val queueEntryId: QueueEntryId,
         val position: PositionAnchor,
+    ) : PlaybackCoreEvent
+
+    data class EngineFailed(
+        val generation: Long,
+        val queueEntryId: QueueEntryId,
+        val error: PlaybackError,
     ) : PlaybackCoreEvent
 
     data class SetPlayWhenReady(val value: Boolean) : PlaybackCoreEvent
@@ -208,11 +224,13 @@ class PlaybackReducer {
         when (event) {
             is PlaybackCoreEvent.ReplaceContext -> replaceContext(snapshot, event)
             is PlaybackCoreEvent.QueueChanged -> queueChanged(snapshot, event.queue)
+            is PlaybackCoreEvent.SelectEntry -> selectEntry(snapshot, event.queueEntryId)
             is PlaybackCoreEvent.SourceReady -> sourceReady(snapshot, event)
             is PlaybackCoreEvent.SourceUnavailable -> sourceUnavailable(snapshot, event)
             is PlaybackCoreEvent.EngineCommitted -> engineCommitted(snapshot, event.tag)
             is PlaybackCoreEvent.EnginePhaseChanged -> enginePhaseChanged(snapshot, event)
             is PlaybackCoreEvent.EnginePosition -> enginePosition(snapshot, event)
+            is PlaybackCoreEvent.EngineFailed -> engineFailed(snapshot, event)
             is PlaybackCoreEvent.SetPlayWhenReady ->
                 PlaybackReduction(
                     snapshot.copy(playWhenReady = event.value),
@@ -224,6 +242,30 @@ class PlaybackReducer {
                     listOf(PlaybackEffect.SetEngineRepeat(event.mode)),
                 )
         }
+
+    private fun selectEntry(
+        snapshot: PlaybackSnapshot,
+        queueEntryId: QueueEntryId,
+    ): PlaybackReduction {
+        require(snapshot.queue.baseQueue.any { it.id == queueEntryId }) {
+            "Selected QueueEntryId must exist in the queue"
+        }
+        val revision = snapshot.queueRevision + 1
+        val tag = PlaybackRequestTag(snapshot.generation, revision, queueEntryId)
+        return PlaybackReduction(
+            snapshot.copy(
+                queueRevision = revision,
+                queue = snapshot.queue.copy(currentQueueEntryId = queueEntryId),
+                committedQueueEntryId = null,
+                phase = PlaybackPhase.Preparing(queueEntryId),
+                position = PositionAnchor(0, 0),
+                engineWindow = emptyList(),
+                expectedEngineCommit = null,
+                currentError = null,
+            ),
+            listOf(PlaybackEffect.PrepareSource(tag)),
+        )
+    }
 
     private fun replaceContext(
         snapshot: PlaybackSnapshot,
@@ -384,6 +426,26 @@ class PlaybackReducer {
         } else {
             PlaybackReduction(snapshot, emptyList())
         }
+
+    private fun engineFailed(
+        snapshot: PlaybackSnapshot,
+        event: PlaybackCoreEvent.EngineFailed,
+    ): PlaybackReduction {
+        val pendingMatches =
+            snapshot.expectedEngineCommit?.let {
+                it.generation == event.generation && it.queueEntryId == event.queueEntryId
+            } == true
+        val committedMatches = snapshot.acceptsCommitted(event.generation, event.queueEntryId)
+        if (!pendingMatches && !committedMatches) return PlaybackReduction(snapshot, emptyList())
+        return PlaybackReduction(
+            snapshot.copy(
+                phase = PlaybackPhase.Failed(event.queueEntryId, event.error),
+                expectedEngineCommit = null,
+                currentError = event.error,
+            ),
+            emptyList(),
+        )
+    }
 
     private fun PlaybackSnapshot.accepts(tag: PlaybackRequestTag): Boolean =
         tag.generation == generation &&
