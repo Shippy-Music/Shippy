@@ -22,14 +22,32 @@ import androidx.room.RoomDatabase
 import app.shippy.data.db.entity.ArtistEntity
 import app.shippy.data.db.entity.ArtworkReferenceEntity
 import app.shippy.data.db.entity.AudioFingerprintEntity
+import app.shippy.data.db.entity.CanonicalFieldProvenanceEntity
+import app.shippy.data.db.entity.DownloadJobEntity
+import app.shippy.data.db.entity.EntityRedirectEntity
 import app.shippy.data.db.entity.ExternalIdentifierEntity
+import app.shippy.data.db.entity.IdentityDecisionEntity
+import app.shippy.data.db.entity.IdentityRejectionEntity
+import app.shippy.data.db.entity.LastFmScrobbleOutboxEntity
+import app.shippy.data.db.entity.LibraryLayoutEntryEntity
+import app.shippy.data.db.entity.LibraryRecordingEntity
+import app.shippy.data.db.entity.LyricsCacheEntity
 import app.shippy.data.db.entity.MediaAssetEntity
+import app.shippy.data.db.entity.MergeAuditEntity
 import app.shippy.data.db.entity.MetadataObservationEntity
+import app.shippy.data.db.entity.MigrationAuditEntity
+import app.shippy.data.db.entity.PlayHistoryEntity
+import app.shippy.data.db.entity.PlaybackCheckpointEntity
+import app.shippy.data.db.entity.PlaybackCheckpointEntryEntity
+import app.shippy.data.db.entity.PlaylistEntity
+import app.shippy.data.db.entity.PlaylistEntryEntity
 import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.entity.ReleaseEntity
 import app.shippy.data.db.entity.ReleaseTrackEntity
+import app.shippy.data.db.entity.SavedSourceEntity
 import app.shippy.data.db.entity.SourceReferenceEntity
+import app.shippy.data.db.entity.UserMetadataOverrideEntity
 
 @Database(
     entities =
@@ -45,6 +63,24 @@ import app.shippy.data.db.entity.SourceReferenceEntity
             ArtworkReferenceEntity::class,
             MediaAssetEntity::class,
             AudioFingerprintEntity::class,
+            LibraryRecordingEntity::class,
+            PlaylistEntity::class,
+            PlaylistEntryEntity::class,
+            LibraryLayoutEntryEntity::class,
+            UserMetadataOverrideEntity::class,
+            CanonicalFieldProvenanceEntity::class,
+            IdentityDecisionEntity::class,
+            IdentityRejectionEntity::class,
+            EntityRedirectEntity::class,
+            MergeAuditEntity::class,
+            PlayHistoryEntity::class,
+            PlaybackCheckpointEntity::class,
+            PlaybackCheckpointEntryEntity::class,
+            DownloadJobEntity::class,
+            LastFmScrobbleOutboxEntity::class,
+            LyricsCacheEntity::class,
+            SavedSourceEntity::class,
+            MigrationAuditEntity::class,
         ],
     version = ShippyR16Database.SCHEMA_VERSION,
     exportSchema = true,

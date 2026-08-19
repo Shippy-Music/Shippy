@@ -93,11 +93,12 @@ avoid checklist theatre.
   results are ignored, and only a matching QueueEntryId engine commit publishes
   current playback state.
 - `:shippy-data` now exists as an isolated Android/Room module depending only on
-  core. Schema v1 exports the first 11 normalized recording, artist, release,
-  source-observation, artwork, asset, and fingerprint tables with exact-key,
-  ownership, availability, checksum, and referential constraints. An in-memory
-  Room creation test proves the table set, schema version, and foreign-key mode;
-  `:app` does not depend on or read this database yet.
+  core. Schema v1 exports all 29 normalized identity, source/asset, Library,
+  playlist, metadata authority, redirect/audit, history/checkpoint, download,
+  integration, saved-source, and migration tables. Exact-source uniqueness,
+  duplicate playlist occurrences, ownership, checksum, and referential
+  constraints are exercised in-memory; `:app` does not depend on or read this
+  database yet.
 
 ## Current blockers
 
@@ -110,9 +111,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add the remaining Library, playlist, metadata-authority, redirect/audit,
-   history/checkpoint, download/integration, and migration tables before DAOs
-   and read models; production remains on legacy v10.
+1. Add scoped DAOs and atomic transactions for canonical identity/source/asset
+   and Library/playlist writes, then introduce critical read views and FTS;
+   production remains on legacy v10.
 
 ## Verification level
 
@@ -125,6 +126,7 @@ tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
 focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (22
 tests plus its forbidden-import gate). No R16 code has been instrumented,
-device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes
-its initial empty-schema creation test; the exported schema contains version 1,
-11 entities, zero views, and identity hash `0bddf0562a82be11be613e2ab84da6cd`.
+device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes 2
+schema tests, including duplicate playlist occurrences, orphan rejection, and
+exact-source uniqueness. The exported schema contains version 1, 29 entities,
+zero views, and identity hash `901060a547b0b5607bd180bf3e8741d7`.
