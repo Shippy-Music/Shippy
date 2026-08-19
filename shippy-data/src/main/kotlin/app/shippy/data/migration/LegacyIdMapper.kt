@@ -48,6 +48,20 @@ internal object LegacyIdMapper {
     fun downloadAsset(oldJobId: String): MediaAssetId =
         MediaAssetId(mapped("download-asset", oldJobId))
 
+    fun lastFmRecording(oldOutboxId: String): RecordingId =
+        RecordingId(mapped("lastfm-recording", oldOutboxId))
+
+    fun lastFmArtist(oldOutboxId: String, name: String): ArtistId =
+        ArtistId(mapped("lastfm-artist", oldOutboxId, name))
+
+    fun lastFmObservation(oldOutboxId: String): MetadataObservationId =
+        MetadataObservationId(mapped("lastfm-observation", oldOutboxId))
+
+    fun lastFmOutbox(oldOutboxId: String): String = mapped("lastfm-outbox", oldOutboxId)
+
+    fun lastFmListeningSession(oldOutboxId: String): String =
+        mapped("lastfm-listening-session", oldOutboxId)
+
     fun observation(oldTrackId: String): MetadataObservationId =
         MetadataObservationId(mapped("observation", oldTrackId))
 

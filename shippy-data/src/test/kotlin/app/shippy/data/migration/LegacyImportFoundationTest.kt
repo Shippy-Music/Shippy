@@ -129,6 +129,16 @@ class LegacyImportFoundationTest {
             assertEquals("job-a", download.jobId)
             assertEquals("candidate-a", download.requestedCandidateId)
             assertEquals("provider-item", download.requestedSourceItemId)
+
+            val lyrics =
+                reader.lyrics(afterTrackId = null, afterFingerprint = null, limit = 1).single()
+            assertEquals("track-a", lyrics.trackId)
+            assertTrue(lyrics.plainLyrics?.contains("words") == true)
+
+            val outbox =
+                reader.lastFmOutbox(afterQueuedAtEpochMs = null, afterId = null, limit = 1).single()
+            assertEquals("queue-item:queue-1", outbox.id)
+            assertEquals("track-a", outbox.trackId)
         }
     }
 
@@ -455,6 +465,66 @@ class LegacyImportFoundationTest {
             assertEquals(1L, database.legacyImportDao().assetCount())
         }
 
+    @Test
+    fun `M7 and M8 preserve valid lyrics and duplicate-safe Last fm FIFO`() =
+        kotlinx.coroutines.runBlocking {
+            startAudit("migration-8")
+            LegacyCanonicalTrackImporter(database)
+                .importPage(
+                    "migration-8",
+                    listOf(legacyTrack("track-a", "Alpha", "6:Artist", null)),
+                    1_000,
+                )
+            val validFingerprint = "alpha\u001Fartist\u001F\u001F120"
+            val lyricsRows =
+                listOf(
+                    legacyLyrics(fingerprint = validFingerprint),
+                    legacyLyrics(fingerprint = "bad-fingerprint"),
+                )
+
+            val lyricsResult =
+                LegacyLyricsImporter(database).importPage("migration-8", lyricsRows, 2_000)
+
+            assertEquals(1, lyricsResult.importedCount)
+            assertEquals(1, lyricsResult.skippedCount)
+            val recordingA = LegacyIdMapper.recording("track-a").value
+            val lyrics =
+                checkNotNull(database.lyricsDao().exact(recordingA, validFingerprint, "lrclib"))
+            assertEquals(2_000L, lyrics.expiresAtEpochMs)
+
+            val outboxRows =
+                listOf(
+                    legacyOutbox(
+                        id = "queue-item:queue-a",
+                        queuedAtEpochMs = 1_000,
+                        trackId = "track-a",
+                    ),
+                    legacyOutbox(id = "queue-item:orphan", queuedAtEpochMs = 2_000, trackId = null),
+                    legacyOutbox(
+                        id = "queue-item:invalid",
+                        queuedAtEpochMs = 3_000,
+                        trackId = null,
+                        artist = " ",
+                    ),
+                )
+            val outboxImporter = LegacyLastFmOutboxImporter(database)
+            val outboxResult = outboxImporter.importPage("migration-8", outboxRows, 3_000)
+
+            assertEquals(2, outboxResult.acceptedCount)
+            assertEquals(1, outboxResult.skippedCount)
+            assertEquals(2, database.lastFmOutboxDao().count())
+            val oldest = database.lastFmOutboxDao().oldest(10)
+            assertEquals(recordingA, oldest.first().recordingId)
+            assertEquals(
+                LegacyIdMapper.lastFmRecording("queue-item:orphan").value,
+                oldest.last().recordingId,
+            )
+            assertFalse(oldest.first().chosenByUser)
+
+            outboxImporter.importPage("migration-8", outboxRows, 3_000)
+            assertEquals(2, database.lastFmOutboxDao().count())
+        }
+
     private fun createLegacyDatabase() {
         SQLiteDatabase.openOrCreateDatabase(legacyFile, null).use { database ->
             database.version = LEGACY_SCHEMA_VERSION
@@ -466,7 +536,11 @@ class LegacyImportFoundationTest {
                         table == "user_playlist" ||
                         table == "playlist_membership" ||
                         table == "download_job" ||
-                        table == "download_candidate"
+                        table == "download_candidate" ||
+                        table == "lyrics_cache" ||
+                        table == "lastfm_scrobble_outbox" ||
+                        table == "playback_checkpoint" ||
+                        table == "playback_checkpoint_item"
                 ) {
                     continue
                 }
@@ -605,6 +679,7 @@ class LegacyImportFoundationTest {
             )
             createLegacyLibraryTables(database)
             createLegacyDownloadTables(database)
+            createLegacyIntegrationTables(database)
         }
     }
 
@@ -734,6 +809,81 @@ class LegacyImportFoundationTest {
         )
     }
 
+    private fun createLegacyIntegrationTables(database: SQLiteDatabase) {
+        database.execSQL(
+            """
+            CREATE TABLE lyrics_cache (
+                trackId TEXT NOT NULL,
+                fingerprint TEXT NOT NULL,
+                titleKey TEXT NOT NULL,
+                artistsKey TEXT NOT NULL,
+                albumKey TEXT NOT NULL,
+                durationSeconds INTEGER NOT NULL,
+                sourceId TEXT NOT NULL,
+                recordId INTEGER NOT NULL,
+                instrumental INTEGER NOT NULL,
+                plainLyrics TEXT,
+                syncedLyrics TEXT,
+                cachedAtEpochMs INTEGER NOT NULL,
+                PRIMARY KEY(trackId, fingerprint)
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO lyrics_cache
+            (trackId, fingerprint, titleKey, artistsKey, albumKey, durationSeconds,
+             sourceId, recordId, instrumental, plainLyrics, syncedLyrics, cachedAtEpochMs)
+            VALUES ('track-a', 'alpha' || char(31) || 'artist' || char(31) || '' || char(31) || '120',
+                    'alpha', 'artist', '', 120, 'lrclib', 1, 0, 'the words', NULL, 1000)
+            """
+                .trimIndent()
+        )
+        database.execSQL("CREATE TABLE playback_checkpoint (slot TEXT NOT NULL PRIMARY KEY)")
+        database.execSQL(
+            """
+            CREATE TABLE playback_checkpoint_item (
+                slot TEXT NOT NULL,
+                heapPosition INTEGER NOT NULL,
+                queueItemId TEXT NOT NULL,
+                trackId TEXT NOT NULL,
+                PRIMARY KEY(slot, heapPosition)
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO playback_checkpoint_item (slot, heapPosition, queueItemId, trackId)
+            VALUES ('active', 0, 'queue-1', 'track-a')
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            CREATE TABLE lastfm_scrobble_outbox (
+                id TEXT NOT NULL PRIMARY KEY,
+                artist TEXT NOT NULL,
+                track TEXT NOT NULL,
+                album TEXT,
+                durationSeconds INTEGER,
+                startedAtEpochSeconds INTEGER NOT NULL,
+                queuedAtEpochMs INTEGER NOT NULL
+            )
+            """
+                .trimIndent()
+        )
+        database.execSQL(
+            """
+            INSERT INTO lastfm_scrobble_outbox
+            (id, artist, track, album, durationSeconds, startedAtEpochSeconds, queuedAtEpochMs)
+            VALUES ('queue-item:queue-1', 'Artist', 'Alpha', NULL, 120, 100, 1000)
+            """
+                .trimIndent()
+        )
+    }
+
     private suspend fun startAudit(migrationId: String) {
         database
             .migrationAuditDao()
@@ -821,6 +971,39 @@ class LegacyImportFoundationTest {
             requestedSourceId = "provider",
             requestedSourceItemId = "provider-item",
             requestedProviderId = "provider",
+        )
+
+    private fun legacyLyrics(fingerprint: String) =
+        LegacyLyricsRow(
+            trackId = "track-a",
+            fingerprint = fingerprint,
+            titleKey = "alpha",
+            artistsKey = "artist",
+            albumKey = "",
+            durationSeconds = 120,
+            sourceId = "lrclib",
+            recordId = 1,
+            instrumental = false,
+            plainLyrics = "the words",
+            syncedLyrics = null,
+            cachedAtEpochMs = 1_000,
+        )
+
+    private fun legacyOutbox(
+        id: String,
+        queuedAtEpochMs: Long,
+        trackId: String?,
+        artist: String = "Artist",
+    ) =
+        LegacyLastFmOutboxRow(
+            id = id,
+            artist = artist,
+            track = "Alpha",
+            album = null,
+            durationSeconds = 120,
+            startedAtEpochSeconds = 100,
+            queuedAtEpochMs = queuedAtEpochMs,
+            trackId = trackId,
         )
 
     private companion object {

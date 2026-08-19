@@ -190,6 +190,16 @@ avoid checklist theatre.
   identity/location/length conflicts remain warnings rather than reassignment.
   Raw artifact, pending, provider-stream, and failure-message locators are not
   copied into R16 durable state.
+- M7 pages lyrics by `(TrackId, fingerprint)`, validates the legacy fingerprint
+  against its full normalized metadata tuple, rejects empty/corrupt payloads,
+  maps exact Recording/provider identity, and marks imported cache rows stale so
+  they remain an offline fallback while normal retrieval may refresh them.
+- M8 preserves Last.fm FIFO order by `(queuedAt, outboxId)` with deterministic
+  outbox/listening IDs. Exact legacy queue-item links reuse the M1 Recording;
+  otherwise the importer creates one isolated deterministic durable Recording
+  from the scrobble metadata rather than fuzzy-merging or dropping the pending
+  listen. Retry cannot duplicate delivery rows, and unavailable legacy
+  `chosenByUser` evidence defaults honestly to false.
 
 ## Current blockers
 
@@ -202,9 +212,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add bounded M7 lyrics and M8 Last.fm outbox migration while retaining the M5
-   Musikr/local-ingestion dependency before any runnable cutover; production
-   remains on legacy v10.
+1. Add bounded M9 source-neutral playback-checkpoint migration and M10 saved
+   provider entity import while retaining the M5 Musikr/local-ingestion
+   dependency before any runnable cutover; production remains on legacy v10.
 
 ## Verification level
 
@@ -242,3 +252,6 @@ data-module tests).
 M6 download paging, source mapping, exact artifact verification, managed-asset
 reuse, stale-availability repair, locator discard, and retry behavior add 1
 passing focused test (25 total data-module tests).
+M7/M8 lyrics fingerprint validation, stale-cache preservation, exact queue-item
+outbox linking, isolated fallback identity, FIFO order, and retry behavior add 1
+passing focused test (26 total data-module tests).

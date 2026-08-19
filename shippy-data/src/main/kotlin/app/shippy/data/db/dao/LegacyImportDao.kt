@@ -66,6 +66,8 @@ internal interface LegacyImportDao {
 
     @Query("SELECT COUNT(*) FROM download_job") suspend fun downloadJobCount(): Long
 
+    @Query("SELECT COUNT(*) FROM lyrics_cache") suspend fun lyricsCount(): Long
+
     @Query("SELECT * FROM source_reference WHERE source_reference_id = :sourceReferenceId")
     suspend fun source(sourceReferenceId: String): SourceReferenceEntity?
 

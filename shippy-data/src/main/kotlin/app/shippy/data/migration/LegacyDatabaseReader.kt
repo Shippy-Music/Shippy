@@ -113,6 +113,32 @@ internal data class LegacyDownloadJobRow(
     val requestedProviderId: String?,
 )
 
+internal data class LegacyLyricsRow(
+    val trackId: String,
+    val fingerprint: String,
+    val titleKey: String,
+    val artistsKey: String,
+    val albumKey: String,
+    val durationSeconds: Long,
+    val sourceId: String,
+    val recordId: Long,
+    val instrumental: Boolean,
+    val plainLyrics: String?,
+    val syncedLyrics: String?,
+    val cachedAtEpochMs: Long,
+)
+
+internal data class LegacyLastFmOutboxRow(
+    val id: String,
+    val artist: String,
+    val track: String,
+    val album: String?,
+    val durationSeconds: Int?,
+    val startedAtEpochSeconds: Long,
+    val queuedAtEpochMs: Long,
+    val trackId: String?,
+)
+
 internal class LegacyDatabaseReader private constructor(private val database: SQLiteDatabase) :
     Closeable {
     init {
@@ -468,6 +494,129 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
                                 requestedSourceId = cursor.stringOrNull(23),
                                 requestedSourceItemId = cursor.stringOrNull(24),
                                 requestedProviderId = cursor.stringOrNull(25),
+                            )
+                        )
+                    }
+                }
+            }
+    }
+
+    fun lyrics(
+        afterTrackId: String?,
+        afterFingerprint: String?,
+        limit: Int,
+    ): List<LegacyLyricsRow> {
+        requirePageSize(limit)
+        require((afterTrackId == null) == (afterFingerprint == null)) {
+            "Legacy lyrics checkpoint must contain both key parts"
+        }
+        val selection =
+            if (afterTrackId == null) {
+                ""
+            } else {
+                "WHERE trackId > ? OR (trackId = ? AND fingerprint > ?)"
+            }
+        val arguments =
+            if (afterTrackId == null) {
+                emptyArray()
+            } else {
+                arrayOf(afterTrackId, afterTrackId, checkNotNull(afterFingerprint))
+            }
+        return database
+            .rawQuery(
+                """
+                SELECT trackId, fingerprint, titleKey, artistsKey, albumKey, durationSeconds,
+                       sourceId, recordId, instrumental, plainLyrics, syncedLyrics, cachedAtEpochMs
+                FROM lyrics_cache
+                $selection
+                ORDER BY trackId, fingerprint
+                LIMIT $limit
+                """
+                    .trimIndent(),
+                arguments,
+            )
+            .useRows { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            LegacyLyricsRow(
+                                trackId = cursor.getString(0),
+                                fingerprint = cursor.getString(1),
+                                titleKey = cursor.getString(2),
+                                artistsKey = cursor.getString(3),
+                                albumKey = cursor.getString(4),
+                                durationSeconds = cursor.getLong(5),
+                                sourceId = cursor.getString(6),
+                                recordId = cursor.getLong(7),
+                                instrumental = cursor.getInt(8) != 0,
+                                plainLyrics = cursor.stringOrNull(9),
+                                syncedLyrics = cursor.stringOrNull(10),
+                                cachedAtEpochMs = cursor.getLong(11),
+                            )
+                        )
+                    }
+                }
+            }
+    }
+
+    fun lastFmOutbox(
+        afterQueuedAtEpochMs: Long?,
+        afterId: String?,
+        limit: Int,
+    ): List<LegacyLastFmOutboxRow> {
+        requirePageSize(limit)
+        require((afterQueuedAtEpochMs == null) == (afterId == null)) {
+            "Legacy Last.fm checkpoint must contain both key parts"
+        }
+        val selection =
+            if (afterQueuedAtEpochMs == null) {
+                ""
+            } else {
+                "WHERE outbox.queuedAtEpochMs > ? OR (outbox.queuedAtEpochMs = ? AND outbox.id > ?)"
+            }
+        val arguments =
+            if (afterQueuedAtEpochMs == null) {
+                emptyArray()
+            } else {
+                arrayOf(
+                    afterQueuedAtEpochMs.toString(),
+                    afterQueuedAtEpochMs.toString(),
+                    checkNotNull(afterId),
+                )
+            }
+        return database
+            .rawQuery(
+                """
+                SELECT outbox.id, outbox.artist, outbox.track, outbox.album,
+                       outbox.durationSeconds, outbox.startedAtEpochSeconds,
+                       outbox.queuedAtEpochMs,
+                       (
+                           SELECT item.trackId FROM playback_checkpoint_item AS item
+                           WHERE 'queue-item:' || item.queueItemId = outbox.id
+                           ORDER BY item.slot, item.heapPosition
+                           LIMIT 1
+                       ) AS trackId
+                FROM lastfm_scrobble_outbox AS outbox
+                $selection
+                ORDER BY outbox.queuedAtEpochMs, outbox.id
+                LIMIT $limit
+                """
+                    .trimIndent(),
+                arguments,
+            )
+            .useRows { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            LegacyLastFmOutboxRow(
+                                id = cursor.getString(0),
+                                artist = cursor.getString(1),
+                                track = cursor.getString(2),
+                                album = cursor.stringOrNull(3),
+                                durationSeconds = cursor.intOrNull(4),
+                                startedAtEpochSeconds = cursor.getLong(5),
+                                queuedAtEpochMs = cursor.getLong(6),
+                                trackId = cursor.stringOrNull(7),
                             )
                         )
                     }
