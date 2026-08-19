@@ -32,6 +32,10 @@ Implemented R16 foundations now include:
   current/previous/look-ahead source preparation, automatic engine transitions,
   source-neutral checkpoint/restore, and one bounded retry for retryable current
   source failure;
+- an inactive Media3 projection adapter that constructs the full tagged
+  transaction before player mutation, uses QueueEntryId as `mediaId`, disables
+  Media3 shuffle, keeps repeat-all in Shippy traversal, and maps committed,
+  automatic, phase, position, and typed error callbacks back to the coordinator;
 - monotonic audible-time tracking driven by continuous low-frequency ticks,
   plus a bounded generation/queue/entry playback trace.
 
@@ -39,9 +43,11 @@ Focused verification covers duplicate occurrences, rapid generation replacement,
 distant window rebuild, source retry, source-neutral restore, automatic advance,
 continuous audible time, a 300-command seeded invariant trace, and a 10,000-entry
 queue that prepares only four sources. The coordinator still uses a fake engine
-contract in tests; Media3 service integration and production cutover remain open.
+for actor tests; the Media3 transaction projection has focused mapping tests but
+has not yet been wired to the service or exercised on a device. Production
+cutover remains open.
 The full local gate passes: 25 `:shippy-core`, 10 `:shippy-sources`, 37
-`:shippy-data`, and 529 app JVM tests (0 failures, 1 existing skip), plus
+`:shippy-data`, and 531 app JVM tests (0 failures, 1 existing skip), plus
 `spotlessCheck`, `:app:lintDebug`, and `:app:assembleDebug`.
 
 ## Reopened from current device feedback
@@ -120,7 +126,7 @@ acceptance remains open. The acceptance plan is in
 - Kotlin source and Android/JVM test-source compilation: passed.
 - Focused playback, library, and Last.fm tests: passed.
 - Final non-device gate passed: `spotlessCheck`, `:app:testDebugUnitTest`
-  (529 tests, 0 failures, 1 skipped), and `:app:lintDebug` (0 errors).
+  (531 tests, 0 failures, 1 skipped), and `:app:lintDebug` (0 errors).
 - `:app:assembleDebug` passed. Current debug artifact:
   `artifacts/Shippy-Alpha-R15.3-Stabilized-20260819.apk` (61,707,279 bytes;
   SHA-256

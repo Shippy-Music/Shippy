@@ -21,7 +21,10 @@ separate `:shippy-core`, `:shippy-data`, and `:shippy-sources` boundaries plus a
 inactive app-layer playback coordinator. The R16 coordinator serializes commands,
 source completions, engine observations, restore, and listening ticks; Shippy
 owns QueueEntryId traversal and bounded source preparation, while the future
-Media3 adapter remains a projection. R16 checkpoint state is source-neutral,
+Media3 adapter remains a projection. Its transaction is fully tagged before
+`setMediaItems`, uses QueueEntryId as Media3 `mediaId`, disables Media3 shuffle,
+and translates player callbacks back into generation-scoped observations. R16
+checkpoint state is source-neutral,
 and expiring locators, headers, cache leases, and temporary Crew paths are never
 checkpoint identity.
 

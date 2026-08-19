@@ -33,9 +33,10 @@ keeping implementation slices proportional to evidence from the repository.
   - [x] Implement the inactive serialized coordinator, deterministic queue,
         bounded engine window, retry/recovery, checkpoint/restore, audible-time
         ticker, trace, 10k queue proof, and seeded command invariants.
-  - [ ] Implement the Media3 adapter/transaction bridge and route service,
-        MediaSession, notification, widgets, Android Auto, and Crew through the
-        one command/snapshot path.
+  - [x] Implement the inactive Media3 adapter/transaction projection with tagged
+        QueueEntryId items, Shippy-owned shuffle/repeat-all, and callback mapping.
+  - [ ] Route service, MediaSession, notification, widgets, Android Auto, and
+        Crew through the one command/snapshot path.
   - [ ] Pass physical callback-order, process-death, source-expiry/fallback,
         audio-focus, route, gapless/crossfade, and large-queue acceptance.
 - [ ] Complete canonical Library/search/playlist/offline read models and UI
