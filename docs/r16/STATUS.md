@@ -1,7 +1,7 @@
 # Shippy R16 Status
 
 **Updated:** 2026-08-19  
-**Active phase:** Phase 0 — Freeze, Evidence, and Safety  
+**Active phase:** Phase 1 — Urgent R15.3 Correctness Repairs  
 **Authority:** `../Shippy_R16_Master_Architecture_and_Implementation_Spec.md`
 
 ## Execution mandate
@@ -12,6 +12,12 @@ owner decision that the master specification explicitly marks as blocking.
 
 Build and Gradle caches must be retained between builds. Clear them only after a
 specific cache-corruption diagnosis.
+
+Treat the master specification as a compass, not a literal transcription task:
+its invariants, data-safety rules, authority boundaries, and required outcomes
+are binding, while suggested class names, exact commit counts, and implementation
+details may adapt to current evidence. Prefer practical coherent slices and
+avoid checklist theatre.
 
 ## Current authority state
 
@@ -29,6 +35,11 @@ specific cache-corruption diagnosis.
 - Source ZIP and APK checksums match the documented stabilization evidence.
 - The master specification was copied byte-for-byte into the repository and its
   checksum was verified.
+- The tall-player seek bar again uses content height while the 304dp preview
+  remains owned by the lyrics container.
+- Playlist order controls now live in a playlist-only layout and no longer
+  inflate on Songs, Albums, Artists, or Genres.
+- The focused layout regression suite passes both ownership invariants.
 
 ## Current blockers
 
@@ -41,12 +52,14 @@ specific cache-corruption diagnosis.
 
 ## Next exact slice
 
-1. Complete Phase 0 baseline/ADR records.
-2. Characterize and repair the eight urgent R15.3 regressions without extending
-   the legacy architecture.
-3. Establish the pure `:shippy-core` boundary.
+1. Move the expected new-playback identity assignment before Media3 mutation.
+2. Give Last.fm a continuous audible clock and refresh its queue projection on
+   reorder.
+3. Bound collection composition, queue display projection, and managed-download
+   rediscovery before establishing `:shippy-core`.
 
 ## Verification level
 
-Baseline preservation is checksum-verified. No R16 source has yet been compiled,
-unit-tested, instrumented, device-tested, or performance-tested.
+Baseline preservation is checksum-verified. Changed app Kotlin and Android
+resources compile, and `R16LayoutRegressionTest` passes (2 tests). No R16 code
+has been instrumented, device-tested, or performance-tested.

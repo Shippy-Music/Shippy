@@ -127,7 +127,7 @@
     <org.oxycblt.auxio.playback.ui.StyledSeekBar
         android:id="@+id/playback_seek_bar"
         android:layout_width="match_parent"
-        android:layout_height="304dp"
+        android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/spacing_small"
         app:layout_constraintBottom_toTopOf="@+id/playback_controls_container"
         app:layout_constraintEnd_toEndOf="parent"

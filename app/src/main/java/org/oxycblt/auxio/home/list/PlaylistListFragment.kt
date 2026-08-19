@@ -32,7 +32,7 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
-import org.oxycblt.auxio.databinding.FragmentHomeListBinding
+import org.oxycblt.auxio.databinding.FragmentPlaylistListBinding
 import org.oxycblt.auxio.detail.DetailViewModel
 import org.oxycblt.auxio.home.HomeViewModel
 import org.oxycblt.auxio.list.ListFragment
@@ -65,7 +65,7 @@ import org.oxycblt.musikr.Song
  */
 @AndroidEntryPoint
 class PlaylistListFragment :
-    ListFragment<Playlist, FragmentHomeListBinding>(),
+    ListFragment<Playlist, FragmentPlaylistListBinding>(),
     FastScrollRecyclerView.PopupProvider,
     FastScrollRecyclerView.Listener {
     private val homeModel: HomeViewModel by activityViewModels()
@@ -148,9 +148,12 @@ class PlaylistListFragment :
         }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
-        FragmentHomeListBinding.inflate(inflater)
+        FragmentPlaylistListBinding.inflate(inflater)
 
-    override fun onBindingCreated(binding: FragmentHomeListBinding, savedInstanceState: Bundle?) {
+    override fun onBindingCreated(
+        binding: FragmentPlaylistListBinding,
+        savedInstanceState: Bundle?,
+    ) {
         super.onBindingCreated(binding, savedInstanceState)
 
         binding.homeRecycler.apply {
@@ -219,7 +222,7 @@ class PlaylistListFragment :
         )
     }
 
-    override fun onDestroyBinding(binding: FragmentHomeListBinding) {
+    override fun onDestroyBinding(binding: FragmentPlaylistListBinding) {
         super.onDestroyBinding(binding)
         playlistDragHelper?.attachToRecyclerView(null)
         playlistDragHelper = null
