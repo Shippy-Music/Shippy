@@ -60,6 +60,10 @@ avoid checklist theatre.
   dependency gate. Its first model slice defines canonical UUID identities,
   Recording/Artist/Release, source, media-asset, Library, playlist-entry, and
   queue-entry types without Android, Room, Media3, Musikr, provider DTOs, or UI.
+- Core metadata now retains observations/provenance separately, resolves fields
+  by stable trust precedence with user overrides first, parses material version
+  traits, and returns evidence-backed conservative identity decisions with
+  exact-key/strong-ID paths and version/duration vetoes.
 
 ## Current blockers
 
@@ -85,6 +89,6 @@ playback identity/transition suites pass (11 tests). The Last.fm suite passes
 presentation suites (10 tests). The bounded pager projection suite passes (4
 tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
-focused-unit-tested. `:shippy-core:check` passes independently (2 tests plus its
+focused-unit-tested. `:shippy-core:check` passes independently (6 tests plus its
 forbidden-import gate). No R16 code has been instrumented,
 device-tested, or performance-tested.
