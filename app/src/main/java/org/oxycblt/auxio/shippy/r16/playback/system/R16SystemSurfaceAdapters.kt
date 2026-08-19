@@ -17,9 +17,14 @@
  */
 package org.oxycblt.auxio.shippy.r16.playback.system
 
+import android.content.Context
+import android.graphics.drawable.Icon
+import android.service.quicksettings.Tile
 import app.shippy.core.identity.QueueEntryId
 import app.shippy.core.identity.RecordingId
 import app.shippy.core.playback.RepeatMode
+import kotlinx.coroutines.flow.StateFlow
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.playback.service.PlaybackActions
 
 /** Source-neutral content consumed by notification, widget, and lock-screen renderers. */
@@ -70,6 +75,37 @@ object R16QuickSettingsProjection {
             state.isPlaying -> R16QuickSettingsState.ACTIVE
             else -> R16QuickSettingsState.INACTIVE
         }
+}
+
+/** Thin renderer/click adapter for the existing Quick Settings service lifecycle. */
+class R16QuickSettingsAdapter(
+    private val states: StateFlow<R16SystemPlaybackState>,
+    private val commands: R16SystemPlaybackCommands,
+) {
+    fun render(context: Context, tile: Tile) {
+        val state = R16QuickSettingsProjection.project(states.value)
+        tile.state =
+            when (state) {
+                R16QuickSettingsState.UNAVAILABLE -> Tile.STATE_UNAVAILABLE
+                R16QuickSettingsState.ACTIVE -> Tile.STATE_ACTIVE
+                R16QuickSettingsState.INACTIVE -> Tile.STATE_INACTIVE
+            }
+        tile.icon =
+            Icon.createWithResource(
+                context,
+                if (state == R16QuickSettingsState.ACTIVE) {
+                    R.drawable.ic_pause_24
+                } else {
+                    R.drawable.ic_play_24
+                },
+            )
+        tile.setLabel(context.getString(R.string.lbl_playback))
+        tile.updateTile()
+    }
+
+    suspend fun click() {
+        commands.playPause()
+    }
 }
 
 /**

@@ -93,19 +93,19 @@ private constructor(
 
         // Note: Store these values here so they remain consistent once the bitmap is loaded.
         val isPlaying = playbackManager.progression.isPlaying
-        val repeatMode = playbackManager.repeatMode
+        val repeatIconRes = playbackManager.repeatMode.icon
         val isShuffled = playbackManager.isShuffled
 
         fun publish(bitmap: Bitmap?) {
             if (revision != artworkRevision) return
             val state =
-                PlaybackState(
+                WidgetPlaybackState(
                     title = title,
                     artist = artist,
                     album = album,
                     cover = bitmap,
                     isPlaying = isPlaying,
-                    repeatMode = repeatMode,
+                    repeatIconRes = repeatIconRes,
                     isShuffled = isShuffled,
                 )
             widgetProvider.update(context, uiSettings, state)
@@ -126,43 +126,7 @@ private constructor(
     }
 
     private fun newArtworkTarget(publish: (Bitmap?) -> Unit) =
-        object : BitmapProvider.Target {
-            override fun onConfigRequest(builder: ImageRequest.Builder): ImageRequest.Builder {
-                val cornerRadius =
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        // Android 12, always round the cover with the widget's inner radius
-                        L.d("Using android 12 corner radius")
-                        context.getDimenPixels(android.R.dimen.system_app_widget_inner_radius)
-                    } else if (uiSettings.roundMode) {
-                        // < Android 12, but the user still enabled round mode.
-                        L.d("Using default corner radius")
-                        context.getDimenPixels(R.dimen.m3_shape_corners_large)
-                    } else {
-                        // User did not enable round mode.
-                        L.d("Using no corner radius")
-                        0
-                    }
-
-                val transformations = buildList {
-                    if (imageSettings.forceSquareCovers) {
-                        add(SquareCropTransformation.INSTANCE)
-                    }
-                    if (cornerRadius > 0) {
-                        add(WidgetBitmapTransformation(15f))
-                        add(RoundedRectTransformation(cornerRadius.toFloat()))
-                    } else {
-                        add(WidgetBitmapTransformation(3f))
-                    }
-                }
-
-                return builder.size(Size.ORIGINAL).transformations(transformations)
-            }
-
-            override fun onCompleted(bitmap: Bitmap?) {
-                L.d("Bitmap loaded, uploading widget state")
-                publish(bitmap)
-            }
-        }
+        newWidgetArtworkTarget(context, imageSettings, uiSettings, publish)
 
     /** Release this instance, preventing any further events from updating the widget instances. */
     fun release() {
@@ -209,25 +173,54 @@ private constructor(
     override fun onRoundModeChanged() = update()
 
     override fun onImageSettingsChanged() = update()
-
-    /**
-     * A condensed form of the playback state that is safe to use in AppWidgets.
-     *
-     * @param title Current canonical playback title.
-     * @param artist Current canonical playback artist text.
-     * @param album Current canonical playback album text.
-     * @param cover A pre-loaded album cover [Bitmap], with rounded corners.
-     * @param isPlaying [PlaybackStateManager.progression]
-     * @param repeatMode [PlaybackStateManager.repeatMode]
-     * @param isShuffled [PlaybackStateManager.isShuffled]
-     */
-    data class PlaybackState(
-        val title: String,
-        val artist: String,
-        val album: String,
-        val cover: Bitmap?,
-        val isPlaying: Boolean,
-        val repeatMode: RepeatMode,
-        val isShuffled: Boolean,
-    )
 }
+
+/** A condensed, authority-neutral playback state safe to render in AppWidgets. */
+data class WidgetPlaybackState(
+    val title: String,
+    val artist: String,
+    val album: String,
+    val cover: Bitmap?,
+    val isPlaying: Boolean,
+    val repeatIconRes: Int,
+    val isShuffled: Boolean,
+)
+
+internal fun newWidgetArtworkTarget(
+    context: Context,
+    imageSettings: ImageSettings,
+    uiSettings: UISettings,
+    publish: (Bitmap?) -> Unit,
+) =
+    object : BitmapProvider.Target {
+        override fun onConfigRequest(builder: ImageRequest.Builder): ImageRequest.Builder {
+            val cornerRadius =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    L.d("Using android 12 corner radius")
+                    context.getDimenPixels(android.R.dimen.system_app_widget_inner_radius)
+                } else if (uiSettings.roundMode) {
+                    L.d("Using default corner radius")
+                    context.getDimenPixels(R.dimen.m3_shape_corners_large)
+                } else {
+                    L.d("Using no corner radius")
+                    0
+                }
+
+            val transformations = buildList {
+                if (imageSettings.forceSquareCovers) add(SquareCropTransformation.INSTANCE)
+                if (cornerRadius > 0) {
+                    add(WidgetBitmapTransformation(15f))
+                    add(RoundedRectTransformation(cornerRadius.toFloat()))
+                } else {
+                    add(WidgetBitmapTransformation(3f))
+                }
+            }
+
+            return builder.size(Size.ORIGINAL).transformations(transformations)
+        }
+
+        override fun onCompleted(bitmap: Bitmap?) {
+            L.d("Bitmap loaded, uploading widget state")
+            publish(bitmap)
+        }
+    }

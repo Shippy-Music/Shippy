@@ -1,7 +1,7 @@
 # Shippy R16 Status
 
 **Updated:** 2026-08-19  
-**Active phase:** Phase 4 — Source Ingestion and Managed Assets  
+**Active phase:** Phase 7 — System Surfaces (inactive pre-cutover)  
 **Authority:** `../Shippy_R16_Master_Architecture_and_Implementation_Spec.md`
 
 ## Execution mandate
@@ -355,6 +355,13 @@ avoid checklist theatre.
   only `PlaybackCommand`; these adapters import neither `Song` nor the legacy manager.
   The retained R15.3 Android surfaces remain active until their lifecycle wrappers
   and the single-player cutover gate are complete.
+- Inactive lifecycle wrappers now apply that projection through the retained
+  MediaSession, playback notification, widget layouts/artwork transformations,
+  Android broadcast actions, foreground callback, and Quick Settings rendering.
+  Queue and metadata publication reject stale asynchronous work; widget artwork is
+  reused across unrelated snapshots and recreated after image/shape setting changes.
+  Attach/release is centralized, commands still enter one R16 router, and no wrapper
+  owns a player, queue, or legacy playback state. Production R15.3 wiring is unchanged.
 
 ## Current blockers
 
@@ -367,10 +374,10 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Bind the inactive system bridge into wrappers around the retained MediaSession,
-   notification, foreground, artwork, widget, receiver, and Quick Settings behavior.
-   Prove attach/release/recreation and occurrence agreement behind the cutover
-   selector; do not activate R16 or create a second player yet.
+1. Compose the inactive service runtime, system-surface runtime, and Quick Settings /
+   external-surface lookup behind one explicit process-scoped cutover selector.
+   Prove one authority lifecycle and safe attach/release/recreation without enabling
+   R16 or constructing a second player in production.
 
 ## Verification level
 
@@ -440,8 +447,9 @@ Canonical playback presentation adds 2 focused data tests for identity projectio
 missing rows, empty requests, and bounded 1,001-ID lookup. Shared system projection
 adds 2 focused app tests for duplicate Recording occurrences, shuffled traversal,
 exact QueueEntryId presentation, Quick Settings agreement, and central command
-routing. Android MediaSession types compile, but the inactive bridge is not yet
-attached to a real service or device surface.
+routing. The inactive retained MediaSession, notification, widget, receiver,
+foreground, artwork, and Quick Settings lifecycle wrappers compile and pass app lint;
+they are not production-composed, instrumented, or device-tested.
 `:shippy-sources:check` passes its forbidden-import gate and 10 focused
 source, managed-asset, ingestion, and enrichment tests. The app compiles with the
 inactive Musikr/data bridge; its exact observation-mapping test and

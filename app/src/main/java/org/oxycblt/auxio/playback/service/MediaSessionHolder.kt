@@ -501,7 +501,7 @@ private constructor(
  * @author Alexander Capehart (OxygenCobalt)
  */
 @SuppressLint("RestrictedApi")
-private class PlaybackNotification(
+internal class PlaybackNotification(
     private val context: Context,
     sessionToken: MediaSessionCompat.Token,
 ) : ForegroundServiceNotification(context, CHANNEL_INFO) {
@@ -570,7 +570,12 @@ private class PlaybackNotification(
      */
     fun updateRepeatMode(repeatMode: RepeatMode) {
         L.d("Applying repeat mode action: $repeatMode")
-        mActions[0] = buildRepeatAction(context, repeatMode)
+        updateRepeatIcon(repeatMode.icon)
+    }
+
+    /** Update the repeat action without coupling an R16 surface to the legacy repeat enum. */
+    fun updateRepeatIcon(@DrawableRes iconRes: Int) {
+        mActions[0] = buildAction(context, PlaybackActions.ACTION_INC_REPEAT_MODE, iconRes)
     }
 
     /**

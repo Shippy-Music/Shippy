@@ -30,7 +30,6 @@ import android.widget.RemoteViews
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.playback.service.PlaybackActions
-import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.UISettingsImpl
 import org.oxycblt.auxio.util.newBroadcastPendingIntent
@@ -70,13 +69,13 @@ class WidgetProvider : AppWidgetProvider() {
     }
 
     /**
-     * Update the currently shown layout based on the given [WidgetComponent.PlaybackState]
+     * Update the currently shown layout based on the given [WidgetPlaybackState]
      *
      * @param context [Context] required to update the widget layout.
      * @param uiSettings [UISettings] to obtain round mode configuration
-     * @param state [WidgetComponent.PlaybackState] to show, or null if no playback is going on.
+     * @param state [WidgetPlaybackState] to show, or null if no playback is going on.
      */
-    fun update(context: Context, uiSettings: UISettings, state: WidgetComponent.PlaybackState?) {
+    fun update(context: Context, uiSettings: UISettings, state: WidgetPlaybackState?) {
         if (state == null) {
             // No state, use the default widget.
             L.d("No state provided, returning to default")
@@ -183,16 +182,16 @@ class WidgetProvider : AppWidgetProvider() {
             .setupBackground(uiSettings)
             .setupBackground(uiSettings)
 
-    private fun newThinStickLayout(context: Context, state: WidgetComponent.PlaybackState) =
+    private fun newThinStickLayout(context: Context, state: WidgetPlaybackState) =
         newRemoteViews(context, R.layout.widget_stick_thin).setupTimelineControls(context, state)
 
-    private fun newWideStickLayout(context: Context, state: WidgetComponent.PlaybackState) =
+    private fun newWideStickLayout(context: Context, state: WidgetPlaybackState) =
         newRemoteViews(context, R.layout.widget_stick_wide).setupFullControls(context, state)
 
     private fun newThinWaferLayout(
         context: Context,
         uiSettings: UISettings,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ) =
         newRemoteViews(context, R.layout.widget_wafer_thin)
             .setupBackground(uiSettings)
@@ -203,7 +202,7 @@ class WidgetProvider : AppWidgetProvider() {
     private fun newWideWaferLayout(
         context: Context,
         uiSettings: UISettings,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ) =
         newRemoteViews(context, R.layout.widget_wafer_wide)
             .setupBackground(uiSettings)
@@ -214,7 +213,7 @@ class WidgetProvider : AppWidgetProvider() {
     private fun newThinDockedLayout(
         context: Context,
         uiSettings: UISettings,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ) =
         newRemoteViews(context, R.layout.widget_docked_thin)
             .setupBar(uiSettings)
@@ -224,7 +223,7 @@ class WidgetProvider : AppWidgetProvider() {
     private fun newWideDockedLayout(
         context: Context,
         uiSettings: UISettings,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ) =
         newRemoteViews(context, R.layout.widget_docked_wide)
             .setupBar(uiSettings)
@@ -234,7 +233,7 @@ class WidgetProvider : AppWidgetProvider() {
     private fun newThinPaneLayout(
         context: Context,
         uiSettings: UISettings,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ) =
         newRemoteViews(context, R.layout.widget_pane_thin)
             .setupBackground(uiSettings)
@@ -244,7 +243,7 @@ class WidgetProvider : AppWidgetProvider() {
     private fun newWidePaneLayout(
         context: Context,
         uiSettings: UISettings,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ) =
         newRemoteViews(context, R.layout.widget_pane_wide)
             .setupBackground(uiSettings)
@@ -290,12 +289,9 @@ class WidgetProvider : AppWidgetProvider() {
      * Set up the album cover in a [RemoteViews] layout that contains one.
      *
      * @param context [Context] required to set up the view.
-     * @param state Current [WidgetComponent.PlaybackState] to display.
+     * @param state Current [WidgetPlaybackState] to display.
      */
-    private fun RemoteViews.setupCover(
-        context: Context,
-        state: WidgetComponent.PlaybackState?,
-    ): RemoteViews {
+    private fun RemoteViews.setupCover(context: Context, state: WidgetPlaybackState?): RemoteViews {
         if (state == null) {
             setImageViewBitmap(R.id.widget_cover, null)
             setContentDescription(R.id.widget_cover, null)
@@ -339,11 +335,11 @@ class WidgetProvider : AppWidgetProvider() {
      * them.
      *
      * @param context [Context] required to set up the view.
-     * @param state Current [WidgetComponent.PlaybackState] to display.
+     * @param state Current [WidgetPlaybackState] to display.
      */
     private fun RemoteViews.setupPlaybackState(
         context: Context,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ): RemoteViews {
         setupCover(context, state)
         setTextViewText(R.id.widget_song, state.title)
@@ -355,11 +351,11 @@ class WidgetProvider : AppWidgetProvider() {
      * Set up the play/pause button in a [RemoteViews] layout that contains one.
      *
      * @param context [Context] required to set up the view.
-     * @param state Current [WidgetComponent.PlaybackState] to display.
+     * @param state Current [WidgetPlaybackState] to display.
      */
     private fun RemoteViews.setupBasicControls(
         context: Context,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ): RemoteViews {
         // Hook the play/pause button to the play/pause broadcast that will be recognized
         // by PlaybackService.
@@ -393,11 +389,11 @@ class WidgetProvider : AppWidgetProvider() {
      * them.
      *
      * @param context [Context] required to set up the view.
-     * @param state Current [WidgetComponent.PlaybackState] to display.
+     * @param state Current [WidgetPlaybackState] to display.
      */
     private fun RemoteViews.setupTimelineControls(
         context: Context,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ): RemoteViews {
         // Timeline controls contain the basic controls, set those up
         setupBasicControls(context, state)
@@ -421,11 +417,11 @@ class WidgetProvider : AppWidgetProvider() {
      * contains them.
      *
      * @param context [Context] required to set up the view.
-     * @param state Current [WidgetComponent.PlaybackState] to display.
+     * @param state Current [WidgetPlaybackState] to display.
      */
     private fun RemoteViews.setupFullControls(
         context: Context,
-        state: WidgetComponent.PlaybackState,
+        state: WidgetPlaybackState,
     ): RemoteViews {
         // Full controls contain timeline controls, make are set those.
         setupTimelineControls(context, state)
@@ -444,13 +440,7 @@ class WidgetProvider : AppWidgetProvider() {
         // Set up the repeat/shuffle buttons. When working with RemoteViews, we will
         // need to hard-code different accent tinting configurations, as stateful drawables
         // are unsupported.
-        val repeatRes =
-            when (state.repeatMode) {
-                RepeatMode.NONE -> R.drawable.ic_repeat_off_24
-                RepeatMode.ALL -> R.drawable.ic_repeat_on_24
-                RepeatMode.TRACK -> R.drawable.ic_repeat_one_24
-            }
-        setImageViewResource(R.id.widget_repeat, repeatRes)
+        setImageViewResource(R.id.widget_repeat, state.repeatIconRes)
 
         val shuffleRes =
             when {
