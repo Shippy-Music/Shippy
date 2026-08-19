@@ -121,6 +121,15 @@ avoid checklist theatre.
   recording. Source-neutral playback checkpoints replace their header and ordered
   occurrence rows atomically, preserve duplicate recordings by queue-entry ID,
   and reject incomplete or inconsistent occurrence sets before writing.
+- Download writes are scoped by recording/job and publish a verified permanent
+  asset with the completed job in one transaction, retaining exact requested
+  source identity and verified length. Last.fm uses a listening-session-unique
+  FIFO outbox; lyrics use recording/fingerprint/provider identity; saved provider
+  entities retain their exact source key.
+- Migration audits now have an insert-once start, resumable progress lookup, and
+  guarded single completion with target counts and checksum. Bootstrap cutover
+  state remains intentionally outside this mutable database, and no importer or
+  production switch is claimed yet.
 
 ## Current blockers
 
@@ -133,8 +142,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete download publication, Last.fm/lyrics/saved-source, and migration
-   audit DAOs with focused transaction tests; production remains on legacy v10.
+1. Add bounded Paging read queries and sparse playlist order maintenance, then
+   implement the versioned backup/import foundation; production remains on
+   legacy v10.
 
 ## Verification level
 
@@ -154,3 +164,5 @@ playlist writes, plus canonical Library/playlist read projection and FTS lookup.
 The exported schema contains version 1, 30 entities including FTS, 2 views, and
 identity hash `a492bff168b76a611f7a9dfb6d8b665b`. The durable identity/history/checkpoint
 DAO suite adds 3 passing focused tests (9 total data-module tests).
+The download/integration/migration ledger suite adds 3 passing focused tests
+(12 total data-module tests).
