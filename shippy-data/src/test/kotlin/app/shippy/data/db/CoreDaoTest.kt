@@ -34,6 +34,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -136,6 +137,37 @@ class CoreDaoTest {
                 database.playlistDao().entries(playlist.playlistId),
             )
         }
+
+    @Test
+    fun `read views and FTS project one canonical identity`() = runBlocking {
+        insertRecording("recording-1")
+        database.assetDao().upsert(asset("asset-1", "recording-1"))
+        database
+            .libraryDao()
+            .upsertRelationship(
+                LibraryRecordingEntity(
+                    recordingId = "recording-1",
+                    liked = true,
+                    explicitlySaved = false,
+                    userEdited = false,
+                    manuallyIdentified = false,
+                    firstAddedAtEpochMs = 1,
+                    updatedAtEpochMs = 1,
+                )
+            )
+        database.playlistDao().create(playlist("playlist-1"), listOf(playlistEntry("entry-1", 10)))
+
+        val song = checkNotNull(database.readModelDao().librarySong("recording-1"))
+        val playlistEntry = database.readModelDao().playlistEntries("playlist-1").single()
+        database.searchDao().refresh("recording-1")
+
+        assertEquals("Artist", song.artistDisplay)
+        assertTrue(song.localAssetExists)
+        assertTrue(song.liked)
+        assertEquals("entry-1", playlistEntry.playlistEntryId)
+        assertEquals("AVAILABLE", playlistEntry.availabilitySummary)
+        assertEquals(listOf("recording-1"), database.searchDao().searchRecordingIds("Track*", 10))
+    }
 
     private suspend fun insertRecording(recordingId: String) {
         val artist =

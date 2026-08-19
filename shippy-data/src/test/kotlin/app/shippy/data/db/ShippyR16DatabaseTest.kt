@@ -55,8 +55,13 @@ class ShippyR16DatabaseTest {
         sqlite.query("SELECT name FROM sqlite_master WHERE type = 'table'").use { cursor ->
             while (cursor.moveToNext()) names += cursor.getString(0)
         }
+        val views = mutableSetOf<String>()
+        sqlite.query("SELECT name FROM sqlite_master WHERE type = 'view'").use { cursor ->
+            while (cursor.moveToNext()) views += cursor.getString(0)
+        }
 
         assertTrue(names.containsAll(EXPECTED_TABLES))
+        assertEquals(EXPECTED_VIEWS, views)
         sqlite.query("PRAGMA user_version").use { cursor ->
             assertTrue(cursor.moveToFirst())
             assertEquals(ShippyR16Database.SCHEMA_VERSION, cursor.getInt(0))
@@ -213,6 +218,8 @@ class ShippyR16DatabaseTest {
                 "lyrics_cache",
                 "saved_source_entity",
                 "migration_audit",
+                "recording_fts",
             )
+        val EXPECTED_VIEWS = setOf("library_song_view", "playlist_entry_view")
     }
 }

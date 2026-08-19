@@ -22,6 +22,7 @@ import androidx.room.RoomDatabase
 import app.shippy.data.db.dao.AssetDao
 import app.shippy.data.db.dao.LibraryDao
 import app.shippy.data.db.dao.PlaylistDao
+import app.shippy.data.db.dao.ReadModelDao
 import app.shippy.data.db.dao.RecordingDao
 import app.shippy.data.db.dao.SourceDao
 import app.shippy.data.db.entity.ArtistEntity
@@ -53,6 +54,10 @@ import app.shippy.data.db.entity.ReleaseTrackEntity
 import app.shippy.data.db.entity.SavedSourceEntity
 import app.shippy.data.db.entity.SourceReferenceEntity
 import app.shippy.data.db.entity.UserMetadataOverrideEntity
+import app.shippy.data.db.fts.RecordingFtsEntity
+import app.shippy.data.db.fts.SearchDao
+import app.shippy.data.db.view.LibrarySongRowView
+import app.shippy.data.db.view.PlaylistEntryRowView
 
 @Database(
     entities =
@@ -86,7 +91,9 @@ import app.shippy.data.db.entity.UserMetadataOverrideEntity
             LyricsCacheEntity::class,
             SavedSourceEntity::class,
             MigrationAuditEntity::class,
+            RecordingFtsEntity::class,
         ],
+    views = [LibrarySongRowView::class, PlaylistEntryRowView::class],
     version = ShippyR16Database.SCHEMA_VERSION,
     exportSchema = true,
 )
@@ -100,6 +107,10 @@ internal abstract class ShippyR16Database : RoomDatabase() {
     abstract fun libraryDao(): LibraryDao
 
     abstract fun playlistDao(): PlaylistDao
+
+    abstract fun readModelDao(): ReadModelDao
+
+    abstract fun searchDao(): SearchDao
 
     companion object {
         const val DATABASE_NAME = "shippy-r16.db"

@@ -104,6 +104,11 @@ avoid checklist theatre.
   verified assets, per-recording Library relationships, and duplicate-safe
   playlist creation/reorder. Source refresh cannot silently reassign recording
   identity, and playlist reorder must contain every current occurrence.
+- `library_song_view` and `playlist_entry_view` now project canonical metadata,
+  ordered artist credit, ownership/offline state, latest download state, and
+  availability without rebuilding the full Library in memory. A Room FTS4 table
+  indexes title, artist, release, identifiers, linked source titles, and user
+  overrides through an explicit per-recording refresh boundary.
 
 ## Current blockers
 
@@ -116,9 +121,9 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add critical Library/playlist read views plus transactional FTS maintenance,
-   then complete the audit/history/checkpoint/integration DAOs; production
-   remains on legacy v10.
+1. Bind canonical writes and FTS refresh in one database transaction, then
+   complete redirect/audit, history/checkpoint, download/integration, and
+   migration DAOs; production remains on legacy v10.
 
 ## Verification level
 
@@ -131,8 +136,9 @@ tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
 focused-unit-tested. Phase 2's `:shippy-core:check` passes independently (22
 tests plus its forbidden-import gate). No R16 code has been instrumented,
-device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes 5
+device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes 6
 schema/DAO tests, including duplicate playlist occurrences, orphan rejection,
 exact-source uniqueness/idempotence, asset/Library scoping, and complete-order
-playlist writes. The exported schema contains version 1, 29 entities, zero
-views, and identity hash `901060a547b0b5607bd180bf3e8741d7`.
+playlist writes, plus canonical Library/playlist read projection and FTS lookup.
+The exported schema contains version 1, 30 entities including FTS, 2 views, and
+identity hash `a492bff168b76a611f7a9dfb6d8b665b`.

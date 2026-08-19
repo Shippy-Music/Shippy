@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "901060a547b0b5607bd180bf3e8741d7",
+    "identityHash": "a492bff168b76a611f7a9dfb6d8b665b",
     "entities": [
       {
         "tableName": "recording",
@@ -2568,11 +2568,87 @@
             "migration_id"
           ]
         }
+      },
+      {
+        "tableName": "recording_fts",
+        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`recording_id` TEXT NOT NULL, `title` TEXT NOT NULL, `artist_names` TEXT NOT NULL, `release_title` TEXT NOT NULL, `aliases` TEXT NOT NULL, `source_titles` TEXT NOT NULL, `user_override_text` TEXT NOT NULL, tokenize=unicode61, notindexed=`recording_id`)",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistNames",
+            "columnName": "artist_names",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseTitle",
+            "columnName": "release_title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aliases",
+            "columnName": "aliases",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceTitles",
+            "columnName": "source_titles",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userOverrideText",
+            "columnName": "user_override_text",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": []
+        },
+        "ftsVersion": "FTS4",
+        "ftsOptions": {
+          "tokenizer": "unicode61",
+          "tokenizerArgs": [],
+          "contentTable": "",
+          "languageIdColumnName": "",
+          "matchInfo": "FTS4",
+          "notIndexedColumns": [
+            "recording_id"
+          ],
+          "prefixSizes": [],
+          "preferredOrder": "ASC"
+        },
+        "contentSyncTriggers": []
+      }
+    ],
+    "views": [
+      {
+        "viewName": "library_song_view",
+        "createSql": "CREATE VIEW `${VIEW_NAME}` AS SELECT\n            r.recording_id AS recording_id,\n            r.canonical_title AS title,\n            COALESCE((\n                SELECT GROUP_CONCAT(credit_part, '')\n                FROM (\n                    SELECT credited_name || join_phrase AS credit_part\n                    FROM recording_artist_credit\n                    WHERE recording_id = r.recording_id\n                    ORDER BY position\n                )\n            ), '') AS artist_display,\n            rel.canonical_title AS release_title,\n            art.location AS artwork_location,\n            r.duration_ms AS duration_ms,\n            COALESCE(lr.liked, 0) AS liked,\n            EXISTS(\n                SELECT 1 FROM media_asset local_asset\n                WHERE local_asset.recording_id = r.recording_id\n                  AND local_asset.asset_kind = 'LOCAL_FILE'\n                  AND local_asset.asset_state = 'AVAILABLE'\n            ) AS local_asset_exists,\n            EXISTS(\n                SELECT 1 FROM media_asset download_asset\n                WHERE download_asset.recording_id = r.recording_id\n                  AND download_asset.asset_kind = 'SHIPPY_DOWNLOAD'\n                  AND download_asset.asset_state = 'AVAILABLE'\n            ) AS download_asset_exists,\n            (\n                SELECT MAX(history.started_at_epoch_ms)\n                FROM play_history history\n                WHERE history.recording_id = r.recording_id\n            ) AS last_played_at_epoch_ms,\n            lr.first_added_at_epoch_ms AS date_added_epoch_ms,\n            LOWER(r.canonical_title) AS title_sort_key,\n            LOWER(COALESCE((\n                SELECT credited_name\n                FROM recording_artist_credit\n                WHERE recording_id = r.recording_id\n                ORDER BY position\n                LIMIT 1\n            ), '')) AS artist_sort_key\n        FROM recording r\n        LEFT JOIN library_recording lr ON lr.recording_id = r.recording_id\n        LEFT JOIN release rel ON rel.release_id = r.preferred_release_id\n        LEFT JOIN artwork_reference art ON art.artwork_id = r.preferred_artwork_id"
+      },
+      {
+        "viewName": "playlist_entry_view",
+        "createSql": "CREATE VIEW `${VIEW_NAME}` AS SELECT\n            entry.playlist_entry_id AS playlist_entry_id,\n            entry.playlist_id AS playlist_id,\n            entry.order_key AS order_key,\n            entry.recording_id AS recording_id,\n            song.title AS title,\n            song.artist_display AS artist_display,\n            song.release_title AS release_title,\n            song.artwork_location AS artwork_location,\n            song.duration_ms AS duration_ms,\n            song.liked AS liked,\n            (song.local_asset_exists OR song.download_asset_exists) AS offline_available,\n            COALESCE((\n                SELECT job.state\n                FROM download_job job\n                WHERE job.recording_id = entry.recording_id\n                ORDER BY job.created_at_epoch_ms DESC, job.job_id DESC\n                LIMIT 1\n            ), 'NONE') AS download_state,\n            CASE\n                WHEN song.local_asset_exists OR song.download_asset_exists THEN 'AVAILABLE'\n                WHEN EXISTS(\n                    SELECT 1 FROM source_reference source\n                    WHERE source.recording_id = entry.recording_id\n                      AND source.availability_state IN ('AVAILABLE', 'RESOLVABLE')\n                ) THEN 'RESOLVABLE'\n                ELSE 'UNKNOWN'\n            END AS availability_summary\n        FROM playlist_entry entry\n        JOIN library_song_view song ON song.recording_id = entry.recording_id"
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '901060a547b0b5607bd180bf3e8741d7')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a492bff168b76a611f7a9dfb6d8b665b')"
     ]
   }
 }
