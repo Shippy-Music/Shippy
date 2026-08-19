@@ -28,9 +28,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -92,6 +94,12 @@ constructor(
         manager.addListener(this)
         registerNetworkCallback()
         scope?.launch { deliveryMutex.withLock { flush() } }
+        scope?.launch(Dispatchers.Main.immediate) {
+            while (isActive) {
+                delay(LISTEN_TICK_MS)
+                onProgressionChanged(manager.progression)
+            }
+        }
     }
 
     fun release(manager: PlaybackStateManager) {
@@ -130,6 +138,15 @@ constructor(
         queue: List<ResolvedQueueItem>,
         index: Int,
         change: org.oxycblt.auxio.playback.state.QueueChange,
+    ) {
+        this.queue = queue
+        begin(queue.getOrNull(index)?.item)
+    }
+
+    override fun onCanonicalQueueReordered(
+        queue: List<ResolvedQueueItem>,
+        index: Int,
+        isShuffled: Boolean,
     ) {
         this.queue = queue
         begin(queue.getOrNull(index)?.item)
@@ -302,5 +319,6 @@ constructor(
         const val MAX_BATCH = 50
         const val MAX_BATCHES_PER_FLUSH = 4
         const val QUEUE_ITEM_PREFIX = "queue-item:"
+        const val LISTEN_TICK_MS = 1_000L
     }
 }

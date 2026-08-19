@@ -53,4 +53,13 @@ class LastFmListenPolicyTest {
         repeat(47) { assertFalse(policy.update((it + 1) * 5_000L)) }
         assertTrue(policy.update(240_000))
     }
+
+    @Test
+    fun `one second clock ticks count only advancing playback`() {
+        val policy = LastFmListenPolicy(40_000)
+        policy.update(0)
+        repeat(10) { assertFalse(policy.update(0)) }
+        repeat(19) { assertFalse(policy.update((it + 1) * 1_000L)) }
+        assertTrue(policy.update(20_000))
+    }
 }

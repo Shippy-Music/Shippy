@@ -42,6 +42,9 @@ avoid checklist theatre.
 - The focused layout regression suite passes both ownership invariants.
 - New playback now validates its target and records the expected queue-item ID
   before any Media3 mutation can synchronously publish a transition callback.
+- The service-owned Last.fm observer samples the monotonic playback progression
+  each second, counts only advancing position deltas, and refreshes its canonical
+  queue snapshot after reorder or shuffle changes.
 
 ## Current blockers
 
@@ -54,14 +57,13 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Give Last.fm a continuous audible clock and refresh its queue projection on
-   reorder.
-2. Bound collection composition, queue display projection, and managed-download
+1. Bound collection composition, queue display projection, and managed-download
    rediscovery before establishing `:shippy-core`.
 
 ## Verification level
 
 Baseline preservation is checksum-verified. Changed app Kotlin and Android
 resources compile. `R16LayoutRegressionTest` passes (2 tests), and the focused
-playback identity/transition suites pass (11 tests). No R16 code has been
-instrumented, device-tested, or performance-tested.
+playback identity/transition suites pass (11 tests). The Last.fm suite passes
+(23 tests). No R16 code has been instrumented, device-tested, or
+performance-tested.
