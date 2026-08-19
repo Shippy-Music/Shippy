@@ -152,6 +152,12 @@ avoid checklist theatre.
   or all roll back. A retry is idempotent, performs no fuzzy cross-track merge, and
   leaves imported identities transient until later relationship/asset phases make
   durability explicit. Backup, later phases, verification, and cutover remain open.
+- `ShippyBackupV1` now defines a bounded ZIP/NDJSON archive with an explicit
+  schema/version manifest, required allow-listed user-data sections, optional
+  history and asset manifests, and per-section byte counts plus SHA-256 checksums.
+  Reads reject missing, duplicate, unknown, oversized, or tampered entries. Cache,
+  Crew temporary media, raw credentials, headers, resolved URLs, and logs have no
+  archive section; sanitized database export/restore orchestration is still open.
 
 ## Current blockers
 
@@ -164,8 +170,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Implement the checksum-verified `ShippyBackupV1` archive contract, then add
-   bounded M2 candidate reads/import; production remains on legacy v10.
+1. Add bounded M2 candidate reads/import with exact provider keys and provisional
+   local/download evidence rules; production remains on legacy v10.
 
 ## Verification level
 
@@ -191,4 +197,6 @@ Paging and sparse-order coverage adds 3 passing focused tests (15 total
 data-module tests).
 The read-only legacy reader, deterministic mapping, and import-plan suite adds 3
 passing focused tests. M1 atomic import/rollback/idempotence adds 2 more (20 total
+data-module tests).
+The backup round-trip and tamper rejection add 2 passing tests (22 total
 data-module tests).
