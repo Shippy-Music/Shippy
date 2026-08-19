@@ -64,6 +64,12 @@ avoid checklist theatre.
   by stable trust precedence with user overrides first, parses material version
   traits, and returns evidence-backed conservative identity decisions with
   exact-key/strong-ID paths and version/duration vetoes.
+- Core source selection now rejects unverified identity/assets and unavailable
+  or policy-blocked candidates before deterministic ranking. Explicit source
+  preference is honored first, followed by Crew-required media, verified
+  downloads, linked local assets, complete cache, providers, and Crew peers.
+  Exact source-key linking is idempotent and reports conflicts instead of
+  silently reassigning a source to another recording.
 
 ## Current blockers
 
@@ -76,9 +82,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Complete the remaining pure-core policies: metadata/version matching,
-   source selection, queue/shuffle reduction, merge redirects, listening
-   thresholds, and portable Crew descriptors.
+1. Complete the remaining pure-core policies: queue/shuffle reduction, merge
+   redirects, listening thresholds, and portable Crew descriptors.
 
 ## Verification level
 
@@ -89,6 +94,6 @@ playback identity/transition suites pass (11 tests). The Last.fm suite passes
 presentation suites (10 tests). The bounded pager projection suite passes (4
 tests). Managed-download reconciliation/filtering passes its focused suite (7
 tests). All eight named urgent R15.3 regression repairs are implemented and
-focused-unit-tested. `:shippy-core:check` passes independently (6 tests plus its
+focused-unit-tested. `:shippy-core:check` passes independently (10 tests plus its
 forbidden-import gate). No R16 code has been instrumented,
 device-tested, or performance-tested.
