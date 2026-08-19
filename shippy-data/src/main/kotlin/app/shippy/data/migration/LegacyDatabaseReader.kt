@@ -46,6 +46,22 @@ internal data class LegacyCanonicalTrackRow(
     val artwork: String?,
 )
 
+internal data class LegacyCanonicalCandidateRow(
+    val trackId: String,
+    val candidateId: String,
+    val position: Int,
+    val kind: String,
+    val sourceId: String,
+    val sourceItemId: String,
+    val availability: String,
+    val locator: String?,
+    val providerId: String?,
+    val mimeType: String?,
+    val container: String?,
+    val bitrateBps: Int?,
+    val contentLength: Long?,
+)
+
 internal class LegacyDatabaseReader private constructor(private val database: SQLiteDatabase) :
     Closeable {
     init {
@@ -115,6 +131,68 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
             }
     }
 
+    fun canonicalCandidates(
+        afterTrackId: String?,
+        afterCandidateId: String?,
+        limit: Int,
+    ): List<LegacyCanonicalCandidateRow> {
+        require(limit in 1..MAX_PAGE_SIZE) {
+            "Legacy page size must be between 1 and $MAX_PAGE_SIZE"
+        }
+        require((afterTrackId == null) == (afterCandidateId == null)) {
+            "Legacy candidate checkpoint must contain both key parts"
+        }
+        val selection =
+            if (afterTrackId == null) {
+                ""
+            } else {
+                "WHERE trackId > ? OR (trackId = ? AND candidateId > ?)"
+            }
+        val arguments: Array<String> =
+            if (afterTrackId == null) {
+                emptyArray()
+            } else {
+                arrayOf(afterTrackId, afterTrackId, checkNotNull(afterCandidateId))
+            }
+        return database
+            .rawQuery(
+                """
+                SELECT trackId, candidateId, position, kind, sourceId, sourceItemId,
+                       availability, locator, providerId, mimeType, container,
+                       bitrateBps, contentLength
+                FROM canonical_track_candidate
+                $selection
+                ORDER BY trackId, candidateId
+                LIMIT $limit
+                """
+                    .trimIndent(),
+                arguments,
+            )
+            .useRows { cursor ->
+                buildList {
+                    while (cursor.moveToNext()) {
+                        add(
+                            LegacyCanonicalCandidateRow(
+                                trackId = cursor.getString(0),
+                                candidateId = cursor.getString(1),
+                                position = cursor.getInt(2),
+                                kind = cursor.getString(3),
+                                sourceId = cursor.getString(4),
+                                sourceItemId = cursor.getString(5),
+                                availability = cursor.getString(6),
+                                locator = cursor.stringOrNull(7),
+                                providerId = cursor.stringOrNull(8),
+                                mimeType = cursor.stringOrNull(9),
+                                container = cursor.stringOrNull(10),
+                                bitrateBps = cursor.intOrNull(11),
+                                contentLength = cursor.longOrNull(12),
+                            )
+                        )
+                    }
+                }
+            }
+    }
+
     override fun close() {
         database.close()
     }
@@ -147,6 +225,8 @@ private fun Cursor.stringOrNull(column: Int): String? =
     if (isNull(column)) null else getString(column)
 
 private fun Cursor.longOrNull(column: Int): Long? = if (isNull(column)) null else getLong(column)
+
+private fun Cursor.intOrNull(column: Int): Int? = if (isNull(column)) null else getInt(column)
 
 private fun Cursor.booleanOrNull(column: Int): Boolean? =
     if (isNull(column)) null else getInt(column) != 0

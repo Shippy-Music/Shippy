@@ -158,6 +158,15 @@ avoid checklist theatre.
   Reads reject missing, duplicate, unknown, oversized, or tampered entries. Cache,
   Crew temporary media, raw credentials, headers, resolved URLs, and logs have no
   archive section; sanitized database export/restore orchestration is still open.
+- M2 now pages `canonical_track_candidate` by its composite stable key and
+  atomically advances the matching audit checkpoint with source/asset counts.
+  Provider candidates retain exact provider/item identity but never persist a
+  legacy resolved stream URL. Local and download candidates become playable
+  assets only through verifier-supplied durable location evidence gathered
+  before the Room transaction; stale availability without a verified asset is
+  downgraded. Temporary Crew candidates remain raw audit observations only and
+  never become permanent sources. Retry is idempotent, and an exact source or
+  asset-location conflict is reported rather than reassigned.
 
 ## Current blockers
 
@@ -170,8 +179,8 @@ avoid checklist theatre.
 
 ## Next exact slice
 
-1. Add bounded M2 candidate reads/import with exact provider keys and provisional
-   local/download evidence rules; production remains on legacy v10.
+1. Add bounded M3 Library-relationship and M4 playlist import, preserving user
+   ownership and sparse occurrence ordering; production remains on legacy v10.
 
 ## Verification level
 
@@ -200,3 +209,6 @@ passing focused tests. M1 atomic import/rollback/idempotence adds 2 more (20 tot
 data-module tests).
 The backup round-trip and tamper rejection add 2 passing tests (22 total
 data-module tests).
+M2 composite paging, exact source import, verified asset publication, URL
+discard, Crew-temporary exclusion, and retry behavior add 1 passing focused test
+(23 total data-module tests).

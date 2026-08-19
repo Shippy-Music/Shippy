@@ -49,6 +49,10 @@ internal interface LegacyImportDao {
 
     @Query("SELECT COUNT(*) FROM recording") suspend fun recordingCount(): Long
 
+    @Query("SELECT COUNT(*) FROM source_reference") suspend fun sourceCount(): Long
+
+    @Query("SELECT COUNT(*) FROM media_asset") suspend fun assetCount(): Long
+
     @Query("SELECT * FROM release WHERE release_id = :releaseId")
     suspend fun release(releaseId: String): ReleaseEntity?
 

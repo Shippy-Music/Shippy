@@ -46,6 +46,9 @@ internal object LegacyIdMapper {
     fun observation(oldTrackId: String): MetadataObservationId =
         MetadataObservationId(mapped("observation", oldTrackId))
 
+    fun candidateObservation(oldTrackId: String, oldCandidateId: String): MetadataObservationId =
+        MetadataObservationId(mapped("candidate-observation", oldTrackId, oldCandidateId))
+
     fun artist(oldTrackId: String, position: Int, name: String): ArtistId =
         ArtistId(mapped("track-artist", oldTrackId, position.toString(), name))
 

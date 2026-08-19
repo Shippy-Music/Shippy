@@ -84,6 +84,18 @@ class LegacyImportFoundationTest {
             assertEquals("track-a", firstPage.single().trackId)
             assertEquals("track-b", secondPage.single().trackId)
             assertEquals("Album", secondPage.single().album)
+
+            val firstCandidate =
+                reader.canonicalCandidates(afterTrackId = null, afterCandidateId = null, limit = 1)
+            val secondCandidate =
+                reader.canonicalCandidates(
+                    afterTrackId = firstCandidate.single().trackId,
+                    afterCandidateId = firstCandidate.single().candidateId,
+                    limit = 1,
+                )
+            assertEquals("candidate-a", firstCandidate.single().candidateId)
+            assertEquals("track-b", secondCandidate.single().trackId)
+            assertEquals("candidate-b", secondCandidate.single().candidateId)
         }
     }
 
@@ -154,11 +166,95 @@ class LegacyImportFoundationTest {
             Unit
         }
 
+    @Test
+    fun `M2 imports exact sources verified assets and drops temporary Crew candidates`() =
+        kotlinx.coroutines.runBlocking {
+            startAudit("migration-2")
+            LegacyCanonicalTrackImporter(database)
+                .importPage(
+                    "migration-2",
+                    listOf(legacyTrack("track-a", "Alpha", "6:Artist", null)),
+                    1_000,
+                )
+            val rows =
+                listOf(
+                    legacyCandidate(
+                        candidateId = "candidate-a",
+                        kind = "PROVIDER",
+                        sourceId = "provider",
+                        sourceItemId = "provider-item",
+                        providerId = "provider",
+                        locator = "https://expired.example/audio",
+                    ),
+                    legacyCandidate(
+                        candidateId = "candidate-b",
+                        kind = "LOCAL",
+                        sourceId = "device-local",
+                        sourceItemId = "local-item",
+                        locator = "content://legacy/local-item",
+                        contentLength = 321,
+                    ),
+                    legacyCandidate(
+                        candidateId = "candidate-c",
+                        kind = "CREW_TEMPORARY",
+                        sourceId = "crew",
+                        sourceItemId = "crew-item",
+                        locator = "file:///private/crew-temp",
+                    ),
+                )
+            val verifier = LegacyAssetVerifier { row ->
+                if (row.kind == "LOCAL") {
+                    VerifiedLegacyAsset(
+                        locationType = "CONTENT_URI",
+                        location = "content://verified/local-item",
+                        displayName = "local-item.mp3",
+                        contentLength = 321,
+                    )
+                } else {
+                    null
+                }
+            }
+            val importer = LegacyCandidateImporter(database, verifier)
+
+            val result = importer.importPage("migration-2", rows, 2_000)
+
+            assertEquals(2, result.importedSourceCount)
+            assertEquals(1, result.importedAssetCount)
+            assertEquals("candidate-c", result.lastCandidateId)
+            assertEquals(2L, database.legacyImportDao().sourceCount())
+            assertEquals(1L, database.legacyImportDao().assetCount())
+            val provider =
+                checkNotNull(database.sourceDao().exact("provider", "RECORDING", "provider-item"))
+            assertEquals(null, provider.originalUrl)
+            val providerObservation =
+                checkNotNull(
+                    database
+                        .legacyImportDao()
+                        .observation(
+                            LegacyIdMapper.candidateObservation("track-a", "candidate-a").value
+                        )
+                )
+            assertFalse(checkNotNull(providerObservation.extrasJson).contains("expired.example"))
+            val local =
+                checkNotNull(database.sourceDao().exact("local-file", "LOCAL_FILE", "local-item"))
+            val asset =
+                checkNotNull(
+                    database.assetDao().get(LegacyIdMapper.asset("track-a", "candidate-b").value)
+                )
+            assertEquals(local.sourceReferenceId, asset.sourceReferenceId)
+            assertEquals("content://verified/local-item", asset.location)
+            assertTrue(result.warnings.any { it.contains("temporary Crew") })
+
+            importer.importPage("migration-2", rows, 2_000)
+            assertEquals(2L, database.legacyImportDao().sourceCount())
+            assertEquals(1L, database.legacyImportDao().assetCount())
+        }
+
     private fun createLegacyDatabase() {
         SQLiteDatabase.openOrCreateDatabase(legacyFile, null).use { database ->
             database.version = LEGACY_SCHEMA_VERSION
             for (table in LEGACY_TABLES) {
-                if (table == "canonical_track") continue
+                if (table == "canonical_track" || table == "canonical_track_candidate") continue
                 database.execSQL("CREATE TABLE `$table` (`id` TEXT)")
             }
             database.execSQL(
@@ -223,6 +319,75 @@ class LegacyImportFoundationTest {
                     null,
                 ),
             )
+            database.execSQL(
+                """
+                CREATE TABLE canonical_track_candidate (
+                    trackId TEXT NOT NULL,
+                    candidateId TEXT NOT NULL,
+                    position INTEGER NOT NULL,
+                    kind TEXT NOT NULL,
+                    sourceId TEXT NOT NULL,
+                    sourceItemId TEXT NOT NULL,
+                    availability TEXT NOT NULL,
+                    locator TEXT,
+                    providerId TEXT,
+                    mimeType TEXT,
+                    container TEXT,
+                    bitrateBps INTEGER,
+                    contentLength INTEGER,
+                    PRIMARY KEY(trackId, candidateId)
+                )
+                """
+                    .trimIndent()
+            )
+            database.execSQL(
+                """
+                INSERT INTO canonical_track_candidate
+                (trackId, candidateId, position, kind, sourceId, sourceItemId,
+                 availability, locator, providerId, mimeType, container, bitrateBps, contentLength)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                    .trimIndent(),
+                arrayOf<Any?>(
+                    "track-b",
+                    "candidate-b",
+                    0,
+                    "PROVIDER",
+                    "provider",
+                    "item-b",
+                    "RESOLVABLE",
+                    "https://expired.example/b",
+                    "provider",
+                    "audio/mp4",
+                    "m4a",
+                    128_000,
+                    null,
+                ),
+            )
+            database.execSQL(
+                """
+                INSERT INTO canonical_track_candidate
+                (trackId, candidateId, position, kind, sourceId, sourceItemId,
+                 availability, locator, providerId, mimeType, container, bitrateBps, contentLength)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """
+                    .trimIndent(),
+                arrayOf<Any?>(
+                    "track-a",
+                    "candidate-a",
+                    0,
+                    "LOCAL",
+                    "device-local",
+                    "item-a",
+                    "AVAILABLE",
+                    "content://legacy/item-a",
+                    null,
+                    "audio/mpeg",
+                    "mp3",
+                    192_000,
+                    321,
+                ),
+            )
         }
     }
 
@@ -258,6 +423,31 @@ class LegacyImportFoundationTest {
             live = false,
             remix = false,
             artwork = null,
+        )
+
+    private fun legacyCandidate(
+        candidateId: String,
+        kind: String,
+        sourceId: String,
+        sourceItemId: String,
+        providerId: String? = null,
+        locator: String? = null,
+        contentLength: Long? = null,
+    ) =
+        LegacyCanonicalCandidateRow(
+            trackId = "track-a",
+            candidateId = candidateId,
+            position = 0,
+            kind = kind,
+            sourceId = sourceId,
+            sourceItemId = sourceItemId,
+            availability = "AVAILABLE",
+            locator = locator,
+            providerId = providerId,
+            mimeType = "audio/mpeg",
+            container = "mp3",
+            bitrateBps = 192_000,
+            contentLength = contentLength,
         )
 
     private companion object {
