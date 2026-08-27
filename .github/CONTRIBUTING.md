@@ -1,6 +1,6 @@
 # Contributing to Shippy
 
-Shippy is in alpha. Small, focused fixes with reproducible evidence are the
+Shippy is in beta. Small, focused fixes with reproducible evidence are the
 fastest contributions to review.
 
 ## Report a bug
