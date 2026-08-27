@@ -80,42 +80,50 @@ internal object DownloadReconciliationPlanner {
         destinationState: DownloadDestinationState,
         downloads: List<PersistedDownload>,
     ): DownloadReconciliationPlan {
-        val available = downloads.filter { it.job.state == DownloadState.AVAILABLE }
-        val knownDocumentUris = buildSet {
-            downloads.forEach { download ->
-                download.job.artifact?.contentUri?.let(::add)
-                download.pendingDocument?.contentUri?.let(::add)
+        val available = availableDownloads(downloads)
+        val knownDocumentUris = knownDocumentUris(downloads)
+        return when (destinationState) {
+            is DownloadDestinationState.Ready -> {
+                readyPlan(destinationState, downloads, available, knownDocumentUris)
             }
+            else -> unavailablePlan(destinationState)
         }
+    }
 
-        if (destinationState !is DownloadDestinationState.Ready) {
-            return DownloadReconciliationPlan(
-                result =
-                    DownloadReconciliationResult(
-                        destinationState = destinationState,
-                        repairedMissingArtifactJobIds = emptyList(),
-                        unmanagedDocuments = emptyList(),
-                    ),
-                missingArtifactJobIds = emptyList(),
-                relationshipRepairs = emptyList(),
-            )
+    private fun availableDownloads(downloads: List<PersistedDownload>): List<PersistedDownload> =
+        downloads.filter { it.job.state == DownloadState.AVAILABLE }
+
+    private fun knownDocumentUris(downloads: List<PersistedDownload>): Set<String> = buildSet {
+        downloads.forEach { download ->
+            download.job.artifact?.contentUri?.let(::add)
+            download.pendingDocument?.contentUri?.let(::add)
         }
+    }
 
+    private fun unavailablePlan(
+        destinationState: DownloadDestinationState
+    ): DownloadReconciliationPlan =
+        DownloadReconciliationPlan(
+            result =
+                DownloadReconciliationResult(
+                    destinationState = destinationState,
+                    repairedMissingArtifactJobIds = emptyList(),
+                    unmanagedDocuments = emptyList(),
+                ),
+            missingArtifactJobIds = emptyList(),
+            relationshipRepairs = emptyList(),
+        )
+
+    private fun readyPlan(
+        destinationState: DownloadDestinationState.Ready,
+        downloads: List<PersistedDownload>,
+        available: List<PersistedDownload>,
+        knownDocumentUris: Set<String>,
+    ): DownloadReconciliationPlan {
         val documentsByUri =
             destinationState.existingAudio.associateBy(StoredAudioDocument::contentUri)
-        val verifiedArtifactJobIds =
-            available.mapNotNullTo(mutableSetOf()) { download ->
-                download.job.artifact
-                    ?.takeIf { artifact ->
-                        documentsByUri[artifact.contentUri]?.contentLength == artifact.contentLength
-                    }
-                    ?.let { download.job.id }
-            }
+        val verifiedArtifactJobIds = verifiedArtifactJobIds(available, documentsByUri)
         val missing = available.filterNot { it.job.id in verifiedArtifactJobIds }
-        val verifiedTracks =
-            available
-                .filter { it.job.id in verifiedArtifactJobIds }
-                .mapTo(mutableSetOf()) { it.track.id }
 
         return DownloadReconciliationPlan(
             result =
@@ -128,8 +136,30 @@ internal object DownloadReconciliationPlanner {
                         },
                 ),
             missingArtifactJobIds = missing.map { it.job.id },
-            relationshipRepairs = downloads.relationshipRepairs(verifiedTracks),
+            relationshipRepairs =
+                downloads.relationshipRepairs(verifiedTrackIds(available, verifiedArtifactJobIds)),
         )
+    }
+
+    private fun verifiedArtifactJobIds(
+        available: List<PersistedDownload>,
+        documentsByUri: Map<String, StoredAudioDocument>,
+    ): Set<DownloadJobId> = buildSet {
+        available.forEach { download ->
+            val artifact = download.job.artifact ?: return@forEach
+            if (documentsByUri[artifact.contentUri]?.contentLength == artifact.contentLength) {
+                add(download.job.id)
+            }
+        }
+    }
+
+    private fun verifiedTrackIds(
+        available: List<PersistedDownload>,
+        verifiedArtifactJobIds: Set<DownloadJobId>,
+    ): Set<TrackId> = buildSet {
+        available.forEach { download ->
+            if (download.job.id in verifiedArtifactJobIds) add(download.track.id)
+        }
     }
 
     private fun List<PersistedDownload>.relationshipRepairs(

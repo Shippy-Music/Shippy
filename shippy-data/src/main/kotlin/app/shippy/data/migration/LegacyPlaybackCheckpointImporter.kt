@@ -65,12 +65,24 @@ internal class LegacyPlaybackCheckpointImporter(private val database: ShippyR16D
                     .playbackCheckpointDao()
                     .replace(checkNotNull(converted).checkpoint, checkNotNull(converted).entries)
             }
+            val targetCounts =
+                audit.targetCountsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?: JSONObject()
+            MigrationExpectedCountEvidence.recordPage(
+                target = targetCounts,
+                phase = LegacyImportPhase.PLAYBACK_CHECKPOINT,
+                pageToken = "M9:active",
+                delta =
+                    MigrationExpectedCountDelta(
+                        checkpointEntries = (converted?.entries?.size ?: 0).toLong()
+                    ),
+            )
             database
                 .migrationAuditDao()
                 .updateProgress(
                     migrationId = migrationId,
                     targetCountsJson =
-                        JSONObject()
+                        targetCounts
                             .put("playbackCheckpointEntries", converted?.entries?.size ?: 0)
                             .put(
                                 "checkpoint",

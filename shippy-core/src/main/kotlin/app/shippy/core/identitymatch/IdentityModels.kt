@@ -39,6 +39,7 @@ enum class MatchEvidenceKind {
     USER_REJECTION,
     VERSION_CONTRADICTION,
     DURATION_CONTRADICTION,
+    EXTERNAL_ID_CONTRADICTION,
 }
 
 data class MatchEvidence(val kind: MatchEvidenceKind, val score: Double, val detail: String) {
@@ -73,6 +74,8 @@ data class MatchingFeatures(
     val isrcs: Set<String> = emptySet(),
     val musicBrainzRecordingIds: Set<String> = emptySet(),
     val acoustIds: Set<String> = emptySet(),
+    val verifiedIsrcs: Set<String> = emptySet(),
+    val verifiedMusicBrainzRecordingIds: Set<String> = emptySet(),
     val sourceKeys: Set<SourceKey> = emptySet(),
     val fingerprintHashes: Set<String> = emptySet(),
 )

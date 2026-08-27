@@ -49,10 +49,6 @@ internal abstract class CatalogueMaintenanceDao {
               WHERE playback_checkpoint_entry.recording_id = recording.recording_id
           )
           AND NOT EXISTS (
-              SELECT 1 FROM play_history
-              WHERE play_history.recording_id = recording.recording_id
-          )
-          AND NOT EXISTS (
               SELECT 1 FROM download_job
               WHERE download_job.recording_id = recording.recording_id
           )
@@ -138,10 +134,6 @@ internal abstract class CatalogueMaintenanceDao {
           AND NOT EXISTS (
               SELECT 1 FROM playback_checkpoint_entry
               WHERE playback_checkpoint_entry.recording_id = recording.recording_id
-          )
-          AND NOT EXISTS (
-              SELECT 1 FROM play_history
-              WHERE play_history.recording_id = recording.recording_id
           )
           AND NOT EXISTS (
               SELECT 1 FROM download_job

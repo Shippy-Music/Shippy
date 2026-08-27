@@ -338,11 +338,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         toolbar.menu.findItem(R.id.action_delete)?.isVisible = playlist != null
         toolbar.menu.findItem(R.id.action_batch_actions)?.isVisible = selectedTrackIds.isNotEmpty()
         toolbar.menu.findItem(R.id.action_edit_order)?.apply {
-            isVisible =
-                playlist != null &&
-                    selectedTrackIds.isEmpty() &&
-                    currentQuery.isBlank() &&
-                    currentSort == CollectionSort.COLLECTION_ORDER
+            isVisible = false
             title = getString(if (trackOrderEditing) R.string.lbl_done else R.string.lbl_edit_order)
         }
     }
@@ -354,11 +350,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         toolbar.menu.findItem(R.id.action_search)?.isVisible = selected == 0
         toolbar.menu.findItem(R.id.action_sort)?.isVisible = selected == 0
         toolbar.menu.findItem(R.id.action_batch_actions)?.isVisible = selected > 0
-        toolbar.menu.findItem(R.id.action_edit_order)?.isVisible =
-            selected == 0 &&
-                currentState is ShippyCollectionDetailState.Playlist &&
-                currentQuery.isBlank() &&
-                currentSort == CollectionSort.COLLECTION_ORDER
+        toolbar.menu.findItem(R.id.action_edit_order)?.isVisible = false
         toolbar.menu.findItem(R.id.action_edit_order)?.title =
             getString(if (trackOrderEditing) R.string.lbl_done else R.string.lbl_edit_order)
     }
@@ -574,10 +566,10 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     private fun collectionArtwork(state: ShippyCollectionDetailState): Any =
         (state as? ShippyCollectionDetailState.Playlist)?.playlist?.artworkUri
             ?: when (collectionId.value) {
-                systemCollectionId(SystemCollectionKind.LIKED) -> R.drawable.shippy_library_liked
+                systemCollectionId(SystemCollectionKind.LIKED) -> R.drawable.shippy_collection_liked
                 systemCollectionId(SystemCollectionKind.DOWNLOADS) ->
-                    R.drawable.shippy_library_downloads
-                systemCollectionId(SystemCollectionKind.LOCAL) -> R.drawable.shippy_library_local
+                    R.drawable.shippy_collection_downloaded
+                systemCollectionId(SystemCollectionKind.LOCAL) -> R.drawable.shippy_collection_local
                 else -> R.drawable.ic_playlist_48
             }
 

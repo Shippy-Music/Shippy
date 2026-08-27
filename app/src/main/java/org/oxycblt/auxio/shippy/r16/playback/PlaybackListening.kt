@@ -18,7 +18,8 @@
 package org.oxycblt.auxio.shippy.r16.playback
 
 import app.shippy.core.identity.ListeningSessionId
-import app.shippy.core.listening.ActiveListeningSession
+import app.shippy.core.listening.ActiveListeningSessionCheckpoint
+import app.shippy.core.listening.FinalizedListeningSession
 import java.time.Instant
 import java.util.UUID
 
@@ -42,11 +43,31 @@ object RandomListeningSessionIdFactory : ListeningSessionIdFactory {
     override fun create(): ListeningSessionId = ListeningSessionId(UUID.randomUUID().toString())
 }
 
-/** Implementations must enqueue quickly and must not block the playback actor. */
+/** Implementations must enqueue quickly and apply bounded backpressure. */
 fun interface ListeningSessionSink {
-    fun offer(session: ActiveListeningSession)
+    suspend fun offer(session: FinalizedListeningSession)
+
+    fun offerCheckpoint(checkpoint: ActiveListeningSessionCheckpoint) = Unit
 }
 
 object NoOpListeningSessionSink : ListeningSessionSink {
-    override fun offer(session: ActiveListeningSession) = Unit
+    override suspend fun offer(session: FinalizedListeningSession) = Unit
+}
+
+data class ListeningSessionIdentity(
+    val scrobbleAuthorized: Boolean = false,
+    val accountId: String? = null,
+) {
+    companion object {
+        val Unauthorized = ListeningSessionIdentity(scrobbleAuthorized = false, accountId = null)
+    }
+}
+
+fun interface ListeningSessionIdentityProvider {
+    suspend fun currentIdentity(): ListeningSessionIdentity
+}
+
+object NoOpListeningSessionIdentityProvider : ListeningSessionIdentityProvider {
+    override suspend fun currentIdentity(): ListeningSessionIdentity =
+        ListeningSessionIdentity.Unauthorized
 }

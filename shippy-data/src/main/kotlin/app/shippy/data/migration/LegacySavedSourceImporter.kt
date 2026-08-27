@@ -104,12 +104,21 @@ internal class LegacySavedSourceImporter(private val database: ShippyR16Database
                 importedCount++
             }
             val last = rows.last()
+            val targetCounts =
+                audit.targetCountsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?: JSONObject()
+            MigrationExpectedCountEvidence.recordPage(
+                target = targetCounts,
+                phase = LegacyImportPhase.SAVED_PROVIDER_ENTITIES,
+                pageToken = "M10:${last.providerId}:${last.entityType}:${last.sourceItemId}",
+                delta = MigrationExpectedCountDelta(savedSourceEntities = importedCount.toLong()),
+            )
             database
                 .migrationAuditDao()
                 .updateProgress(
                     migrationId = migrationId,
                     targetCountsJson =
-                        JSONObject()
+                        targetCounts
                             .put(
                                 "savedSourceEntities",
                                 database.legacyImportDao().savedSourceCount(),

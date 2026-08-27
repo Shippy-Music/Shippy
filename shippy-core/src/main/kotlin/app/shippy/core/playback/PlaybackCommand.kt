@@ -18,6 +18,7 @@
 package app.shippy.core.playback
 
 import app.shippy.core.identity.QueueEntryId
+import app.shippy.core.identity.RecordingId
 import app.shippy.core.queue.QueueAnchor
 import app.shippy.core.queue.QueueEntry
 
@@ -29,6 +30,25 @@ sealed interface PlaybackCommand {
     ) : PlaybackCommand
 
     data object Play : PlaybackCommand
+
+    /**
+     * Resumes only when this exact occurrence is still the coordinator's current queue entry. This
+     * is intentionally a command, rather than a caller-side snapshot check, so it is evaluated on
+     * the playback authority's serialized event loop.
+     */
+    data class ResumeCurrent(
+        val expectedQueueEntryId: QueueEntryId,
+        val expectedRecordingId: RecordingId,
+    ) : PlaybackCommand
+
+    /**
+     * Retries only when this exact occurrence is still current and failed. This is evaluated by the
+     * playback authority's serialized event loop, not by a caller-side state projection.
+     */
+    data class RetryCurrent(
+        val expectedQueueEntryId: QueueEntryId,
+        val expectedRecordingId: RecordingId,
+    ) : PlaybackCommand
 
     data object Pause : PlaybackCommand
 

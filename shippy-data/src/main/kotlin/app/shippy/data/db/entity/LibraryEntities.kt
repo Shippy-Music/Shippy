@@ -58,7 +58,12 @@ data class LibraryRecordingEntity(
                 value = ["pinned", "library_order_key"],
                 orders = [Index.Order.DESC, Index.Order.ASC],
                 name = "index_playlist_library_order",
-            )
+            ),
+            Index(
+                value = ["origin_kind", "origin_key"],
+                unique = true,
+                name = "index_playlist_origin",
+            ),
         ],
 )
 data class PlaylistEntity(
@@ -69,6 +74,8 @@ data class PlaylistEntity(
     @ColumnInfo(name = "artwork_override") val artworkOverride: String?,
     @ColumnInfo(name = "display_sort_mode") val displaySortMode: String,
     @ColumnInfo(name = "display_sort_direction") val displaySortDirection: String,
+    @ColumnInfo(name = "origin_kind") val originKind: String,
+    @ColumnInfo(name = "origin_key") val originKey: String?,
     @ColumnInfo(name = "created_at_epoch_ms") val createdAtEpochMs: Long,
     @ColumnInfo(name = "updated_at_epoch_ms") val updatedAtEpochMs: Long,
 )

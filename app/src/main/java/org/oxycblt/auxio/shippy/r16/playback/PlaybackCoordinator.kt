@@ -17,7 +17,11 @@
  */
 package org.oxycblt.auxio.shippy.r16.playback
 
+import app.shippy.core.identity.ListeningSessionId
 import app.shippy.core.identity.QueueEntryId
+import app.shippy.core.listening.ActiveListeningSessionCheckpoint
+import app.shippy.core.listening.FinalizedListeningSession
+import app.shippy.core.listening.ListeningSessionCompletionReason
 import app.shippy.core.listening.ListeningSessionTracker
 import app.shippy.core.listening.ListeningTrackerEvent
 import app.shippy.core.listening.ListeningTrackerState
@@ -80,6 +84,9 @@ class PlaybackCoordinator(
     private val listeningSessionIdFactory: ListeningSessionIdFactory =
         RandomListeningSessionIdFactory,
     private val listeningTickIntervalMs: Long = DEFAULT_LISTENING_TICK_INTERVAL_MS,
+    private val listeningCheckpointIntervalMs: Long = DEFAULT_LISTENING_CHECKPOINT_INTERVAL_MS,
+    private val listeningSessionIdentityProvider: ListeningSessionIdentityProvider =
+        NoOpListeningSessionIdentityProvider,
 ) : R16PlaybackAuthority {
     private val coordinatorJob = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + coordinatorJob)
@@ -94,6 +101,8 @@ class PlaybackCoordinator(
     private var engineRecoveryTag: PlaybackRequestTag? = null
     private var listeningTickJob: Job? = null
     private var listeningState = ListeningTrackerState()
+    private var listeningCheckpointSessionId: ListeningSessionId? = null
+    private var lastListeningCheckpointAudibleMs = 0L
     private val released = AtomicBoolean(false)
     private val eventLoopJob: Job
     private val observationJob: Job
@@ -101,6 +110,9 @@ class PlaybackCoordinator(
 
     init {
         require(listeningTickIntervalMs > 0) { "Listening tick interval must be positive" }
+        require(listeningCheckpointIntervalMs > 0) {
+            "Listening checkpoint interval must be positive"
+        }
         eventLoopJob = scope.launch(start = CoroutineStart.UNDISPATCHED) { eventLoop() }
         observationJob =
             scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -178,7 +190,7 @@ class PlaybackCoordinator(
         return reply.await()
     }
 
-    private fun handleCommand(event: CoordinatorEvent.Command) {
+    private suspend fun handleCommand(event: CoordinatorEvent.Command) {
         val reduction =
             try {
                 reduceCommand(mutableSnapshot.value, event.command)
@@ -195,7 +207,7 @@ class PlaybackCoordinator(
                 event.reply.complete(PlaybackCommandResult.Rejected(reduction.reason))
             }
             is CommandReduction.Accepted -> {
-                reduction.coreEvent?.let(::apply)
+                reduction.coreEvent?.let { apply(it) }
                 reduction.engineAction?.invoke()
                 val current = mutableSnapshot.value
                 recordTrace(
@@ -210,7 +222,7 @@ class PlaybackCoordinator(
         }
     }
 
-    private fun handleRestore(event: CoordinatorEvent.Restore) {
+    private suspend fun handleRestore(event: CoordinatorEvent.Restore) {
         apply(PlaybackCoreEvent.RestoreContext(event.checkpoint, event.allowResume))
         val current = mutableSnapshot.value
         recordTrace(
@@ -249,6 +261,8 @@ class PlaybackCoordinator(
                 } else {
                     CommandReduction.Accepted(PlaybackCoreEvent.SetPlayWhenReady(true))
                 }
+            is PlaybackCommand.ResumeCurrent -> resumeCurrent(snapshot, command)
+            is PlaybackCommand.RetryCurrent -> retryCurrent(snapshot, command)
             PlaybackCommand.Pause ->
                 CommandReduction.Accepted(PlaybackCoreEvent.SetPlayWhenReady(false))
             is PlaybackCommand.GoTo -> select(snapshot, command.queueEntryId)
@@ -291,6 +305,48 @@ class PlaybackCoordinator(
             PlaybackCommand.Previous -> adjacent(snapshot, forward = false)
         }
 
+    private fun resumeCurrent(
+        snapshot: PlaybackSnapshot,
+        command: PlaybackCommand.ResumeCurrent,
+    ): CommandReduction {
+        val currentQueueEntryId = snapshot.queue.currentQueueEntryId
+        val current =
+            currentQueueEntryId?.let { queueEntryId ->
+                snapshot.queue.baseQueue.firstOrNull { it.id == queueEntryId }
+            }
+        return if (
+            current?.id == command.expectedQueueEntryId &&
+                current.recordingId == command.expectedRecordingId
+        ) {
+            CommandReduction.Accepted(PlaybackCoreEvent.SetPlayWhenReady(true))
+        } else {
+            CommandReduction.Rejected(PlaybackCommandRejection.ENTRY_NOT_FOUND)
+        }
+    }
+
+    private fun retryCurrent(
+        snapshot: PlaybackSnapshot,
+        command: PlaybackCommand.RetryCurrent,
+    ): CommandReduction {
+        val currentQueueEntryId = snapshot.queue.currentQueueEntryId
+        val current =
+            currentQueueEntryId?.let { queueEntryId ->
+                snapshot.queue.baseQueue.firstOrNull { it.id == queueEntryId }
+            }
+        val failed = snapshot.phase as? app.shippy.core.playback.PlaybackPhase.Failed
+        return if (
+            current?.id == command.expectedQueueEntryId &&
+                current.recordingId == command.expectedRecordingId &&
+                failed?.entryId == command.expectedQueueEntryId
+        ) {
+            // Reuse the canonical selection path so source refresh and engine reprepare stay in
+            // one authority-owned transition.
+            CommandReduction.Accepted(PlaybackCoreEvent.SelectEntry(command.expectedQueueEntryId))
+        } else {
+            CommandReduction.Rejected(PlaybackCommandRejection.ENTRY_NOT_FOUND)
+        }
+    }
+
     private fun queueMutation(queue: QueueState): CommandReduction =
         CommandReduction.Accepted(PlaybackCoreEvent.QueueChanged(queue))
 
@@ -326,8 +382,9 @@ class PlaybackCoordinator(
         }
     }
 
-    private fun apply(event: PlaybackCoreEvent) {
+    private suspend fun apply(event: PlaybackCoreEvent) {
         val before = mutableSnapshot.value
+        finalizeListeningFor(event, before)
         val reduction = playbackReducer.reduce(before, event)
         mutableSnapshot.value = reduction.snapshot
         engineRecoveryTag =
@@ -343,6 +400,36 @@ class PlaybackCoordinator(
             ignored = reduction.snapshot === before,
         )
         reduction.effects.forEach(::runEffect)
+    }
+
+    private suspend fun finalizeListeningFor(event: PlaybackCoreEvent, before: PlaybackSnapshot) {
+        val activeQueueEntryId = listeningState.active?.queueEntryId ?: return
+        when (event) {
+            is PlaybackCoreEvent.ReplaceContext ->
+                finishListeningSession(
+                    reason =
+                        if (event.queue.baseQueue.isEmpty()) {
+                            ListeningSessionCompletionReason.CLEARED
+                        } else {
+                            ListeningSessionCompletionReason.QUEUE_REPLACED
+                        }
+                )
+            is PlaybackCoreEvent.RestoreContext ->
+                finishListeningSession(reason = ListeningSessionCompletionReason.QUEUE_REPLACED)
+            is PlaybackCoreEvent.SelectEntry ->
+                if (event.queueEntryId != activeQueueEntryId) {
+                    finishListeningSession(reason = ListeningSessionCompletionReason.QUEUE_REPLACED)
+                }
+            is PlaybackCoreEvent.QueueChanged ->
+                if (
+                    event.queue.baseQueue.none { it.id == activeQueueEntryId } ||
+                        (before.committedQueueEntryId == activeQueueEntryId &&
+                            event.queue.currentQueueEntryId != activeQueueEntryId)
+                ) {
+                    finishListeningSession(reason = ListeningSessionCompletionReason.QUEUE_REPLACED)
+                }
+            else -> Unit
+        }
     }
 
     private fun runEffect(effect: PlaybackEffect) {
@@ -507,7 +594,7 @@ class PlaybackCoordinator(
             }
     }
 
-    private fun handleEngineObservation(observation: PlayerObservation) {
+    private suspend fun handleEngineObservation(observation: PlayerObservation) {
         val before = mutableSnapshot.value
         if (observation is PlayerObservation.Failed && recoverEngineSource(observation, before)) {
             updateListeningSession(observation, before, mutableSnapshot.value)
@@ -544,7 +631,7 @@ class PlaybackCoordinator(
         updateListeningSession(observation, before, mutableSnapshot.value)
     }
 
-    private fun recoverEngineSource(
+    private suspend fun recoverEngineSource(
         observation: PlayerObservation.Failed,
         snapshot: PlaybackSnapshot,
     ): Boolean {
@@ -580,7 +667,7 @@ class PlaybackCoordinator(
         return true
     }
 
-    private fun updateListeningSession(
+    private suspend fun updateListeningSession(
         observation: PlayerObservation,
         before: PlaybackSnapshot,
         after: PlaybackSnapshot,
@@ -597,6 +684,7 @@ class PlaybackCoordinator(
                 val entry =
                     after.queue.baseQueue.singleOrNull { it.id == observation.tag.queueEntryId }
                         ?: return
+                val identity = listeningSessionIdentityProvider.currentIdentity()
                 advanceListening(
                     ListeningTrackerEvent.Commit(
                         sessionId = listeningSessionIdFactory.create(),
@@ -606,7 +694,16 @@ class PlaybackCoordinator(
                         startedAtWallClock = playbackClock.wallClock(),
                         elapsedRealtimeMs = playbackClock.elapsedRealtimeMs(),
                         chosenByUser = true,
-                    )
+                        scrobbleAuthorized = identity.scrobbleAuthorized,
+                        accountId = identity.accountId,
+                    ),
+                    completionReason =
+                        if (observation.automaticTransition) {
+                            ListeningSessionCompletionReason.NATURAL_END
+                        } else {
+                            ListeningSessionCompletionReason.QUEUE_REPLACED
+                        },
+                    lastPositionMs = before.position.positionMs,
                 )
             }
             is PlayerObservation.PhaseChanged -> {
@@ -617,7 +714,10 @@ class PlaybackCoordinator(
                     return
                 }
                 if (observation.phase == app.shippy.core.playback.CommittedEnginePhase.ENDED) {
-                    finishListeningSession(observation.queueEntryId)
+                    finishListeningSession(
+                        observation.queueEntryId,
+                        ListeningSessionCompletionReason.NATURAL_END,
+                    )
                 } else {
                     setListeningAudible(
                         observation.queueEntryId,
@@ -651,7 +751,7 @@ class PlaybackCoordinator(
         }
     }
 
-    private fun setListeningAudible(queueEntryId: QueueEntryId, audible: Boolean) {
+    private suspend fun setListeningAudible(queueEntryId: QueueEntryId, audible: Boolean) {
         advanceListening(
             ListeningTrackerEvent.AudibleChanged(
                 queueEntryId,
@@ -679,25 +779,86 @@ class PlaybackCoordinator(
         listeningTickJob = null
     }
 
-    private fun handleListeningTick(elapsedRealtimeMs: Long) {
+    private suspend fun handleListeningTick(elapsedRealtimeMs: Long) {
         if (mutableSnapshot.value.phase !is app.shippy.core.playback.PlaybackPhase.Playing) return
         advanceListening(ListeningTrackerEvent.Tick(elapsedRealtimeMs))
     }
 
-    private fun finishListeningSession(
-        queueEntryId: QueueEntryId? = listeningState.active?.queueEntryId
+    private suspend fun finishListeningSession(
+        queueEntryId: QueueEntryId? = listeningState.active?.queueEntryId,
+        reason: ListeningSessionCompletionReason = ListeningSessionCompletionReason.RELEASED,
     ) {
         stopListeningTicks()
         queueEntryId ?: return
         advanceListening(
-            ListeningTrackerEvent.Finish(queueEntryId, playbackClock.elapsedRealtimeMs())
+            ListeningTrackerEvent.Finish(queueEntryId, playbackClock.elapsedRealtimeMs()),
+            reason,
         )
     }
 
-    private fun advanceListening(event: ListeningTrackerEvent) {
+    private suspend fun advanceListening(
+        event: ListeningTrackerEvent,
+        completionReason: ListeningSessionCompletionReason =
+            ListeningSessionCompletionReason.QUEUE_REPLACED,
+        lastPositionMs: Long = mutableSnapshot.value.position.positionMs,
+    ) {
+        val activeBefore = listeningState.active
+        val shouldCheckpointOnStop =
+            event is ListeningTrackerEvent.AudibleChanged &&
+                !event.audible &&
+                activeBefore?.queueEntryId == event.queueEntryId &&
+                activeBefore.audibleTime.anchorElapsedRealtimeMs != null
         val transition = listeningSessionTracker.reduce(listeningState, event)
         listeningState = transition.state
-        transition.finalized?.let(listeningSessionSink::offer)
+        transition.finalized?.let { session ->
+            listeningSessionSink.offer(
+                FinalizedListeningSession(
+                    sessionId = session.id,
+                    queueEntryId = session.queueEntryId,
+                    recordingId = session.recordingId,
+                    sourceReferenceId = session.sourceReferenceId,
+                    startedAtWallClock = session.startedAtWallClock,
+                    endedAtWallClock = maxOf(playbackClock.wallClock(), session.startedAtWallClock),
+                    activeListenedMs = session.audibleTime.accumulatedAudibleMs,
+                    lastPositionMs = lastPositionMs,
+                    completionReason = completionReason,
+                    chosenByUser = session.chosenByUser,
+                    scrobbleAuthorized = session.scrobbleAuthorized,
+                    accountId = session.accountId,
+                )
+            )
+        }
+        val active = transition.state.active
+        if (active == null) {
+            listeningCheckpointSessionId = null
+            lastListeningCheckpointAudibleMs = 0L
+            return
+        }
+        if (listeningCheckpointSessionId != active.id) {
+            listeningCheckpointSessionId = active.id
+            lastListeningCheckpointAudibleMs = 0L
+        }
+        val activeListenedMs = active.audibleTime.accumulatedAudibleMs
+        if (
+            shouldCheckpointOnStop ||
+                activeListenedMs - lastListeningCheckpointAudibleMs >= listeningCheckpointIntervalMs
+        ) {
+            listeningSessionSink.offerCheckpoint(
+                ActiveListeningSessionCheckpoint(
+                    sessionId = active.id,
+                    queueEntryId = active.queueEntryId,
+                    recordingId = active.recordingId,
+                    sourceReferenceId = active.sourceReferenceId,
+                    startedAtWallClock = active.startedAtWallClock,
+                    activeListenedMs = activeListenedMs,
+                    lastPositionMs = lastPositionMs,
+                    chosenByUser = active.chosenByUser,
+                    scrobbleAuthorized = active.scrobbleAuthorized,
+                    accountId = active.accountId,
+                )
+            )
+            lastListeningCheckpointAudibleMs = activeListenedMs
+        }
     }
 
     private fun recordTrace(
@@ -725,6 +886,8 @@ private fun PlaybackCommand.traceName(): String =
     when (this) {
         is PlaybackCommand.PlayContext -> "PLAY_CONTEXT"
         PlaybackCommand.Play -> "PLAY"
+        is PlaybackCommand.ResumeCurrent -> "RESUME_CURRENT"
+        is PlaybackCommand.RetryCurrent -> "RETRY_CURRENT"
         PlaybackCommand.Pause -> "PAUSE"
         PlaybackCommand.Next -> "NEXT"
         PlaybackCommand.Previous -> "PREVIOUS"
@@ -742,6 +905,8 @@ private fun PlaybackCommand.traceName(): String =
 private fun PlaybackCommand.traceEntryId(): QueueEntryId? =
     when (this) {
         is PlaybackCommand.PlayContext -> selectedEntryId
+        is PlaybackCommand.ResumeCurrent -> expectedQueueEntryId
+        is PlaybackCommand.RetryCurrent -> expectedQueueEntryId
         is PlaybackCommand.GoTo -> queueEntryId
         is PlaybackCommand.Move -> entryId
         else -> null
@@ -831,3 +996,4 @@ private sealed interface CommandReduction {
 
 private const val MAX_CURRENT_SOURCE_ATTEMPTS = 2
 private const val DEFAULT_LISTENING_TICK_INTERVAL_MS = 1_000L
+private const val DEFAULT_LISTENING_CHECKPOINT_INTERVAL_MS = 30_000L

@@ -50,5 +50,69 @@ internal interface LibraryDao {
     )
     fun observeLayout(): Flow<List<LibraryLayoutEntryEntity>>
 
+    @Query(
+        """
+        SELECT * FROM library_layout_entry
+        WHERE target_type = :targetType AND target_id = :targetId
+        LIMIT 1
+        """
+    )
+    suspend fun layoutEntry(targetType: String, targetId: String): LibraryLayoutEntryEntity?
+
+    @Query("SELECT MAX(order_key) FROM library_layout_entry WHERE target_type = :targetType")
+    suspend fun maxLayoutOrderKey(targetType: String): Long?
+
+    @Query(
+        """
+        SELECT * FROM library_layout_entry
+        WHERE target_type = :targetType
+        ORDER BY order_key, target_id
+        """
+    )
+    suspend fun layoutEntries(targetType: String): List<LibraryLayoutEntryEntity>
+
     @Upsert suspend fun upsertLayout(entries: List<LibraryLayoutEntryEntity>)
+
+    @Query(
+        """
+        DELETE FROM library_layout_entry
+        WHERE target_type = :targetType AND target_id = :targetId
+        """
+    )
+    suspend fun deleteLayout(targetType: String, targetId: String): Int
+
+    @Upsert suspend fun upsertOverride(entity: app.shippy.data.db.entity.UserMetadataOverrideEntity)
+
+    @Query("DELETE FROM library_recording WHERE recording_id = :recordingId")
+    suspend fun deleteRelationship(recordingId: String): Int
+
+    @Query(
+        """
+        DELETE FROM user_metadata_override
+        WHERE recording_id = :recordingId AND field_name = :fieldName
+        """
+    )
+    suspend fun deleteOverride(recordingId: String, fieldName: String): Int
+
+    @Query(
+        "UPDATE user_metadata_override SET recording_id = :newRecordingId WHERE recording_id = :oldRecordingId AND field_name = :fieldName"
+    )
+    suspend fun reassignOverride(
+        oldRecordingId: String,
+        newRecordingId: String,
+        fieldName: String,
+    ): Int
+
+    @Query("DELETE FROM user_metadata_override WHERE recording_id = :recordingId")
+    suspend fun deleteAllOverrides(recordingId: String): Int
+
+    @Query("SELECT * FROM user_metadata_override WHERE recording_id = :recordingId")
+    suspend fun overridesFor(
+        recordingId: String
+    ): List<app.shippy.data.db.entity.UserMetadataOverrideEntity>
+
+    @Query("SELECT * FROM user_metadata_override WHERE recording_id = :recordingId")
+    fun observeOverrides(
+        recordingId: String
+    ): Flow<List<app.shippy.data.db.entity.UserMetadataOverrideEntity>>
 }

@@ -94,6 +94,127 @@ class MetadataIdentityPolicyTest {
         assertEquals(MatchDecision.AUTO_LINK, assessment.decision)
     }
 
+    @Test
+    fun `local file with wrong unverified isrc does not veto correct provider candidate`() {
+        val local =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(isrcs = setOf("WRONG_LOCAL_ISRC"), verifiedIsrcs = emptySet())
+        val provider =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(isrcs = setOf("CORRECT_ISRC"), verifiedIsrcs = setOf("CORRECT_ISRC"))
+
+        val assessment = MatchingPolicy().assess(local, provider)
+
+        org.junit.Assert.assertFalse(assessment.vetoed)
+        assertTrue(assessment.score > 0.0)
+    }
+
+    @Test
+    fun `verified provider isrc contradiction vetoes match`() {
+        val providerA =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(isrcs = setOf("USRC17607839"), verifiedIsrcs = setOf("USRC17607839"))
+        val providerB =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(isrcs = setOf("GBAYE0601477"), verifiedIsrcs = setOf("GBAYE0601477"))
+
+        val assessment = MatchingPolicy().assess(providerA, providerB)
+
+        assertTrue(assessment.vetoed)
+        assertEquals(MatchDecision.KEEP_SEPARATE, assessment.decision)
+    }
+
+    @Test
+    fun `verified musicbrainz recording id contradiction vetoes match`() {
+        val mbidA =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(
+                    musicBrainzRecordingIds = setOf("00000000-0000-0000-0000-000000000001"),
+                    verifiedMusicBrainzRecordingIds = setOf("00000000-0000-0000-0000-000000000001"),
+                )
+        val mbidB =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(
+                    musicBrainzRecordingIds = setOf("00000000-0000-0000-0000-000000000002"),
+                    verifiedMusicBrainzRecordingIds = setOf("00000000-0000-0000-0000-000000000002"),
+                )
+
+        val assessment = MatchingPolicy().assess(mbidA, mbidB)
+
+        assertTrue(assessment.vetoed)
+        assertEquals(MatchDecision.KEEP_SEPARATE, assessment.decision)
+    }
+
+    @Test
+    fun `unverified matching identifiers contribute positive evidence`() {
+        val unverifiedA =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(isrcs = setOf("USRC17607839"), verifiedIsrcs = emptySet())
+        val unverifiedB =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(isrcs = setOf("USRC17607839"), verifiedIsrcs = emptySet())
+
+        val assessment = MatchingPolicy().assess(unverifiedA, unverifiedB)
+
+        assertEquals(MatchDecision.AUTO_LINK, assessment.decision)
+        assertTrue(
+            assessment.evidence.any {
+                it.kind == app.shippy.core.identitymatch.MatchEvidenceKind.ISRC
+            }
+        )
+    }
+
+    @Test
+    fun `identifier matching is case insensitive and whitespace tolerant`() {
+        val lower =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(isrcs = setOf("  usrc17607839  "), verifiedIsrcs = setOf("  usrc17607839  "))
+        val upper =
+            features(RecordingVersion(VersionKind.ORIGINAL))
+                .copy(isrcs = setOf("USRC17607839"), verifiedIsrcs = setOf("USRC17607839"))
+
+        val assessment = MatchingPolicy().assess(lower, upper)
+
+        assertEquals(MatchDecision.AUTO_LINK, assessment.decision)
+    }
+
+    @Test
+    fun `recording merge and unmerge plan produces deterministic survivor and reversible graph`() {
+        val rec1 = app.shippy.core.identity.RecordingId("00000000-0000-0000-0000-000000000001")
+        val rec2 = app.shippy.core.identity.RecordingId("00000000-0000-0000-0000-000000000002")
+        val decisionId =
+            app.shippy.core.identity.IdentityDecisionId("00000000-0000-0000-0000-000000000009")
+        val move =
+            app.shippy.core.identitymatch.RecordingReferenceMove(
+                kind = app.shippy.core.identitymatch.RecordingReferenceKind.SOURCE_REFERENCE,
+                stableId = "source-1",
+            )
+
+        val plan =
+            app.shippy.core.identitymatch.RecordingMergePlanner.plan(
+                firstId = rec1,
+                secondId = rec2,
+                decisionId = decisionId,
+                movedReferences = setOf(move),
+                createdAt = Instant.ofEpochSecond(100),
+            )
+
+        assertEquals(rec1, plan.survivorId)
+        assertEquals(rec2, plan.retiredId)
+
+        var graph = app.shippy.core.identitymatch.RecordingRedirectGraph()
+        val mutation = graph.add(plan.retiredId, plan.survivorId)
+        assertTrue(mutation is app.shippy.core.identitymatch.RedirectMutation.Added)
+        graph = mutation.graph
+
+        assertEquals(rec1, graph.resolve(rec2))
+        assertEquals(rec1, graph.resolve(rec1))
+
+        val unmerge = plan.reverse(graph)
+        assertEquals(rec2, unmerge.restoredRecordingId)
+        assertEquals(rec2, unmerge.redirectGraph.resolve(rec2))
+    }
+
     private fun features(version: RecordingVersion) =
         MatchingFeatures(
             normalizedTitle = "song",

@@ -38,14 +38,40 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.shippy.r16.maintenance.R16LivePlaybackQueue
 import org.oxycblt.auxio.shippy.r16.playback.BoundedPlaybackTraceRecorder
 import org.oxycblt.auxio.shippy.r16.playback.PlaybackTraceEvent
 import org.oxycblt.auxio.shippy.r16.playback.PlaybackTraceKind
 import org.oxycblt.auxio.shippy.r16.playback.R16PlaybackAuthority
 
 class R16PlaybackServiceRuntimeTest {
+    @Test
+    fun `runtime exposes the live queue to maintenance until it releases`() = runBlocking {
+        val checkpoint = checkpoint()
+        val liveQueue = R16LivePlaybackQueue()
+        val runtime =
+            R16PlaybackServiceRuntime(
+                this,
+                FakeAuthority(),
+                FakeCheckpointRepository(checkpoint),
+                BoundedPlaybackTraceRecorder(),
+                checkpointDelayMs = 60_000,
+                livePlaybackQueue = liveQueue,
+            )
+
+        runtime.attach()
+
+        assertEquals(
+            setOf(checkpoint.queue.baseQueue.single().recordingId),
+            liveQueue.activeRecordingIdsOrNull(),
+        )
+        runtime.release()
+        assertNull(liveQueue.activeRecordingIdsOrNull())
+    }
+
     @Test
     fun `runtime restores routes checkpoints and releases one authority`() = runBlocking {
         val checkpoint = checkpoint()
@@ -109,6 +135,43 @@ class R16PlaybackServiceRuntimeTest {
         assertEquals(0, checkpoints.clearCount)
     }
 
+    @Test
+    fun `explicit clear retires unresolved checkpoint before a later attach`() = runBlocking {
+        val checkpoints =
+            FakeCheckpointRepository(
+                loaded = checkpoint(),
+                loadFailure = IllegalArgumentException("bad"),
+            )
+        val runtime =
+            R16PlaybackServiceRuntime(
+                this,
+                FakeAuthority(),
+                checkpoints,
+                BoundedPlaybackTraceRecorder(),
+                checkpointDelayMs = 60_000,
+            )
+
+        runtime.attach()
+        assertTrue(runtime.dispatch(PlaybackCommand.Clear) is PlaybackCommandResult.Accepted)
+        assertEquals(1, checkpoints.clearCount)
+        runtime.release()
+
+        checkpoints.loadFailure = null
+        val recoveredAuthority = FakeAuthority()
+        val recoveredRuntime =
+            R16PlaybackServiceRuntime(
+                this,
+                recoveredAuthority,
+                checkpoints,
+                BoundedPlaybackTraceRecorder(),
+                checkpointDelayMs = 60_000,
+            )
+        recoveredRuntime.attach()
+
+        assertEquals(null, recoveredAuthority.restored)
+        recoveredRuntime.release()
+    }
+
     private class FakeAuthority : R16PlaybackAuthority {
         private val mutableSnapshots = MutableStateFlow(PlaybackSnapshot.Empty)
         override val snapshots: StateFlow<PlaybackSnapshot> = mutableSnapshots
@@ -149,23 +212,26 @@ class R16PlaybackServiceRuntimeTest {
 
     private class FakeCheckpointRepository(
         private val loaded: PlaybackCheckpoint? = null,
-        private val loadFailure: Exception? = null,
+        var loadFailure: Exception? = null,
     ) : R16PlaybackCheckpointRepository {
         var saved: PlaybackCheckpoint? = null
         var clearCount = 0
+        private var durable: PlaybackCheckpoint? = loaded
 
         override suspend fun load(): PlaybackCheckpoint? {
             loadFailure?.let { throw it }
-            return loaded
+            return durable
         }
 
         override suspend fun save(checkpoint: PlaybackCheckpoint) {
             saved = checkpoint
+            durable = checkpoint
         }
 
         override suspend fun clear() {
             clearCount++
             saved = null
+            durable = null
         }
     }
 

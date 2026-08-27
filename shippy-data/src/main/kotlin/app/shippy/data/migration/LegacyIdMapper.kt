@@ -79,6 +79,18 @@ internal object LegacyIdMapper {
     fun playlistEntry(oldPlaylistId: String, oldTrackId: String): PlaylistEntryId =
         PlaylistEntryId(mapped("playlist-entry", oldPlaylistId, oldTrackId))
 
+    fun devicePlaylist(originKey: String): PlaylistId =
+        PlaylistId(mapped("device-playlist", originKey))
+
+    fun devicePlaylistEntry(
+        originKey: String,
+        position: Int,
+        recordingId: RecordingId,
+    ): PlaylistEntryId =
+        PlaylistEntryId(
+            mapped("device-playlist-entry", originKey, position.toString(), recordingId.value)
+        )
+
     fun queueEntry(oldQueueItemId: String): QueueEntryId =
         QueueEntryId(mapped("queue-entry", oldQueueItemId))
 

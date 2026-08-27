@@ -99,15 +99,34 @@ internal abstract class RecordingDao {
     )
     abstract suspend fun externalIdentifiers(recordingId: String): List<ExternalIdentifierEntity>
 
-    @Upsert protected abstract suspend fun upsertRecording(entity: RecordingEntity)
+    @Query("SELECT * FROM external_identifier WHERE external_identifier_id = :identifierId")
+    abstract suspend fun externalIdentifier(identifierId: String): ExternalIdentifierEntity?
+
+    @Upsert abstract suspend fun upsertRecording(entity: RecordingEntity)
 
     @Upsert protected abstract suspend fun upsertArtists(entities: List<ArtistEntity>)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
-    protected abstract suspend fun insertCredits(entities: List<RecordingArtistCreditEntity>)
+    abstract suspend fun insertCredits(entities: List<RecordingArtistCreditEntity>)
 
     @Query("DELETE FROM recording_artist_credit WHERE recording_id = :recordingId")
     protected abstract suspend fun deleteCredits(recordingId: String)
+
+    @Query("DELETE FROM recording WHERE recording_id = :recordingId")
+    abstract suspend fun deleteRecording(recordingId: String): Int
+
+    @Query(
+        "UPDATE external_identifier SET owner_id = :newOwnerId WHERE owner_type = 'RECORDING' AND owner_id = :oldOwnerId"
+    )
+    abstract suspend fun reassignExternalIdentifiers(oldOwnerId: String, newOwnerId: String): Int
+
+    @Query(
+        "UPDATE external_identifier SET owner_id = :newOwnerId WHERE external_identifier_id = :identifierId"
+    )
+    abstract suspend fun reassignExternalIdentifierById(
+        identifierId: String,
+        newOwnerId: String,
+    ): Int
 
     @Upsert abstract suspend fun upsertRelease(entity: ReleaseEntity)
 

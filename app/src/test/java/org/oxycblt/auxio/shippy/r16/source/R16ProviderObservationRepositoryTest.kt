@@ -98,6 +98,10 @@ class R16ProviderObservationRepositoryTest {
         val second = repository.search("fixture")
         val observations = first.sections.map { it.tracks.single() }
 
+        assertEquals(
+            listOf("youtube", "youtube_music"),
+            first.sections.map { it.provider.id.value },
+        )
         assertEquals(observations[0].sourceKey, observations[1].sourceKey)
         assertEquals(R16ProviderId("youtube"), observations[0].sourceKey.providerId)
         assertEquals(SourceItemType.VIDEO, observations[0].sourceKey.itemType)

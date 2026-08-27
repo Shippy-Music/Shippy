@@ -53,6 +53,19 @@ class MediaObjectKeyTest {
         assertNotEquals(MediaObjectKey.from(first), MediaObjectKey.from(second))
     }
 
+    @Test
+    fun `canonical source reference keys are stable and distinguish media variants`() {
+        val sourceId =
+            app.shippy.core.identity.SourceReferenceId(java.util.UUID.randomUUID().toString())
+        val keyDefault1 = MediaObjectKey.fromSourceReference(sourceId, "DEFAULT")
+        val keyDefault2 = MediaObjectKey.fromSourceReference(sourceId, "DEFAULT")
+        val keyLossless = MediaObjectKey.fromSourceReference(sourceId, "LOSSLESS")
+
+        assertEquals(keyDefault1, keyDefault2)
+        assertNotEquals(keyDefault1, keyLossless)
+        org.junit.Assert.assertTrue(keyDefault1.value.startsWith(MediaObjectKey.CACHE_KEY_PREFIX))
+    }
+
     private fun candidate(
         sourceItemId: String = "recording-one",
         locator: String = "https://stream.example/audio",

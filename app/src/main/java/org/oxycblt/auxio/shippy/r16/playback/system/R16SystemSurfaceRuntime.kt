@@ -33,6 +33,10 @@ class R16SystemSurfaceRuntime(
     val notification: ForegroundServiceNotification
         get() = mediaSession.notification
 
+    /** The already-created MediaSession token; reading it does not attach or transfer ownership. */
+    val token: MediaSessionCompat.Token
+        get() = mediaSession.token
+
     fun attach(): MediaSessionCompat.Token {
         check(!released) { "Released R16 system surfaces cannot be attached" }
         if (attached) return mediaSession.token

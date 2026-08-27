@@ -17,9 +17,11 @@
  */
 package org.oxycblt.auxio.shippy.download
 
+import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.OutputStream
@@ -74,6 +76,99 @@ sealed interface StorageResult<out T> {
     data class Failure(val reason: DownloadStorageFailure) : StorageResult<Nothing>
 }
 
+/**
+ * The outcome of deleting a document that Shippy already owns.
+ *
+ * This is intentionally more precise than the legacy boolean delete API: a missing document is safe
+ * to reconcile, while a provider failure must leave the durable download available.
+ */
+enum class SafManagedDownloadDeletionResult {
+    DELETED,
+    ALREADY_MISSING,
+    FAILED,
+}
+
+/** Exact-URI probe result used by the R16 managed-download deletion seam. */
+internal enum class SafManagedDocumentPresence {
+    PRESENT,
+    ABSENT,
+    FAILED,
+}
+
+/**
+ * Applies the deletion truth policy after an exact URI presence probe.
+ *
+ * A zero-row delete is not evidence of absence by itself: the URI is probed again to distinguish a
+ * concurrent removal from a provider that refused or ignored the delete.
+ */
+internal suspend fun deleteSafManagedDocument(
+    uri: Uri,
+    probe: suspend (Uri) -> SafManagedDocumentPresence,
+    delete: suspend (Uri) -> Int,
+): SafManagedDownloadDeletionResult {
+    return when (probe(uri)) {
+        SafManagedDocumentPresence.ABSENT -> SafManagedDownloadDeletionResult.ALREADY_MISSING
+        SafManagedDocumentPresence.FAILED -> SafManagedDownloadDeletionResult.FAILED
+        SafManagedDocumentPresence.PRESENT -> {
+            if (delete(uri) > 0) {
+                SafManagedDownloadDeletionResult.DELETED
+            } else {
+                when (probe(uri)) {
+                    SafManagedDocumentPresence.ABSENT ->
+                        SafManagedDownloadDeletionResult.ALREADY_MISSING
+                    SafManagedDocumentPresence.PRESENT,
+                    SafManagedDocumentPresence.FAILED -> SafManagedDownloadDeletionResult.FAILED
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Deletes one exact SAF document without consulting destination or music-source settings.
+ *
+ * R16 storage owners use this narrow seam for cleanup of a job-owned pending document. The existing
+ * legacy storage delegates to the same probe/delete policy so a provider that returns a zero-row
+ * delete is never mistaken for a successful removal.
+ */
+internal suspend fun deleteSafManagedContentUri(
+    resolver: ContentResolver,
+    uri: Uri,
+): SafManagedDownloadDeletionResult =
+    withContext(Dispatchers.IO) {
+        try {
+            deleteSafManagedDocument(
+                uri = uri,
+                probe = { candidate -> probeSafManagedContentUri(resolver, candidate) },
+                delete = { candidate -> resolver.delete(candidate, null, null) },
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            SafManagedDownloadDeletionResult.FAILED
+        }
+    }
+
+private fun probeSafManagedContentUri(
+    resolver: ContentResolver,
+    uri: Uri,
+): SafManagedDocumentPresence =
+    try {
+        resolver
+            .query(uri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)
+            ?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    SafManagedDocumentPresence.PRESENT
+                } else {
+                    SafManagedDocumentPresence.ABSENT
+                }
+            } ?: SafManagedDocumentPresence.FAILED
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        SafManagedDocumentPresence.FAILED
+    }
+
 @Singleton
 class SafDownloadStorage
 @Inject
@@ -121,7 +216,7 @@ constructor(
                 return@withContext StorageResult.Failure(DownloadStorageFailure.NOT_WRITABLE)
             }
             val openedLocation =
-                runCatching { Location.Unopened.from(context, treeUri)?.open(context) }.getOrNull()
+                runCatching { Location.Unopened.from(context, treeUri).open(context) }.getOrNull()
                     ?: run {
                         releaseNewGrantIfUnused(treeUri, hadPersistedGrant, existingSourceUris)
                         return@withContext StorageResult.Failure(
@@ -288,8 +383,25 @@ constructor(
         }
 
     suspend fun delete(contentUri: String): Boolean =
+        deleteManagedDownload(contentUri) == SafManagedDownloadDeletionResult.DELETED
+
+    /**
+     * Deletes one already-identified SAF document without touching destination settings or local
+     * source configuration.
+     *
+     * A provider can report a false delete even though the document disappeared concurrently, so
+     * the URI is re-queried before returning [SafManagedDownloadDeletionResult.FAILED].
+     */
+    suspend fun deleteManagedDownload(contentUri: String): SafManagedDownloadDeletionResult =
         withContext(Dispatchers.IO) {
-            DocumentFile.fromSingleUri(context, Uri.parse(contentUri))?.delete() == true
+            try {
+                val uri = Uri.parse(contentUri)
+                deleteSafManagedContentUri(resolver, uri)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                SafManagedDownloadDeletionResult.FAILED
+            }
         }
 
     private fun hasPersistedReadWriteGrant(uri: Uri): Boolean =

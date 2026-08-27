@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.oxycblt.auxio.playback.service.ServiceRetentionPolicy
+import org.oxycblt.auxio.shippy.r16.maintenance.R16LivePlaybackQueue
 import org.oxycblt.auxio.shippy.r16.playback.BoundedPlaybackTraceRecorder
 import org.oxycblt.auxio.shippy.r16.playback.PlaybackTraceEvent
 import org.oxycblt.auxio.shippy.r16.playback.R16PlaybackAuthority
@@ -76,6 +77,7 @@ class R16PlaybackServiceRuntime(
     private val checkpoints: R16PlaybackCheckpointRepository,
     private val traceRecorder: BoundedPlaybackTraceRecorder,
     private val checkpointDelayMs: Long = DEFAULT_CHECKPOINT_DELAY_MS,
+    private val livePlaybackQueue: R16LivePlaybackQueue? = null,
 ) : R16PlaybackServiceEndpoint {
     private val runtimeJob = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + runtimeJob)
@@ -87,7 +89,7 @@ class R16PlaybackServiceRuntime(
 
     private var snapshotJob: Job? = null
     private var checkpointJob: Job? = null
-    private var checkpointLoadFailed = false
+    private var checkpointState = CheckpointState.NOT_LOADED
 
     init {
         require(checkpointDelayMs >= 0) { "R16 checkpoint delay cannot be negative" }
@@ -105,41 +107,67 @@ class R16PlaybackServiceRuntime(
 
             val checkpoint =
                 try {
-                    checkpoints.load()
+                    checkpoints.load().also {
+                        checkpointState =
+                            if (it == null) CheckpointState.CLEARED else CheckpointState.RESOLVED
+                    }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
-                    checkpointLoadFailed = true
+                    checkpointState = CheckpointState.UNRESOLVED
                     recordCheckpointIssue(error)
                     null
                 }
             if (checkpoint != null) {
-                when (val result = authority.restore(checkpoint, allowResume)) {
-                    is PlaybackCommandResult.Accepted -> Unit
-                    is PlaybackCommandResult.Rejected -> {
-                        checkpointLoadFailed = true
-                        recordCheckpointIssue(
-                            IllegalStateException(
-                                "R16 checkpoint restore rejected: ${result.reason}"
+                try {
+                    when (val result = authority.restore(checkpoint, allowResume)) {
+                        is PlaybackCommandResult.Accepted -> Unit
+                        is PlaybackCommandResult.Rejected -> {
+                            checkpointState = CheckpointState.UNRESOLVED
+                            recordCheckpointIssue(
+                                IllegalStateException(
+                                    "R16 checkpoint restore rejected: ${result.reason}"
+                                )
                             )
-                        )
+                        }
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    checkpointState = CheckpointState.UNRESOLVED
+                    recordCheckpointIssue(error)
                 }
             }
             mutableStatus.value =
                 mutableStatus.value.copy(lifecycle = R16PlaybackServiceLifecycle.ATTACHED)
+            livePlaybackQueue?.update(authority.snapshots.value)
             snapshotJob =
                 scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                    authority.snapshots.drop(1).collect(::scheduleCheckpoint)
+                    authority.snapshots.drop(1).collect { snapshot ->
+                        livePlaybackQueue?.update(snapshot)
+                        scheduleCheckpoint(snapshot)
+                    }
                 }
         }
     }
 
     override suspend fun dispatch(command: PlaybackCommand): PlaybackCommandResult {
-        if (mutableStatus.value.lifecycle != R16PlaybackServiceLifecycle.ATTACHED) {
-            return PlaybackCommandResult.Rejected(PlaybackCommandRejection.SERVICE_NOT_ATTACHED)
+        return lifecycleMutex.withLock {
+            if (mutableStatus.value.lifecycle != R16PlaybackServiceLifecycle.ATTACHED) {
+                return@withLock PlaybackCommandResult.Rejected(
+                    PlaybackCommandRejection.SERVICE_NOT_ATTACHED
+                )
+            }
+            val result = authority.dispatch(command)
+            if (result is PlaybackCommandResult.Accepted && command == PlaybackCommand.Clear) {
+                checkpointState = CheckpointState.CLEAR_REQUESTED
+                checkpointJob?.cancelAndJoin()
+                if (mutableStatus.value.lifecycle == R16PlaybackServiceLifecycle.ATTACHED) {
+                    persistCurrentCheckpoint()
+                }
+            }
+            result
         }
-        return authority.dispatch(command)
     }
 
     suspend fun release() {
@@ -154,6 +182,7 @@ class R16PlaybackServiceRuntime(
             try {
                 authority.release()
             } finally {
+                livePlaybackQueue?.clear()
                 runtimeJob.cancelAndJoin()
                 mutableStatus.value =
                     mutableStatus.value.copy(lifecycle = R16PlaybackServiceLifecycle.RELEASED)
@@ -181,16 +210,23 @@ class R16PlaybackServiceRuntime(
 
     private suspend fun persistSnapshot(snapshot: PlaybackSnapshot) {
         try {
-            if (snapshot.queue.baseQueue.isEmpty()) {
-                if (checkpointLoadFailed) return
+            if (checkpointState == CheckpointState.CLEAR_REQUESTED) {
                 checkpoints.clear()
+                checkpointState = CheckpointState.CLEARED
+            } else if (snapshot.queue.baseQueue.isEmpty()) {
+                if (
+                    checkpointState == CheckpointState.UNRESOLVED ||
+                        checkpointState == CheckpointState.CLEARED
+                ) {
+                    return
+                }
+                checkpoints.clear()
+                checkpointState = CheckpointState.CLEARED
             } else {
                 checkpoints.save(authority.checkpoint())
-                checkpointLoadFailed = false
+                checkpointState = CheckpointState.RESOLVED
             }
-            if (mutableStatus.value.checkpointIssue != null) {
-                mutableStatus.value = mutableStatus.value.copy(checkpointIssue = null)
-            }
+            clearCheckpointIssue()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -203,6 +239,20 @@ class R16PlaybackServiceRuntime(
             mutableStatus.value.copy(
                 checkpointIssue = error.message ?: error::class.java.simpleName
             )
+    }
+
+    private fun clearCheckpointIssue() {
+        if (mutableStatus.value.checkpointIssue != null) {
+            mutableStatus.value = mutableStatus.value.copy(checkpointIssue = null)
+        }
+    }
+
+    private enum class CheckpointState {
+        NOT_LOADED,
+        RESOLVED,
+        UNRESOLVED,
+        CLEAR_REQUESTED,
+        CLEARED,
     }
 
     private companion object {

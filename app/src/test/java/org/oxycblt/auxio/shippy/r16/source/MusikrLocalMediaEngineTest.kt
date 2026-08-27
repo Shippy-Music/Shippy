@@ -63,4 +63,47 @@ class MusikrLocalMediaEngineTest {
         )
         assertNull(observation.originalUrl)
     }
+
+    @Test
+    fun `plain lexical titles do not produce version traits`() {
+        assertEquals(VersionKind.ORIGINAL, extractLocalRecordingVersion("Live Forever").kind)
+        assertEquals(VersionKind.ORIGINAL, extractLocalRecordingVersion("Acoustic Love").kind)
+        assertEquals(VersionKind.ORIGINAL, extractLocalRecordingVersion("Remix My Heart").kind)
+        assertEquals(VersionKind.ORIGINAL, extractLocalRecordingVersion("Yesterday").kind)
+        assertEquals(VersionKind.ORIGINAL, extractLocalRecordingVersion("").kind)
+        assertEquals(VersionKind.ORIGINAL, extractLocalRecordingVersion(null).kind)
+    }
+
+    @Test
+    fun `explicit qualifiers produce correct version kinds and traits`() {
+        val live = extractLocalRecordingVersion("Track (Live)")
+        assertEquals(VersionKind.LIVE, live.kind)
+        assertEquals(setOf(app.shippy.core.music.VersionTrait.LIVE), live.traits)
+
+        val remix = extractLocalRecordingVersion("Track [Club Remix]")
+        assertEquals(VersionKind.REMIX, remix.kind)
+        assertEquals(setOf(app.shippy.core.music.VersionTrait.REMIX), remix.traits)
+
+        val acoustic = extractLocalRecordingVersion("Track - Acoustic")
+        assertEquals(VersionKind.ACOUSTIC, acoustic.kind)
+        assertEquals(setOf(app.shippy.core.music.VersionTrait.ACOUSTIC), acoustic.traits)
+
+        val multi = extractLocalRecordingVersion("Track (Live Acoustic)")
+        assertEquals(VersionKind.LIVE, multi.kind)
+        assertEquals(
+            setOf(
+                app.shippy.core.music.VersionTrait.LIVE,
+                app.shippy.core.music.VersionTrait.ACOUSTIC,
+            ),
+            multi.traits,
+        )
+
+        val remaster = extractLocalRecordingVersion("Track (2021 Remaster)")
+        assertEquals(VersionKind.REMASTER, remaster.kind)
+        assertEquals(setOf(app.shippy.core.music.VersionTrait.REMASTERED), remaster.traits)
+
+        val unicodeDash = extractLocalRecordingVersion("Track — Instrumental")
+        assertEquals(VersionKind.INSTRUMENTAL, unicodeDash.kind)
+        assertEquals(setOf(app.shippy.core.music.VersionTrait.INSTRUMENTAL), unicodeDash.traits)
+    }
 }

@@ -85,9 +85,9 @@ internal class LibrarySystemCollectionAdapter(
                 }
             binding.collectionIcon.bindArtwork(
                 when (row.kind) {
-                    SystemCollectionKind.LIKED -> R.drawable.shippy_library_liked
-                    SystemCollectionKind.DOWNLOADS -> R.drawable.shippy_library_downloads
-                    SystemCollectionKind.LOCAL -> R.drawable.shippy_library_local
+                    SystemCollectionKind.LIKED -> R.drawable.shippy_collection_liked
+                    SystemCollectionKind.DOWNLOADS -> R.drawable.shippy_collection_downloaded
+                    SystemCollectionKind.LOCAL -> R.drawable.shippy_collection_local
                 },
                 binding.root.context.getString(titleRes),
             )
@@ -318,9 +318,9 @@ internal class UnifiedLibraryCollectionAdapter(
                 }
             binding.collectionIcon.bindArtwork(
                 when (collection.kind) {
-                    SystemCollectionKind.LIKED -> R.drawable.shippy_library_liked
-                    SystemCollectionKind.DOWNLOADS -> R.drawable.shippy_library_downloads
-                    SystemCollectionKind.LOCAL -> R.drawable.shippy_library_local
+                    SystemCollectionKind.LIKED -> R.drawable.shippy_collection_liked
+                    SystemCollectionKind.DOWNLOADS -> R.drawable.shippy_collection_downloaded
+                    SystemCollectionKind.LOCAL -> R.drawable.shippy_collection_local
                 },
                 binding.root.context.getString(titleRes),
             )

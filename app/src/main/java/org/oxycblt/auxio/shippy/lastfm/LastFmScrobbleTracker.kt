@@ -232,7 +232,14 @@ constructor(
     ) {
         deliveryMutex.withLock {
             flush()
-            dao.insert(entry.outbox(queueItemId, startedAt, clock.millis()))
+            val auth = credentials.load()
+            if (auth == null) {
+                publish(queueItemId, LastFmScrobbleStatusKind.Disabled)
+                return@withLock
+            }
+            val accountId = LastFmAccountId.hash(auth.username)
+
+            dao.insert(entry.outbox(queueItemId, accountId, startedAt, clock.millis()))
             publish(queueItemId, LastFmScrobbleStatusKind.Queued)
             flush()
         }
@@ -241,10 +248,13 @@ constructor(
     private suspend fun flush() {
         val auth = credentials.load() ?: return
         if (reauth.required.value) return
+
+        val accountId = LastFmAccountId.hash(auth.username)
+
         repeat(MAX_BATCHES_PER_FLUSH) {
-            val batch = dao.oldest(MAX_BATCH)
+            val batch = dao.oldest(accountId, MAX_BATCH)
             if (batch.isEmpty()) return
-            when (val result = client.scrobble(batch, auth)) {
+            when (val result = client.scrobble(batch.map { it.payload() }, auth)) {
                 is LastFmScrobbleResult.Delivered -> {
                     val terminalIds =
                         result.acceptedIds + result.ignored.mapTo(linkedSetOf()) { it.id }

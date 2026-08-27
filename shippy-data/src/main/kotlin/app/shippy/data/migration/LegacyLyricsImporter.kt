@@ -96,21 +96,23 @@ internal class LegacyLyricsImporter(private val database: ShippyR16Database) {
             }
 
             val last = rows.last()
+            val targetCounts =
+                audit.targetCountsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?: JSONObject()
+            targetCounts
+                .put("lyricsCache", database.legacyImportDao().lyricsCount())
+                .put(
+                    "checkpoint",
+                    JSONObject()
+                        .put("phase", LegacyImportPhase.LYRICS.code)
+                        .put("lastTrackId", last.trackId)
+                        .put("lastFingerprint", last.fingerprint),
+                )
             database
                 .migrationAuditDao()
                 .updateProgress(
                     migrationId = migrationId,
-                    targetCountsJson =
-                        JSONObject()
-                            .put("lyricsCache", database.legacyImportDao().lyricsCount())
-                            .put(
-                                "checkpoint",
-                                JSONObject()
-                                    .put("phase", LegacyImportPhase.LYRICS.code)
-                                    .put("lastTrackId", last.trackId)
-                                    .put("lastFingerprint", last.fingerprint),
-                            )
-                            .toString(),
+                    targetCountsJson = targetCounts.toString(),
                     warningsJson = appendLyricsWarnings(audit.warningsJson, warnings),
                     status = "IMPORTING",
                 )

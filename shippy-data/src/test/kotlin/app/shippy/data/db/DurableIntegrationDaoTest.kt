@@ -127,7 +127,7 @@ class DurableIntegrationDaoTest {
             MigrationAuditEntity(
                 migrationId = "migration-1",
                 sourceVersion = 10,
-                targetVersion = 1,
+                targetVersion = ShippyR16Database.SCHEMA_VERSION,
                 startedAtEpochMs = 1,
                 completedAtEpochMs = null,
                 sourceCountsJson = "{source}",
@@ -139,7 +139,10 @@ class DurableIntegrationDaoTest {
         database.migrationAuditDao().start(audit)
         assertEquals(
             "migration-1",
-            database.migrationAuditDao().latestIncomplete(10, 1)?.migrationId,
+            database
+                .migrationAuditDao()
+                .latestIncomplete(10, ShippyR16Database.SCHEMA_VERSION)
+                ?.migrationId,
         )
 
         database
@@ -249,6 +252,7 @@ class DurableIntegrationDaoTest {
     private fun scrobble(outboxId: String, listeningSessionId: String, queuedAt: Long) =
         LastFmScrobbleOutboxEntity(
             outboxId = outboxId,
+            accountId = "test_account",
             listeningSessionId = listeningSessionId,
             recordingId = "recording-1",
             artist = "Artist",

@@ -34,6 +34,7 @@ import org.oxycblt.auxio.shippy.lastfm.LastFmAuthResult
 import org.oxycblt.auxio.shippy.lastfm.LastFmCredentialRepository
 import org.oxycblt.auxio.shippy.lastfm.LastFmCredentials
 import org.oxycblt.auxio.shippy.lastfm.LastFmReauthState
+import org.oxycblt.auxio.shippy.lastfm.R16LastFmOutboxWorkScheduler
 
 /**
  * Drives the intentionally small Last.fm browser-authorization flow.
@@ -49,6 +50,7 @@ constructor(
     private val credentials: LastFmCredentialRepository,
     private val auth: LastFmAuthClient,
     private val reauth: LastFmReauthState,
+    private val r16OutboxWorkScheduler: R16LastFmOutboxWorkScheduler,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow<LastFmSettingsState>(LastFmSettingsState.Working)
     val state: StateFlow<LastFmSettingsState> = mutableState.asStateFlow()
@@ -110,6 +112,7 @@ constructor(
             try {
                 credentials.clear()
                 reauth.clear()
+                runCatching(r16OutboxWorkScheduler::cancel)
                 mutableState.value = LastFmSettingsState.Disconnected
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
@@ -197,6 +200,7 @@ constructor(
         try {
             credentials.save(value)
             reauth.clear()
+            runCatching(r16OutboxWorkScheduler::schedule)
             pendingAuthorization = null
             mutableState.value = LastFmSettingsState.Connected(value.username)
         } catch (error: Exception) {

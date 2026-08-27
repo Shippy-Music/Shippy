@@ -69,7 +69,7 @@ class R16ProviderObservationRepository(
         val capturedAt = clock.instant()
         return SourceDiscoverySnapshot(
             query = snapshot.query,
-            sections = snapshot.sections.map { it.toSourceSection(capturedAt) },
+            sections = snapshot.sections.mapNotNull { it.toSourceSection(capturedAt) },
         )
     }
 }
@@ -104,21 +104,9 @@ private fun ProviderDescriptor.namespace(): SourceNamespace? =
 
 private fun ProviderSearchSection.toSourceSection(
     capturedAt: java.time.Instant
-): SourceDiscoverySection {
+): SourceDiscoverySection? {
     val descriptor = SourceProviderDescriptor(ProviderId(provider.id.value), provider.displayName)
-    val namespace =
-        provider.namespace()
-            ?: return SourceDiscoverySection(
-                provider = descriptor,
-                tracks = emptyList(),
-                failure =
-                    SourceDiscoveryFailure(
-                        SourceDiscoveryFailureKind.UNSUPPORTED,
-                        retryable = false,
-                        message = "Provider has no R16 source namespace",
-                    ),
-                discardedTrackCount = tracks.size,
-            )
+    val namespace = provider.namespace() ?: return null
     failure?.let {
         return SourceDiscoverySection(
             provider = descriptor,

@@ -17,11 +17,16 @@
  */
 package org.oxycblt.auxio.shippy.r16.playback
 
+import app.shippy.core.identity.ListeningSessionId
 import app.shippy.core.identity.QueueEntryId
 import app.shippy.core.identity.RecordingId
 import app.shippy.core.identity.SourceReferenceId
+import app.shippy.core.listening.ActiveListeningSessionCheckpoint
+import app.shippy.core.listening.FinalizedListeningSession
+import app.shippy.core.listening.ListeningSessionCompletionReason
 import app.shippy.core.playback.CommittedEnginePhase
 import app.shippy.core.playback.PlaybackCommand
+import app.shippy.core.playback.PlaybackCommandRejection
 import app.shippy.core.playback.PlaybackCommandResult
 import app.shippy.core.playback.PlaybackSnapshot
 import app.shippy.core.playback.PlaybackSourceHandle
@@ -38,9 +43,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.oxycblt.auxio.shippy.lastfm.LastFmAccountId
 
 class PlaybackCoordinatorTest {
     @Test
@@ -107,6 +114,61 @@ class PlaybackCoordinatorTest {
             assertEquals(second.id, committed.committedQueueEntryId)
             coordinator.release()
         }
+
+    @Test
+    fun `resume current rejects an observed entry replaced before its serialized command`() =
+        runBlocking {
+            val engine = FakePlayerEngine(autoCommit = true)
+            val coordinator = PlaybackCoordinator(this, engine, ImmediateSourcePreparer())
+            val first = entry(1, recordingId(1))
+            val second = entry(2, recordingId(2))
+
+            coordinator.dispatch(PlaybackCommand.PlayContext(listOf(first, second), first.id))
+            coordinator.dispatch(PlaybackCommand.Pause)
+            coordinator.dispatch(PlaybackCommand.GoTo(second.id))
+
+            val result =
+                coordinator.dispatch(PlaybackCommand.ResumeCurrent(first.id, first.recordingId))
+
+            assertEquals(
+                PlaybackCommandResult.Rejected(PlaybackCommandRejection.ENTRY_NOT_FOUND),
+                result,
+            )
+            assertEquals(second.id, coordinator.snapshots.value.queue.currentQueueEntryId)
+            assertEquals(false, coordinator.snapshots.value.playWhenReady)
+            coordinator.release()
+        }
+
+    @Test
+    fun `retry current rejects after next advances before its serialized command`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = false)
+        val coordinator = PlaybackCoordinator(this, engine, ImmediateSourcePreparer())
+        val first = entry(1, recordingId(1))
+        val second = entry(2, recordingId(2))
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(listOf(first, second), first.id))
+        val transaction = withTimeout(TEST_TIMEOUT_MS) { engine.transactions.receive() }
+        engine.emit(
+            PlayerObservation.Failed(
+                transaction.tag.generation,
+                first.id,
+                app.shippy.core.playback.PlaybackError("SOURCE_UNAVAILABLE", retryable = true),
+            )
+        )
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first {
+                it.phase is app.shippy.core.playback.PlaybackPhase.Failed
+            }
+        }
+
+        assertTrue(coordinator.dispatch(PlaybackCommand.Next) is PlaybackCommandResult.Accepted)
+        assertEquals(
+            PlaybackCommandResult.Rejected(PlaybackCommandRejection.ENTRY_NOT_FOUND),
+            coordinator.dispatch(PlaybackCommand.RetryCurrent(first.id, first.recordingId)),
+        )
+        assertEquals(second.id, coordinator.snapshots.value.queue.currentQueueEntryId)
+        coordinator.release()
+    }
 
     @Test
     fun `shuffle and repeat navigation preserve occurrence identity and deterministic order`() =
@@ -212,7 +274,14 @@ class PlaybackCoordinatorTest {
     @Test
     fun `automatic engine transition commits the next window occurrence`() = runBlocking {
         val engine = FakePlayerEngine(autoCommit = true)
-        val coordinator = PlaybackCoordinator(this, engine, ImmediateSourcePreparer())
+        val finalized = Channel<FinalizedListeningSession>(1)
+        val coordinator =
+            PlaybackCoordinator(
+                this,
+                engine,
+                ImmediateSourcePreparer(),
+                listeningSessionSink = ListeningSessionSink { finalized.trySend(it) },
+            )
         val entries = (1..3).map { entry(it, recordingId(it)) }
 
         coordinator.dispatch(PlaybackCommand.PlayContext(entries, entries[0].id))
@@ -236,6 +305,9 @@ class PlaybackCoordinatorTest {
             }
         assertEquals(entries[1].id, advanced.queue.currentQueueEntryId)
         assertEquals(entries[1].id, advanced.committedQueueEntryId)
+        val completed = withTimeout(TEST_TIMEOUT_MS) { finalized.receive() }
+        assertEquals(entries[0].id, completed.queueEntryId)
+        assertEquals(ListeningSessionCompletionReason.NATURAL_END, completed.completionReason)
         coordinator.release()
     }
 
@@ -316,8 +388,12 @@ class PlaybackCoordinatorTest {
     @Test
     fun `continuous playing ticks finalize monotonic audible time`() = runBlocking {
         val engine = FakePlayerEngine(autoCommit = true)
-        val clock = FakePlaybackClock(elapsedRealtimeMs = 1_000)
-        val finalized = Channel<app.shippy.core.listening.ActiveListeningSession>(1)
+        val clock =
+            FakePlaybackClock(
+                elapsedRealtimeMs = 1_000,
+                wallClockValue = Instant.parse("2026-08-20T00:00:05Z"),
+            )
+        val finalized = Channel<FinalizedListeningSession>(1)
         val coordinator =
             PlaybackCoordinator(
                 this,
@@ -329,6 +405,8 @@ class PlaybackCoordinatorTest {
                         Unit
                     },
                 playbackClock = clock,
+                listeningSessionIdFactory =
+                    ListeningSessionIdFactory { ListeningSessionId(idValue(501)) },
                 listeningTickIntervalMs = 10,
             )
         val selected = entry(1, recordingId(1))
@@ -352,6 +430,7 @@ class PlaybackCoordinatorTest {
         }
         clock.elapsedRealtimeMs = 6_000
         delay(30)
+        clock.wallClockValue = Instant.parse("2026-08-19T00:00:05Z")
         engine.emit(
             PlayerObservation.PhaseChanged(
                 committed.generation,
@@ -361,10 +440,261 @@ class PlaybackCoordinatorTest {
         )
 
         val session = withTimeout(TEST_TIMEOUT_MS) { finalized.receive() }
+        assertEquals(ListeningSessionId(idValue(501)), session.sessionId)
         assertEquals(selected.id, session.queueEntryId)
-        assertEquals(5_000L, session.audibleTime.accumulatedAudibleMs)
+        assertEquals(recordingId(1), session.recordingId)
+        assertEquals(SourceReferenceId(recordingId(1).value), session.sourceReferenceId)
+        assertEquals(5_000L, session.activeListenedMs)
+        assertEquals(0L, session.lastPositionMs)
+        assertEquals(Instant.parse("2026-08-20T00:00:05Z"), session.endedAtWallClock)
+        assertEquals(ListeningSessionCompletionReason.NATURAL_END, session.completionReason)
         coordinator.release()
     }
+
+    @Test
+    fun `listening checkpoints are interval bounded and capture a pause`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val clock = FakePlaybackClock(elapsedRealtimeMs = 1_000)
+        val finalized = Channel<FinalizedListeningSession>(1)
+        val checkpoints = Channel<ActiveListeningSessionCheckpoint>(Channel.UNLIMITED)
+        val sink =
+            object : ListeningSessionSink {
+                override suspend fun offer(session: FinalizedListeningSession) {
+                    finalized.trySend(session)
+                }
+
+                override fun offerCheckpoint(checkpoint: ActiveListeningSessionCheckpoint) {
+                    checkpoints.trySend(checkpoint)
+                }
+            }
+        val coordinator =
+            PlaybackCoordinator(
+                this,
+                engine,
+                ImmediateSourcePreparer(),
+                listeningSessionSink = sink,
+                playbackClock = clock,
+                listeningSessionIdFactory =
+                    ListeningSessionIdFactory { ListeningSessionId(idValue(701)) },
+                listeningTickIntervalMs = 10,
+                listeningCheckpointIntervalMs = 5_000,
+            )
+        val selected = entry(1, recordingId(1))
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(listOf(selected), selected.id))
+        val committed =
+            withTimeout(TEST_TIMEOUT_MS) {
+                coordinator.snapshots.first { it.committedQueueEntryId == selected.id }
+            }
+        engine.emit(
+            PlayerObservation.PhaseChanged(
+                committed.generation,
+                selected.id,
+                CommittedEnginePhase.PLAYING,
+            )
+        )
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first {
+                it.phase == app.shippy.core.playback.PlaybackPhase.Playing(selected.id)
+            }
+        }
+
+        clock.elapsedRealtimeMs = 4_000
+        delay(40)
+        assertTrue(checkpoints.tryReceive().isFailure)
+
+        engine.emit(
+            PlayerObservation.PositionChanged(
+                generation = committed.generation,
+                queueEntryId = selected.id,
+                position = PositionAnchor(1_234, 0, playbackSpeed = 1.0, advancing = true),
+            )
+        )
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first { it.position.positionMs == 1_234L }
+        }
+        clock.elapsedRealtimeMs = 6_100
+        val intervalCheckpoint = withTimeout(TEST_TIMEOUT_MS) { checkpoints.receive() }
+        assertEquals(ListeningSessionId(idValue(701)), intervalCheckpoint.sessionId)
+        assertEquals(selected.id, intervalCheckpoint.queueEntryId)
+        assertEquals(recordingId(1), intervalCheckpoint.recordingId)
+        assertEquals(SourceReferenceId(recordingId(1).value), intervalCheckpoint.sourceReferenceId)
+        assertEquals(5_100L, intervalCheckpoint.activeListenedMs)
+        assertEquals(1_234L, intervalCheckpoint.lastPositionMs)
+        assertTrue(checkpoints.tryReceive().isFailure)
+
+        clock.elapsedRealtimeMs = 7_000
+        engine.emit(
+            PlayerObservation.PhaseChanged(
+                committed.generation,
+                selected.id,
+                CommittedEnginePhase.READY,
+            )
+        )
+        val pausedCheckpoint = withTimeout(TEST_TIMEOUT_MS) { checkpoints.receive() }
+        assertEquals(6_000L, pausedCheckpoint.activeListenedMs)
+        assertEquals(1_234L, pausedCheckpoint.lastPositionMs)
+        coordinator.release()
+    }
+
+    @Test
+    fun `replacement clear and release preserve close reason and queue identity`() = runBlocking {
+        val engine = FakePlayerEngine(autoCommit = true)
+        val clock = FakePlaybackClock(elapsedRealtimeMs = 1_000)
+        val finalized = Channel<FinalizedListeningSession>(Channel.UNLIMITED)
+        var nextSessionId = 900
+        val coordinator =
+            PlaybackCoordinator(
+                this,
+                engine,
+                ImmediateSourcePreparer(),
+                listeningSessionSink = ListeningSessionSink { finalized.trySend(it) },
+                playbackClock = clock,
+                listeningSessionIdFactory =
+                    ListeningSessionIdFactory { ListeningSessionId(idValue(nextSessionId++)) },
+            )
+        val first = entry(1, recordingId(1))
+        val second = entry(2, recordingId(2))
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(listOf(first), first.id))
+        val firstCommitted =
+            withTimeout(TEST_TIMEOUT_MS) {
+                coordinator.snapshots.first { it.committedQueueEntryId == first.id }
+            }
+        engine.emit(
+            PlayerObservation.PositionChanged(
+                generation = firstCommitted.generation,
+                queueEntryId = first.id,
+                position = PositionAnchor(27_000, 0, playbackSpeed = 1.0, advancing = false),
+            )
+        )
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first { it.position.positionMs == 27_000L }
+        }
+        coordinator.dispatch(PlaybackCommand.PlayContext(listOf(second), second.id))
+        val replaced = withTimeout(TEST_TIMEOUT_MS) { finalized.receive() }
+        assertEquals(ListeningSessionId(idValue(900)), replaced.sessionId)
+        assertEquals(first.id, replaced.queueEntryId)
+        assertEquals(recordingId(1), replaced.recordingId)
+        assertEquals(27_000L, replaced.lastPositionMs)
+        assertEquals(ListeningSessionCompletionReason.QUEUE_REPLACED, replaced.completionReason)
+
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first { it.committedQueueEntryId == second.id }
+        }
+        coordinator.dispatch(PlaybackCommand.Clear)
+        val cleared = withTimeout(TEST_TIMEOUT_MS) { finalized.receive() }
+        assertEquals(ListeningSessionId(idValue(901)), cleared.sessionId)
+        assertEquals(second.id, cleared.queueEntryId)
+        assertEquals(ListeningSessionCompletionReason.CLEARED, cleared.completionReason)
+
+        coordinator.dispatch(PlaybackCommand.PlayContext(listOf(first), first.id))
+        withTimeout(TEST_TIMEOUT_MS) {
+            coordinator.snapshots.first { it.committedQueueEntryId == first.id }
+        }
+        coordinator.release()
+        val released = withTimeout(TEST_TIMEOUT_MS) { finalized.receive() }
+        assertEquals(ListeningSessionId(idValue(902)), released.sessionId)
+        assertEquals(first.id, released.queueEntryId)
+        assertEquals(ListeningSessionCompletionReason.RELEASED, released.completionReason)
+    }
+
+    @Test
+    fun `session captures identity at start and mid-track account switch does not change finalized session accountId`() =
+        runBlocking {
+            val engine = FakePlayerEngine(autoCommit = true)
+            val finalized = Channel<FinalizedListeningSession>(Channel.UNLIMITED)
+            val checkpoints = Channel<ActiveListeningSessionCheckpoint>(Channel.UNLIMITED)
+            var currentIdentity =
+                ListeningSessionIdentity(
+                    scrobbleAuthorized = true,
+                    accountId = LastFmAccountId.hash("alice"),
+                )
+            val coordinator =
+                PlaybackCoordinator(
+                    this,
+                    engine,
+                    ImmediateSourcePreparer(),
+                    listeningSessionSink =
+                        object : ListeningSessionSink {
+                            override suspend fun offer(session: FinalizedListeningSession) {
+                                finalized.trySend(session)
+                            }
+
+                            override fun offerCheckpoint(
+                                checkpoint: ActiveListeningSessionCheckpoint
+                            ) {
+                                checkpoints.trySend(checkpoint)
+                            }
+                        },
+                    listeningSessionIdentityProvider = { currentIdentity },
+                )
+            val first = entry(1, recordingId(1))
+
+            coordinator.dispatch(PlaybackCommand.PlayContext(listOf(first), first.id))
+            val committed =
+                withTimeout(TEST_TIMEOUT_MS) {
+                    coordinator.snapshots.first { it.committedQueueEntryId == first.id }
+                }
+            engine.emit(
+                PlayerObservation.PhaseChanged(
+                    committed.generation,
+                    first.id,
+                    CommittedEnginePhase.PLAYING,
+                )
+            )
+
+            // User switches accounts mid-track
+            currentIdentity =
+                ListeningSessionIdentity(
+                    scrobbleAuthorized = true,
+                    accountId = LastFmAccountId.hash("bob"),
+                )
+
+            // Pause triggers checkpoint
+            engine.emit(
+                PlayerObservation.PhaseChanged(
+                    committed.generation,
+                    first.id,
+                    CommittedEnginePhase.READY,
+                )
+            )
+            val checkpoint = withTimeout(TEST_TIMEOUT_MS) { checkpoints.receive() }
+            assertTrue(checkpoint.scrobbleAuthorized)
+            assertEquals(LastFmAccountId.hash("alice"), checkpoint.accountId)
+
+            // End session
+            coordinator.release()
+            val session = withTimeout(TEST_TIMEOUT_MS) { finalized.receive() }
+            assertTrue(session.scrobbleAuthorized)
+            assertEquals(LastFmAccountId.hash("alice"), session.accountId)
+        }
+
+    @Test
+    fun `unauthorized listening session captures unauthorized state and null accountId`() =
+        runBlocking {
+            val engine = FakePlayerEngine(autoCommit = true)
+            val finalized = Channel<FinalizedListeningSession>(1)
+            val coordinator =
+                PlaybackCoordinator(
+                    this,
+                    engine,
+                    ImmediateSourcePreparer(),
+                    listeningSessionSink = ListeningSessionSink { finalized.trySend(it) },
+                    listeningSessionIdentityProvider = NoOpListeningSessionIdentityProvider,
+                )
+            val first = entry(1, recordingId(1))
+
+            coordinator.dispatch(PlaybackCommand.PlayContext(listOf(first), first.id))
+            withTimeout(TEST_TIMEOUT_MS) {
+                coordinator.snapshots.first { it.committedQueueEntryId == first.id }
+            }
+
+            coordinator.release()
+            val session = withTimeout(TEST_TIMEOUT_MS) { finalized.receive() }
+            assertFalse(session.scrobbleAuthorized)
+            assertNull(session.accountId)
+        }
 
     @Test
     fun `ten thousand entry queue prepares only the bounded engine window`() = runBlocking {
@@ -516,10 +846,13 @@ private class CountingSourcePreparer : PlaybackSourcePreparer {
     }
 }
 
-private class FakePlaybackClock(var elapsedRealtimeMs: Long) : PlaybackClock {
+private class FakePlaybackClock(
+    var elapsedRealtimeMs: Long,
+    var wallClockValue: Instant = Instant.EPOCH,
+) : PlaybackClock {
     override fun elapsedRealtimeMs(): Long = elapsedRealtimeMs
 
-    override fun wallClock(): Instant = Instant.EPOCH
+    override fun wallClock(): Instant = wallClockValue
 }
 
 private class FakePlayerEngine(private val autoCommit: Boolean) : PlayerEngine {

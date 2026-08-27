@@ -17,6 +17,7 @@
  */
 package app.shippy.data.db.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
@@ -28,6 +29,11 @@ import app.shippy.data.db.entity.PlaylistEntity
 import app.shippy.data.db.entity.PlaylistEntryEntity
 import app.shippy.data.db.util.SparseOrderKey
 import kotlinx.coroutines.flow.Flow
+
+internal data class PlaylistRecordingMembership(
+    @ColumnInfo(name = "playlist_id") val playlistId: String,
+    @ColumnInfo(name = "occurrence_count") val occurrenceCount: Int,
+)
 
 @Dao
 internal abstract class PlaylistDao {
@@ -48,6 +54,48 @@ internal abstract class PlaylistDao {
 
     @Query(
         """
+        SELECT playlist_id, COUNT(*) AS occurrence_count
+        FROM playlist_entry
+        WHERE recording_id = :recordingId
+        GROUP BY playlist_id
+        """
+    )
+    abstract fun observeRecordingMemberships(
+        recordingId: String
+    ): Flow<List<PlaylistRecordingMembership>>
+
+    @Query(
+        """
+        DELETE FROM playlist_entry
+        WHERE playlist_id = :playlistId AND recording_id = :recordingId
+        """
+    )
+    abstract suspend fun deleteEntriesForRecording(playlistId: String, recordingId: String): Int
+
+    @Query("SELECT * FROM playlist_entry WHERE recording_id = :recordingId")
+    abstract suspend fun entriesForRecording(recordingId: String): List<PlaylistEntryEntity>
+
+    @Query("SELECT * FROM playlist_entry WHERE playlist_entry_id = :playlistEntryId")
+    abstract suspend fun entry(playlistEntryId: String): PlaylistEntryEntity?
+
+    @Query(
+        "UPDATE playlist_entry SET recording_id = :newRecordingId WHERE playlist_entry_id = :playlistEntryId"
+    )
+    abstract suspend fun reassignEntryRecordingId(
+        playlistEntryId: String,
+        newRecordingId: String,
+    ): Int
+
+    @Query(
+        "UPDATE playlist_entry SET recording_id = :newRecordingId WHERE recording_id = :oldRecordingId"
+    )
+    abstract suspend fun reassignEntriesForRecording(
+        oldRecordingId: String,
+        newRecordingId: String,
+    ): Int
+
+    @Query(
+        """
         SELECT * FROM playlist_entry
         WHERE playlist_id = :playlistId
         ORDER BY order_key, playlist_entry_id
@@ -55,27 +103,165 @@ internal abstract class PlaylistDao {
     )
     abstract suspend fun entries(playlistId: String): List<PlaylistEntryEntity>
 
+    /** The current append anchor without materializing the entire playlist in the common case. */
+    @Query(
+        """
+        SELECT * FROM playlist_entry
+        WHERE playlist_id = :playlistId
+        ORDER BY order_key DESC, playlist_entry_id DESC
+        LIMIT 1
+        """
+    )
+    abstract suspend fun lastEntry(playlistId: String): PlaylistEntryEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     protected abstract suspend fun insertPlaylist(entity: PlaylistEntity)
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     abstract suspend fun insertEntries(entities: List<PlaylistEntryEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    abstract suspend fun insertEntry(entity: PlaylistEntryEntity)
+
     @Update protected abstract suspend fun updateEntries(entities: List<PlaylistEntryEntity>)
+
+    /** Rewrites only order keys for the exact current playlist occurrences. */
+    suspend fun rekeyEntries(entries: List<PlaylistEntryEntity>) {
+        if (entries.isNotEmpty()) updateEntries(entries)
+    }
 
     @Query(
         """
-        UPDATE playlist_entry SET order_key = :orderKey
+        SELECT * FROM playlist_entry
         WHERE playlist_id = :playlistId AND playlist_entry_id = :playlistEntryId
+        LIMIT 1
         """
     )
-    protected abstract suspend fun updateOrderKey(
+    protected abstract suspend fun exactEntry(
+        playlistId: String,
+        playlistEntryId: String,
+    ): PlaylistEntryEntity?
+
+    @Query(
+        """
+        SELECT * FROM playlist_entry
+        WHERE playlist_id = :playlistId
+          AND (
+            order_key < :orderKey
+            OR (order_key = :orderKey AND playlist_entry_id < :playlistEntryId)
+          )
+        ORDER BY order_key DESC, playlist_entry_id DESC
+        LIMIT 1
+        """
+    )
+    protected abstract suspend fun previousEntry(
         playlistId: String,
         playlistEntryId: String,
         orderKey: Long,
+    ): PlaylistEntryEntity?
+
+    @Query(
+        """
+        SELECT * FROM playlist_entry
+        WHERE playlist_id = :playlistId
+          AND (
+            order_key > :orderKey
+            OR (order_key = :orderKey AND playlist_entry_id > :playlistEntryId)
+          )
+        ORDER BY order_key, playlist_entry_id
+        LIMIT 1
+        """
+    )
+    protected abstract suspend fun nextEntry(
+        playlistId: String,
+        playlistEntryId: String,
+        orderKey: Long,
+    ): PlaylistEntryEntity?
+
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM playlist_entry
+            WHERE playlist_id = :playlistId
+              AND order_key IN (:firstOrderKey, :secondOrderKey)
+              AND playlist_entry_id NOT IN (:firstEntryId, :secondEntryId)
+        )
+        """
+    )
+    protected abstract suspend fun hasThirdEntryAtEitherOrderKey(
+        playlistId: String,
+        firstEntryId: String,
+        firstOrderKey: Long,
+        secondEntryId: String,
+        secondOrderKey: Long,
+    ): Boolean
+
+    @Query(
+        """
+        UPDATE playlist_entry
+        SET order_key = CASE playlist_entry_id
+            WHEN :firstEntryId THEN :secondOrderKey
+            WHEN :secondEntryId THEN :firstOrderKey
+            ELSE order_key
+        END
+        WHERE playlist_id = :playlistId
+          AND playlist_entry_id IN (:firstEntryId, :secondEntryId)
+        """
+    )
+    protected abstract suspend fun swapOrderKeys(
+        playlistId: String,
+        firstEntryId: String,
+        firstOrderKey: Long,
+        secondEntryId: String,
+        secondOrderKey: Long,
     ): Int
 
     @Delete abstract suspend fun deleteEntries(entities: List<PlaylistEntryEntity>)
+
+    @Query(
+        """
+        DELETE FROM playlist_entry
+        WHERE playlist_id = :playlistId AND playlist_entry_id = :playlistEntryId
+        """
+    )
+    abstract suspend fun deleteEntry(playlistId: String, playlistEntryId: String): Int
+
+    @Query(
+        """
+        DELETE FROM playlist_entry
+        WHERE playlist_id = :playlistId AND playlist_entry_id IN (:playlistEntryIds)
+        """
+    )
+    abstract suspend fun deleteEntriesByIds(playlistId: String, playlistEntryIds: Set<String>): Int
+
+    @Query(
+        """
+        UPDATE playlist
+        SET name = :name, updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE playlist_id = :playlistId
+        """
+    )
+    abstract suspend fun renamePlaylist(
+        playlistId: String,
+        name: String,
+        updatedAtEpochMs: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE playlist
+        SET display_sort_mode = :displaySortMode,
+            display_sort_direction = :displaySortDirection,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE playlist_id = :playlistId
+        """
+    )
+    abstract suspend fun updateDisplaySort(
+        playlistId: String,
+        displaySortMode: String,
+        displaySortDirection: String,
+        updatedAtEpochMs: Long,
+    ): Int
 
     @Query("DELETE FROM playlist WHERE playlist_id = :playlistId")
     abstract suspend fun deletePlaylist(playlistId: String): Int
@@ -108,64 +294,72 @@ internal abstract class PlaylistDao {
     }
 
     @Transaction
-    open suspend fun moveBetween(
+    open suspend fun moveAdjacent(
         playlistId: String,
         playlistEntryId: String,
-        beforeEntryId: String?,
-        afterEntryId: String?,
-    ) {
-        require(playlistEntryId != beforeEntryId && playlistEntryId != afterEntryId) {
-            "Moved occurrence cannot be its own anchor"
-        }
-        val current = entries(playlistId)
+        direction: PlaylistAdjacentMoveDirection,
+    ): PlaylistAdjacentMoveResult {
         val moving =
-            current.singleOrNull { it.playlistEntryId == playlistEntryId }
-                ?: error("Playlist occurrence is missing")
-        val remaining = current.filterNot { it.playlistEntryId == playlistEntryId }
-        val insertionIndex = insertionIndex(remaining, beforeEntryId, afterEntryId)
-        val before = remaining.getOrNull(insertionIndex - 1)
-        val after = remaining.getOrNull(insertionIndex)
-        val sparseKey = SparseOrderKey.between(before?.orderKey, after?.orderKey)
-        if (sparseKey != null) {
-            check(updateOrderKey(playlistId, playlistEntryId, sparseKey) == 1) {
-                "Playlist occurrence disappeared during move"
+            exactEntry(playlistId, playlistEntryId) ?: return PlaylistAdjacentMoveResult.NOT_FOUND
+        val neighbor =
+            when (direction) {
+                PlaylistAdjacentMoveDirection.TOWARD_START ->
+                    previousEntry(playlistId, moving.playlistEntryId, moving.orderKey)
+                PlaylistAdjacentMoveDirection.TOWARD_END ->
+                    nextEntry(playlistId, moving.playlistEntryId, moving.orderKey)
+            } ?: return PlaylistAdjacentMoveResult.AT_BOUNDARY
+
+        val involvedKeyIsShared =
+            hasThirdEntryAtEitherOrderKey(
+                playlistId = playlistId,
+                firstEntryId = moving.playlistEntryId,
+                firstOrderKey = moving.orderKey,
+                secondEntryId = neighbor.playlistEntryId,
+                secondOrderKey = neighbor.orderKey,
+            )
+        if (moving.orderKey != neighbor.orderKey && !involvedKeyIsShared) {
+            check(
+                swapOrderKeys(
+                    playlistId = playlistId,
+                    firstEntryId = moving.playlistEntryId,
+                    firstOrderKey = moving.orderKey,
+                    secondEntryId = neighbor.playlistEntryId,
+                    secondOrderKey = neighbor.orderKey,
+                ) == 2
+            ) {
+                "Playlist occurrences disappeared during adjacent move"
             }
-            return
+            return PlaylistAdjacentMoveResult.MOVED
         }
 
-        val reordered = remaining.toMutableList().apply { add(insertionIndex, moving) }
+        // Imported/corrupt tied keys can turn a two-row swap into a multi-position jump.
+        // Repair only this playlist, retaining the exact adjacent intent.
+        val reordered = entries(playlistId).toMutableList()
+        val movingIndex = reordered.indexOfFirst { it.playlistEntryId == moving.playlistEntryId }
+        val neighborIndex =
+            reordered.indexOfFirst { it.playlistEntryId == neighbor.playlistEntryId }
+        check(
+            movingIndex >= 0 &&
+                neighborIndex >= 0 &&
+                kotlin.math.abs(movingIndex - neighborIndex) == 1
+        ) {
+            "Adjacent playlist occurrences changed during move"
+        }
+        reordered[movingIndex] = neighbor
+        reordered[neighborIndex] = moving
         val keys = SparseOrderKey.rebalancedKeys(reordered.size)
         updateEntries(reordered.mapIndexed { index, entry -> entry.copy(orderKey = keys[index]) })
+        return PlaylistAdjacentMoveResult.MOVED
     }
+}
 
-    private fun insertionIndex(
-        remaining: List<PlaylistEntryEntity>,
-        beforeEntryId: String?,
-        afterEntryId: String?,
-    ): Int {
-        if (remaining.isEmpty()) {
-            require(beforeEntryId == null && afterEntryId == null) {
-                "An empty playlist move cannot have anchors"
-            }
-            return 0
-        }
-        if (beforeEntryId == null) {
-            require(afterEntryId == remaining.first().playlistEntryId) {
-                "Start move must anchor the current first occurrence"
-            }
-            return 0
-        }
-        if (afterEntryId == null) {
-            require(beforeEntryId == remaining.last().playlistEntryId) {
-                "End move must anchor the current last occurrence"
-            }
-            return remaining.size
-        }
-        val beforeIndex = remaining.indexOfFirst { it.playlistEntryId == beforeEntryId }
-        val afterIndex = remaining.indexOfFirst { it.playlistEntryId == afterEntryId }
-        require(beforeIndex >= 0 && afterIndex == beforeIndex + 1) {
-            "Move anchors must be adjacent playlist occurrences"
-        }
-        return afterIndex
-    }
+internal enum class PlaylistAdjacentMoveDirection {
+    TOWARD_START,
+    TOWARD_END,
+}
+
+internal enum class PlaylistAdjacentMoveResult {
+    MOVED,
+    AT_BOUNDARY,
+    NOT_FOUND,
 }

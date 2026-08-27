@@ -20,7 +20,11 @@ package org.oxycblt.auxio.music
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 
+@RunWith(RobolectricTestRunner::class)
 class ManagedDownloadFilteringFSTest {
     @Test
     fun `exact managed URI suppresses only registered bytes`() {
@@ -44,5 +48,22 @@ class ManagedDownloadFilteringFSTest {
         assertTrue(index.contains("content://documents/pending", path = null, contentLength = 7))
         assertFalse(index.contains("content://documents/managed", path = null, contentLength = 99))
         assertFalse(index.contains("content://documents/user", path = null, contentLength = 100))
+    }
+
+    @Test
+    fun `exact R16 pending URI suppresses any observed length`() {
+        val index =
+            ManagedDownloadFileIndex.from(
+                context = RuntimeEnvironment.getApplication(),
+                downloads = emptyList(),
+                r16PendingLocations = listOf("content://documents/r16-pending"),
+            )
+
+        assertTrue(
+            index.contains("content://documents/r16-pending", path = null, contentLength = 7)
+        )
+        assertFalse(
+            index.contains("content://documents/r16-unregistered", path = null, contentLength = 7)
+        )
     }
 }

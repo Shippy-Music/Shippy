@@ -1,3 +1,18 @@
+## Shippy R16 Beta 1
+
+- Introduces Shippy's independent `com.rtx09x.shippy` application identity.
+- Adds the R16 canonical library, migration, playback, search, offline, backup,
+  history, and Last.fm foundations.
+- Refreshes Shippy branding, launcher artwork, splash screen, and built-in
+  collection artwork while retaining the established native Android UI feel.
+- Hardens queue identity, artwork consistency, local/download filtering,
+  playback caching, scrobble delivery, and large-library behavior.
+- Adds focused regression coverage, database migration schemas, paging,
+  baseline-profile, and macrobenchmark infrastructure.
+
+> Beta note: automated checks cover the repository, but broader device,
+> migration-fixture, provider-drift, and multi-device Crew testing continues.
+
 ## Shippy Alpha Release 1
 
 Shippy's first public alpha combines an Android-native local player with a

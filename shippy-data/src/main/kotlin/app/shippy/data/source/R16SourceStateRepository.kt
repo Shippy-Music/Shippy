@@ -38,6 +38,8 @@ import kotlinx.coroutines.flow.map
 interface R16SourceStateRepository {
     fun observe(recordingId: RecordingId): Flow<List<SourceReference>>
 
+    suspend fun get(sourceReferenceId: SourceReferenceId): SourceReference?
+
     suspend fun exact(key: SourceKey): SourceReference?
 
     suspend fun updateAvailability(
@@ -53,6 +55,9 @@ internal class RoomR16SourceStateRepository(private val database: ShippyR16Datab
         database.sourceDao().observeForRecording(recordingId.value).map { sources ->
             sources.map(SourceReferenceEntity::toDomain)
         }
+
+    override suspend fun get(sourceReferenceId: SourceReferenceId): SourceReference? =
+        database.sourceDao().get(sourceReferenceId.value)?.toDomain()
 
     override suspend fun exact(key: SourceKey): SourceReference? =
         database

@@ -30,7 +30,7 @@ internal data class LegacySchemaSnapshot(
     val rowCounts: Map<String, Long>,
 ) {
     val compatible: Boolean
-        get() = version == LEGACY_SCHEMA_VERSION && missingRequiredTables.isEmpty()
+        get() = version in SUPPORTED_LEGACY_SCHEMA_VERSIONS && missingRequiredTables.isEmpty()
 }
 
 internal data class LegacyCanonicalTrackRow(
@@ -180,8 +180,13 @@ internal data class LegacyCrewCheckpointRow(
     val updatedAtEpochMs: Long,
 )
 
-internal class LegacyDatabaseReader private constructor(private val database: SQLiteDatabase) :
-    Closeable {
+internal class LegacyDatabaseReader
+private constructor(
+    private val database: SQLiteDatabase,
+    private val onPlaylistMembershipQuery: (() -> Unit)? = null,
+) : Closeable {
+    private var playlistMembershipStream: LegacyPlaylistMembershipStream? = null
+
     init {
         check(database.isReadOnly) { "Legacy database must be opened read-only" }
     }
@@ -407,6 +412,10 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
             }
     }
 
+    /**
+     * Streams one ordered legacy result set so page calls do not re-run a per-row rank query. A new
+     * reader scans once to the persisted key, preserving process-death resume semantics.
+     */
     fun playlistMemberships(
         afterPlaylistId: String?,
         afterPosition: Int?,
@@ -418,64 +427,41 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
         require(checkpointParts.all { it == null } || checkpointParts.all { it != null }) {
             "Legacy playlist-membership checkpoint must contain all key parts"
         }
-        val selection =
-            if (afterPlaylistId == null) {
-                ""
-            } else {
-                """
-                WHERE membership.playlistId > ?
-                   OR (membership.playlistId = ? AND membership.position > ?)
-                   OR (membership.playlistId = ? AND membership.position = ?
-                       AND membership.trackId > ?)
-                """
-                    .trimIndent()
-            }
-        val arguments =
-            if (afterPlaylistId == null) {
-                emptyArray()
-            } else {
-                arrayOf(
-                    afterPlaylistId,
-                    afterPlaylistId,
-                    checkNotNull(afterPosition).toString(),
-                    afterPlaylistId,
-                    afterPosition.toString(),
-                    checkNotNull(afterTrackId),
+        val after =
+            afterPlaylistId?.let {
+                MembershipKey(
+                    playlistId = it,
+                    position = checkNotNull(afterPosition),
+                    trackId = checkNotNull(afterTrackId),
                 )
             }
-        return database
-            .rawQuery(
-                """
-                SELECT membership.trackId, membership.playlistId, membership.position,
-                       (
-                           SELECT COUNT(*) FROM playlist_membership AS preceding
-                           WHERE preceding.playlistId = membership.playlistId
-                             AND (preceding.position < membership.position
-                                  OR (preceding.position = membership.position
-                                      AND preceding.trackId < membership.trackId))
-                       ) AS orderOrdinal
-                FROM playlist_membership AS membership
-                $selection
-                ORDER BY membership.playlistId, membership.position, membership.trackId
-                LIMIT $limit
-                """
-                    .trimIndent(),
-                arguments,
-            )
-            .useRows { cursor ->
-                buildList {
-                    while (cursor.moveToNext()) {
-                        add(
-                            LegacyPlaylistMembershipRow(
-                                trackId = cursor.getString(0),
-                                playlistId = cursor.getString(1),
-                                position = cursor.getInt(2),
-                                orderOrdinal = cursor.getLong(3),
+        val stream =
+            playlistMembershipStream?.takeIf { it.lastReturnedKey == after }
+                ?: LegacyPlaylistMembershipStream(
+                        database
+                            .rawQuery(
+                                """
+                                SELECT membership.trackId, membership.playlistId, membership.position
+                                FROM playlist_membership AS membership
+                                ORDER BY membership.playlistId, membership.position, membership.trackId
+                                """
+                                    .trimIndent(),
+                                emptyArray(),
                             )
-                        )
+                            .also { onPlaylistMembershipQuery?.invoke() }
+                    )
+                    .also { newStream ->
+                        playlistMembershipStream?.close()
+                        playlistMembershipStream = newStream
+                        newStream.skipThrough(after)
                     }
-                }
+        playlistMembershipStream = stream
+        return buildList(limit) {
+            while (size < limit) {
+                val row = stream.next() ?: break
+                add(row)
             }
+        }
     }
 
     fun downloadJobs(afterJobId: String?, limit: Int): List<LegacyDownloadJobRow> {
@@ -862,6 +848,8 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
     }
 
     override fun close() {
+        playlistMembershipStream?.close()
+        playlistMembershipStream = null
         database.close()
     }
 
@@ -881,6 +869,18 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
 
     companion object {
         fun openReadOnly(file: File): LegacyDatabaseReader {
+            return openReadOnly(file, null)
+        }
+
+        internal fun openReadOnlyForTesting(
+            file: File,
+            onPlaylistMembershipQuery: () -> Unit,
+        ): LegacyDatabaseReader = openReadOnly(file, onPlaylistMembershipQuery)
+
+        private fun openReadOnly(
+            file: File,
+            onPlaylistMembershipQuery: (() -> Unit)?,
+        ): LegacyDatabaseReader {
             require(file.isFile) { "Legacy database file is missing" }
             val database =
                 SQLiteDatabase.openDatabase(
@@ -888,10 +888,63 @@ internal class LegacyDatabaseReader private constructor(private val database: SQ
                     null,
                     SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
                 )
-            return LegacyDatabaseReader(database)
+            return LegacyDatabaseReader(database, onPlaylistMembershipQuery)
         }
     }
 }
+
+private data class MembershipKey(val playlistId: String, val position: Int, val trackId: String)
+
+private class LegacyPlaylistMembershipStream(private val cursor: Cursor) : Closeable {
+    var lastReturnedKey: MembershipKey? = null
+        private set
+
+    private var pending: LegacyPlaylistMembershipRow? = null
+    private var currentPlaylistId: String? = null
+    private var nextOrdinal = 0L
+
+    fun skipThrough(after: MembershipKey?) {
+        if (after == null) return
+        while (true) {
+            val row = read() ?: return
+            if (row.key().compareTo(after) > 0) {
+                pending = row
+                return
+            }
+        }
+    }
+
+    fun next(): LegacyPlaylistMembershipRow? = pending?.also { pending = null } ?: read()
+
+    override fun close() = cursor.close()
+
+    private fun read(): LegacyPlaylistMembershipRow? {
+        if (!cursor.moveToNext()) return null
+        val playlistId = cursor.getString(1)
+        val orderOrdinal =
+            if (playlistId == currentPlaylistId) {
+                nextOrdinal
+            } else {
+                currentPlaylistId = playlistId
+                nextOrdinal = 0
+                0
+            }
+        nextOrdinal = Math.addExact(orderOrdinal, 1)
+        return LegacyPlaylistMembershipRow(
+                trackId = cursor.getString(0),
+                playlistId = playlistId,
+                position = cursor.getInt(2),
+                orderOrdinal = orderOrdinal,
+            )
+            .also { lastReturnedKey = it.key() }
+    }
+}
+
+private fun LegacyPlaylistMembershipRow.key() =
+    MembershipKey(playlistId = playlistId, position = position, trackId = trackId)
+
+private fun MembershipKey.compareTo(other: MembershipKey): Int =
+    compareValuesBy(this, other, { it.playlistId }, { it.position }, { it.trackId })
 
 private inline fun <Result> Cursor.useRows(block: (Cursor) -> Result): Result = use(block)
 
@@ -916,7 +969,8 @@ private fun Cursor.intOrNull(column: Int): Int? = if (isNull(column)) null else 
 private fun Cursor.booleanOrNull(column: Int): Boolean? =
     if (isNull(column)) null else getInt(column) != 0
 
-internal const val LEGACY_SCHEMA_VERSION = 10
+internal const val LEGACY_SCHEMA_VERSION = 11
+internal val SUPPORTED_LEGACY_SCHEMA_VERSIONS = setOf(10, 11)
 private const val MAX_PAGE_SIZE = 500
 private const val MAX_PLAYBACK_CHECKPOINT_ITEMS = 10_000
 private const val MAX_CREW_CHECKPOINT_PAYLOAD_BYTES = 4 * 1024 * 1024

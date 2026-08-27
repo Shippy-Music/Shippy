@@ -34,6 +34,8 @@ sealed interface ListeningTrackerEvent {
         val startedAtWallClock: Instant,
         val elapsedRealtimeMs: Long,
         val chosenByUser: Boolean,
+        val scrobbleAuthorized: Boolean = false,
+        val accountId: String? = null,
     ) : ListeningTrackerEvent
 
     data class AudibleChanged(
@@ -96,6 +98,8 @@ class ListeningSessionTracker {
                         startedAtWallClock = event.startedAtWallClock,
                         audibleTime = AudibleTimeAccumulator(),
                         chosenByUser = event.chosenByUser,
+                        scrobbleAuthorized = event.scrobbleAuthorized,
+                        accountId = event.accountId,
                     )
                 ),
             finalized = finalized,

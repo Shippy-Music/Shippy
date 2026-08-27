@@ -1,0 +1,33 @@
+plugins {
+    id 'com.android.test'
+    id 'androidx.baselineprofile'
+}
+
+android {
+    namespace 'org.oxycblt.auxio.shippy.baselineprofile'
+    compileSdk target_sdk
+
+    defaultConfig {
+        minSdk 28
+        targetSdk target_sdk
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    buildTypes {
+        benchmark {
+            debuggable true
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+            testProguardFiles rootProject.file('benchmark-test-proguard-rules.pro')
+            matchingFallbacks = ['release']
+        }
+    }
+
+    targetProjectPath ':app'
+}
+
+dependencies {
+    implementation "androidx.benchmark:benchmark-macro-junit4:1.4.1"
+    implementation 'androidx.test.ext:junit:1.3.0'
+    implementation 'androidx.test.uiautomator:uiautomator:2.3.0'
+}

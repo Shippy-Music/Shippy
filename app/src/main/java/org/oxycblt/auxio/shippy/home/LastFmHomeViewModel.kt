@@ -131,23 +131,32 @@ constructor(
         val provider =
             providerSettings.selection(byId.keys).priority.firstNotNullOfOrNull(byId::get)
                 ?: return overview
-        if (overview.recommendations.none { it.artworkUrl == null }) return overview
+        if (
+            overview.recommendations.none { it.artworkUrl == null } &&
+                overview.topTracks.none { it.artworkUrl == null }
+        ) {
+            return overview
+        }
         val gate = Semaphore(2)
-        val recommendations = coroutineScope {
-            overview.recommendations
-                .map { recommendation ->
-                    async {
-                        if (recommendation.artworkUrl != null) return@async recommendation
-                        gate.withPermit {
-                            providerArtwork(provider, recommendation)?.let {
-                                recommendation.copy(artworkUrl = it)
-                            } ?: recommendation
+        suspend fun enrich(tracks: List<org.oxycblt.auxio.shippy.lastfm.LastFmOverviewTrack>) =
+            coroutineScope {
+                tracks
+                    .map { recommendation ->
+                        async {
+                            if (recommendation.artworkUrl != null) return@async recommendation
+                            gate.withPermit {
+                                providerArtwork(provider, recommendation)?.let {
+                                    recommendation.copy(artworkUrl = it)
+                                } ?: recommendation
+                            }
                         }
                     }
-                }
-                .awaitAll()
-        }
-        return overview.copy(recommendations = recommendations)
+                    .awaitAll()
+            }
+        return overview.copy(
+            recommendations = enrich(overview.recommendations),
+            topTracks = enrich(overview.topTracks),
+        )
     }
 
     private suspend fun providerArtwork(
@@ -171,13 +180,18 @@ constructor(
             }
         val artist = recommendation.artist.normalized()
         val title = recommendation.title.normalized()
-        return tracks
-            .firstOrNull {
+        val exact =
+            tracks.firstOrNull {
                 it.title.normalized() == title &&
                     it.artists.any { name -> name.normalized() == artist }
             }
-            ?.artwork
-            ?.takeIf(String::isNotBlank)
+        val close =
+            tracks.firstOrNull {
+                val candidateTitle = it.title.normalized()
+                val artistMatches = it.artists.any { name -> name.normalized() == artist }
+                artistMatches && (candidateTitle.contains(title) || title.contains(candidateTitle))
+            }
+        return (exact ?: close ?: tracks.firstOrNull())?.artwork?.takeIf(String::isNotBlank)
     }
 
     private fun String.normalized() = trim().lowercase().replace(Regex("\\s+"), " ")

@@ -27,6 +27,7 @@ import app.shippy.data.db.dao.IdentityDao
 import app.shippy.data.db.dao.LastFmOutboxDao
 import app.shippy.data.db.dao.LegacyImportDao
 import app.shippy.data.db.dao.LibraryDao
+import app.shippy.data.db.dao.LibraryMembershipDao
 import app.shippy.data.db.dao.LyricsDao
 import app.shippy.data.db.dao.MigrationAuditDao
 import app.shippy.data.db.dao.PlaybackCheckpointDao
@@ -46,6 +47,7 @@ import app.shippy.data.db.entity.IdentityDecisionEntity
 import app.shippy.data.db.entity.IdentityRejectionEntity
 import app.shippy.data.db.entity.LastFmScrobbleOutboxEntity
 import app.shippy.data.db.entity.LibraryLayoutEntryEntity
+import app.shippy.data.db.entity.LibraryMembershipIndexEntity
 import app.shippy.data.db.entity.LibraryRecordingEntity
 import app.shippy.data.db.entity.LyricsCacheEntity
 import app.shippy.data.db.entity.MediaAssetEntity
@@ -64,6 +66,7 @@ import app.shippy.data.db.entity.ReleaseTrackEntity
 import app.shippy.data.db.entity.SavedSourceEntity
 import app.shippy.data.db.entity.SourceReferenceEntity
 import app.shippy.data.db.entity.UserMetadataOverrideEntity
+import app.shippy.data.db.fts.PlaylistFtsEntity
 import app.shippy.data.db.fts.RecordingFtsEntity
 import app.shippy.data.db.fts.SearchDao
 import app.shippy.data.db.view.LibrarySongRowView
@@ -84,6 +87,7 @@ import app.shippy.data.db.view.PlaylistEntryRowView
             MediaAssetEntity::class,
             AudioFingerprintEntity::class,
             LibraryRecordingEntity::class,
+            LibraryMembershipIndexEntity::class,
             PlaylistEntity::class,
             PlaylistEntryEntity::class,
             LibraryLayoutEntryEntity::class,
@@ -102,6 +106,7 @@ import app.shippy.data.db.view.PlaylistEntryRowView
             SavedSourceEntity::class,
             MigrationAuditEntity::class,
             RecordingFtsEntity::class,
+            PlaylistFtsEntity::class,
         ],
     views = [LibrarySongRowView::class, PlaylistEntryRowView::class],
     version = ShippyR16Database.SCHEMA_VERSION,
@@ -117,6 +122,8 @@ internal abstract class ShippyR16Database : RoomDatabase() {
     abstract fun catalogueMaintenanceDao(): CatalogueMaintenanceDao
 
     abstract fun libraryDao(): LibraryDao
+
+    abstract fun libraryMembershipDao(): LibraryMembershipDao
 
     abstract fun playlistDao(): PlaylistDao
 
@@ -144,6 +151,6 @@ internal abstract class ShippyR16Database : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "shippy-r16.db"
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 6
     }
 }

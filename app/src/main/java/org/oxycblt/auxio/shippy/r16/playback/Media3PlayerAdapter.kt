@@ -36,6 +36,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import org.oxycblt.auxio.shippy.media.MediaObjectKey
+import org.oxycblt.auxio.shippy.media.cache.PlaybackCacheManager
 
 fun interface Media3ItemFactory {
     fun create(item: PreparedEngineItem): MediaItem
@@ -117,6 +119,7 @@ class Media3PlayerAdapter(
     private val player: Player,
     private val itemFactory: Media3ItemFactory,
     private val clock: PlaybackClock = SystemPlaybackClock,
+    private val playbackCache: PlaybackCacheManager? = null,
 ) : PlayerEngine, Player.Listener {
     private val observationChannel = Channel<PlayerObservation>(Channel.UNLIMITED)
     override val observations: Flow<PlayerObservation> = observationChannel.receiveAsFlow()
@@ -124,6 +127,7 @@ class Media3PlayerAdapter(
     private val playerLooper = player.applicationLooper
     private val playerHandler = Handler(playerLooper)
     private val released = AtomicBoolean(false)
+    private var activeCacheKey: MediaObjectKey? = null
 
     init {
         postToPlayer { player.addListener(this) }
@@ -171,6 +175,8 @@ class Media3PlayerAdapter(
             onPlayer {
                 player.removeListener(this)
                 player.release()
+                activeCacheKey?.let { key -> playbackCache?.unprotectKey(key) }
+                activeCacheKey = null
             }
         } finally {
             itemFactory.release()
@@ -179,6 +185,18 @@ class Media3PlayerAdapter(
     }
 
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        val newCustomKey = mediaItem?.localConfiguration?.customCacheKey
+        val newKey =
+            if (newCustomKey != null && newCustomKey.startsWith(MediaObjectKey.CACHE_KEY_PREFIX)) {
+                MediaObjectKey.fromCustomCacheKey(newCustomKey)
+            } else {
+                null
+            }
+        if (newKey != activeCacheKey) {
+            activeCacheKey?.let { key -> playbackCache?.unprotectKey(key) }
+            activeCacheKey = newKey
+            newKey?.let { key -> playbackCache?.protectKey(key) }
+        }
         mediaItem
             ?.localConfiguration
             ?.tag

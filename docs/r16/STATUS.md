@@ -1,8 +1,9 @@
 # Shippy R16 Status
 
-**Updated:** 2026-08-19  
-**Active phase:** Phase 7 — System Surfaces (inactive pre-cutover)  
+**Updated:** 2026-08-21
+**Active phase:** Isolated ACTIVE composition (durable selector still fail-closed)
 **Authority:** `../Shippy_R16_Master_Architecture_and_Implementation_Spec.md`
+**Execution model:** `AUTONOMOUS_EXECUTION_OPERATING_MODEL.md`
 
 ## Execution mandate
 
@@ -13,9 +14,8 @@ owner decision that the master specification explicitly marks as blocking.
 Build and Gradle caches must be retained between builds. Clear them only after a
 specific cache-corruption diagnosis.
 
-All R16 work remains local for owner testing. Local commits may preserve
-coherent checkpoints, but no GitHub push, pull request, release, or other
-publication is authorized until the owner explicitly requests it.
+All R16 work remains local for owner testing. Do not commit, push, open a pull
+request, release, or publish until the owner explicitly requests it.
 
 Treat the master specification as a compass, not a literal transcription task:
 its invariants, data-safety rules, authority boundaries, and required outcomes
@@ -23,15 +23,388 @@ are binding, while suggested class names, exact commit counts, and implementatio
 details may adapt to current evidence. Prefer practical coherent slices and
 avoid checklist theatre.
 
+The autonomous execution operating model now governs implementation shape:
+preserve sound completed work, integrate the central end-to-end Shippy spine
+before expanding horizontally, delegate coherent ownership through Sol → Terra
+→ Luna, and justify complexity only by a concrete product or safety property.
+
 ## Current authority state
 
-- R15.3 legacy database, playback manager, Library, and UI remain active.
-- No R16 runtime authority is active yet.
+- An isolated ACTIVE composition now exists: one process-shared R16 runtime, one
+  player/playback spine/coordinator, a canonical MediaBrowser adapter/router, an
+  R16-only Songs host, system surfaces, listening-session delivery, and Last.fm
+  scheduling. This is composition evidence, not durable activation: persisted
+  `R16_ACTIVE` still selects `ACTIVE_UNAVAILABLE`, M14 remains unreachable, and
+  R15.3 remains the sole production authority.
+- R15.3 remains the sole production authority: its legacy database, playback
+  manager, Library, and UI remain active.
+- An R15 database alone stays on normal R15 database, playback, Library, and UI
+  access. It does not activate or block on incomplete M0-M13 machinery.
+- A persisted migration marker opens an isolated recovery host before normal
+  legacy work. That host owns M0-M13 only and exposes no R16 playback,
+  Library/Search reads, feature flags, or M14.
+- The read-only authority selector is production-wired into `MainActivity` and
+  `AuxioService`. Only `LEGACY` may construct legacy UI/playback; migration and
+  recovery states stay isolated, while `R16_ACTIVE` fails closed to a static
+  unavailable screen. `R16M14Cutover` still has no reachable production caller.
+- `READY_TO_SWITCH` is a recovery checkpoint only; it is neither a cutover
+  action nor an activation trigger. Legacy data and backup remain intact.
+- `R16BackupRuntime` exists behind the explicitly opened inactive R16 data
+  runtime. It does not change production authority.
+- A lazy singleton active-data owner now guarantees that R16 Library and playback
+  consumers receive the same `R16DataRuntime` only for explicit isolated
+  `R16AuthorityMode.ACTIVE`; the durable `R16_ACTIVE` marker cannot select that
+  mode. It opens nothing in legacy, migration, ready, corrupt, or
+  `ACTIVE_UNAVAILABLE` modes. The isolated ACTIVE composition binds that owner
+  to the R16 Songs host, browser/router, and playback spine.
+- That shared runtime now also exposes a bounded MediaBrowser read repository:
+  capped Library-song, playlist-summary, playlist-entry, exact-item, and sanitized
+  local-FTS pages plus strict R16-only media IDs. Duplicate playlist occurrences
+  retain `PlaylistEntryId`; its focused browser/paging gate is 8/8 green. The
+  isolated service/browser adapter and search-to-queue router now use that shared
+  runtime; durable ACTIVE startup remains fail-closed.
+- The isolated Songs host now has contextual search with accessible search, clear,
+  empty, and paged-result UI. It reuses the existing Library-scoped canonical FTS
+  and exact `RecordingId` playback path; it is not the full R16 Library Search
+  surface.
+- Library Search V1 is now a dedicated local-only surface, distinct from Global,
+  Songs contextual, and playlist contextual search. It Room-pages Songs,
+  Playlists, and Artists and exposes query-filtered bounded Liked, Local, and
+  Downloads streams. Canonical Recording playback and existing Playlist, Artist,
+  and system-collection routes are retained. Releases are visibly disabled and
+  deferred because no live Release graph exists.
+- The isolated ACTIVE host now keeps Global Search separate from Library Search:
+  bounded canonical local-FTS results lead, a 200 ms debounce gates generic
+  configured-provider search, each provider failure is isolated with partial
+  retry, and each section is capped at 20. Selected results persist their exact
+  `SourceKey` canonically; JioSaavn retains provider identity, while YouTube and
+  YouTube Music share exact video source identity. MediaSession play accepts only
+  strict `RecordingId` media IDs, while the same session drives mini-player
+  buffering/paused/playing state and its playback controls.
+- The same isolated host now provides paged canonical Playlists browse/detail.
+  Row playback resolves the exact `PlaylistEntryId`; Play and Shuffle atomically
+  submit one `PlayContext` built from the full ordered lightweight playlist seed,
+  not a 50-row rich-view page. Each context creates fresh `QueueEntryId`s while
+  retaining `PlaylistEntryId`, and cached bounded system projection supports a
+  10,000-entry logical queue through the same MediaSession and mini-player.
+  Play/Shuffle now wait for the MediaController connection before dispatch.
+- Playlist detail now has contextual-search V1 scoped to the current playlist's
+  Room FTS. A conservative sanitized query feeds 50-row pages without placeholders
+  through `flatMapLatest`; duplicate rows retain exact `PlaylistEntryId` playback.
+  Search supports clear, Back, and IME actions. Filter-aware Play/Shuffle use the
+  same filtered visible order as the page and the full lightweight playback
+  context, preserving exact `PlaylistEntryId` identity for duplicate occurrences.
+  Invalid filters resolve to an empty result, malformed playback extras fail
+  closed, and playback with no extras uses the persisted playlist sort.
+- Persisted playlist sort V1 supports seven typed modes with `ASC`/`DESC`:
+  `CUSTOM`, `RECENT`, `OLDEST`, `TITLE`, `ARTIST`, `ALBUM`, and `DURATION`.
+  `CUSTOM` is normalized to `ASC` and remains the only reorderable mode; dynamic
+  non-CUSTOM temporary sort is scoped to this V1. The original Auxio `DialogSort`
+  bottom sheet is reused. The 10,000-entry device benchmark remains pending.
+- Tapping that mini-player now opens a full scrollable, artwork-led current-item
+  Now Playing surface. Canonical `QueueEntryId`/`RecordingId` stay internal while
+  the UI shows title, artist, release, artwork, duration, progress, and playback
+  error. A view-bound tick advances progress only while playing, seeks are guarded,
+  and previous, play/pause, next, repeat, and shuffle reuse the existing
+  MediaController -> MediaSession -> `R16SystemPlaybackCommands` path. The mini is
+  hidden while expanded; Back and empty state remain usable.
+- Now Playing also supports a one-way Save to Liked action for the exact current
+  `RecordingId`. The shared R16 runtime owns the write to `library_recording` as
+  `liked=true` and `explicitlySaved=false`; after success the control is filled
+  and disabled. The UI resets disabled when `RecordingId` changes and ignores
+  stale or mismatched Like emissions, preventing A-state/B-action identity races.
+  Unlike and the full Save Destinations sheet are not implemented.
+- Now Playing add-to-playlist V1 captures the displayed `RecordingId`,
+  `QueueEntryId`, title, and artist before opening a dedicated destination
+  picker, so a later playback change cannot retarget the write. Canonical
+  playlists are Room-paged at 50; choosing one appends exactly one entry in one
+  transaction with a fresh `PlaylistEntryId`, preserving legal duplicates. The
+  common append reads only the last entry; sparse-key exhaustion rebalances only
+  the affected playlist. Playlist membership enters the derived Library
+  membership index without fabricating a `library_recording` row. Insert/update/
+  delete triggers, migration/backfill, and rebuild predicates now share that
+  rule; existing v3 databases perform the trigger upgrade and targeted backfill
+  once when needed. The picker exposes Loading, Adding, retry, and failure truth,
+  and retains tokenized completion across STOPPED/configuration changes. This is
+  not the full Save Destinations sheet: membership selection/removal,
+  create-playlist, and multi-target actions remain deferred. No physical-device,
+  durable activation, or M14/cutover claim changes.
+- Library now has an Artists in your Library vertical. Its canonical artist list
+  and detail recordings are limited to current Library membership, deduplicate
+  repeated recording credits with `DISTINCT`, and use deterministic 50-row pages.
+  Browser rows use strict composite `ArtistId` + `RecordingId` identity; detail
+  Play and row playback create the complete lightweight artist context with
+  `ARTIST` origin through the existing MediaSession route. The detail Play control
+  remains disabled until a controller is connected and the artist has recordings.
+  This is not saved-artist or saved-release functionality.
+- Artist detail now also has Shuffle. Play and Shuffle both use the exact Artist
+  browser ID through the one MediaSession path and remain gated on a connected
+  controller plus nonempty artist results.
+- Now Playing presents a friendly failed-state retry for the exact displayed
+  `QueueEntryId` + `RecordingId`. `PlaybackCommand.RetryCurrent` revalidates that
+  occurrence and its failed phase inside the serialized coordinator, then reuses
+  the existing reprepare and bounded source-fallback path. It does not add a
+  source picker or change the manual Next/skip behavior.
+- Queue V1 now exposes a current-anchored page of at most 50 lightweight entries.
+  Prev/Next resolve the exact `QueueEntryId` against revision and cache, and only
+  the requested page is presented. The live MediaSession occurrence supplies the
+  exact current-row highlight while the bounded MediaSession queue is preserved.
+  Reorder, remove, and multi-select are deliberately deferred.
+- The isolated host now has a bounded Home surface: Recent is capped at eight,
+  History is Room-paged at 50, and Continue Listening reads the one current
+  MediaSession occurrence. Its conditional resume rechecks the exact
+  `QueueEntryId`/`RecordingId` atomically inside the serialized coordinator, so
+  a stale tap cannot resume a different occurrence.
+- Home now shows up to eight pinned playlist shortcuts from `library_layout_entry`.
+  That table is the sole pin/order authority: only valid `PLAYLIST` rows survive
+  the inner join, stale references disappear, and each shortcut opens the existing
+  detail by exact `PlaylistId`. Empty shortcuts stay hidden. This adds no system
+  pins, pin/reorder mutation UI, saved-artist/release claim, or Album/Release
+  vertical.
+- Playlist summary pin/order now also reads only `library_layout_entry` through a
+  `PLAYLIST`-scoped left join; a missing layout row is unpinned and ordered
+  deterministically last. An exact `PlaylistId` pin toggle is one Room transaction
+  that preserves an existing layout key or appends one. Per-row in-flight state
+  disables the control; successful writes refresh Paging and the same Home Flow.
+  Reorder, system pins, and saved-artist/release behavior remain absent.
+- Playlist lifecycle V1 now creates a canonical UUID `PlaylistId` with `USER`
+  provenance, default `CUSTOM`/`ASC`, and one unpinned layout row atomically.
+  Rename/delete target the exact canonical `PlaylistId`, including imported/device
+  playlists, without rewriting provenance. Delete removes the layout row and
+  playlist (cascading entries) while retaining unrelated Library/download state;
+  playlist FTS triggers stay aligned. Create, Rename, and Delete dialogs use
+  tokenized completion state retained through STOPPED/configuration changes and
+  acknowledge each completion once. Multiselect remains deferred; persisted
+  playlist sort and adjacent entry reorder are covered below.
+- Playlist-entry removal V1 deletes only the exact paired `PlaylistId` and
+  `PlaylistEntryId`, so duplicate Recording occurrences remain distinct. Missing,
+  mismatched, or repeated requests return false without mutation; imported/device
+  canonical playlists are equally eligible. The detail row popup requires
+  confirmation, tracks each entry in flight, retains its operation-token
+  completion through STOPPED/configuration changes, and refreshes both Paging and
+  the header summary on success. Batch removal remains deferred; persisted
+  playlist sort and adjacent reorder are covered below.
+- Playlist sort V1 persists the typed mode and direction for each playlist and
+  applies one deterministic order to both the paged visible rows and the full
+  lightweight Play/Shuffle context. It is filter-aware, uses exact
+  `PlaylistEntryId` identity for duplicates, fails closed for malformed extras,
+  and treats invalid filters as empty results. `CUSTOM` is normalized to `ASC`
+  and is the only reorderable mode; other modes are temporary/non-reorderable in
+  this V1. The original Auxio `DialogSort` bottom sheet is reused.
+- Playlist-entry adjacent reorder V1 is now integrated for `CUSTOM` playlists
+  with a blank filter only. Screen-owned Edit order mode exposes accessible
+  Move up/Move down actions for the exact `PlaylistEntryId`; Back/Done exits the
+  mode, and ordinary play/remove/search actions are guarded while editing. The
+  repository moves exactly one canonical neighbor using the paired
+  `PlaylistId`/`PlaylistEntryId`: the common indexed path swaps two unique sparse
+  order keys, while tied/shared/corrupt keys materialize and rebalance only the
+  affected playlist. Duplicate Recording occurrences remain independent. This
+  is not drag or arbitrary cross-page reorder, queue reorder, batch action,
+  schema, M14, or device-acceptance evidence.
+- Playlist title FTS is schema v3: v2-to-v3 migration backfills it, insert/rename/
+  delete triggers keep it derived, and `3.json` is generated. Backup restores by
+  clearing, rebuilding, and verifying derived `playlist_fts`. Library Search
+  retains its query, hides empty section headers, shows an honest all-stream empty
+  state, and provides shared-error Retry all plus horizontal 48dp navigation.
+- R16 system collections Liked, Local, and Downloads are Room-paged at 50.
+  Their display paths do not hydrate the collection: only Play/Shuffle obtains
+  the ordered ID-only context needed to construct the complete queue.
+- The current R16 schema is v4: 32 entities including FTS, 2 views, and
+  identity hash `380e115fb92568875e5e2794203fff40`. The additive v3-to-v4
+  migration and generated Room schema `4.json` are present.
 - R16 feature flags have not been introduced.
 - The master specification supersedes conflicting pre-R16 product,
   architecture, implementation, UX, stabilization, and completion claims.
 
-## Last passing gate
+## Narrow R16 offline foundation checkpoint (2026-08-21)
+
+This is a verified R16 offline persistence, resolution, SAF-publication, and
+scanner-suppression foundation. It is not yet a complete transfer pipeline or
+an activation claim.
+
+- Schema v4 and generated Room schema `4.json` durably retain the exact requested
+  source reference, opaque media variant, and destination identity. New jobs
+  require all three; imported v3 jobs preserve honest nulls instead of inventing
+  values. Backup/export retains the new durable fields while excluding pending
+  document locators.
+- The shared `R16OfflineRepository` can load the exact full job snapshot,
+  atomically enter `PUBLISHING` from `VERIFYING` while persisting its pending URI,
+  and reset a `FAILED_RETRYABLE` job to a clean `QUEUED` state after caller-owned
+  cleanup. Dedicated transition gates enforce legal predecessor states, exact
+  Recording/source/variant/destination identity, monotonic progress, and
+  idempotent replay; legacy `FINALIZING` is normalized as `PUBLISHING`.
+- Publication remains verified and fail-closed: only the exact `PUBLISHING` job
+  and destination can publish its `SHIPPY_DOWNLOAD` asset. A shared asset is
+  retained while another job still references it. Last-reference removal is
+  physical-delete-first, then Room reconciliation runs in `NonCancellable`;
+  Recording identity, likes, playlists, and unrelated assets remain intact.
+  Missing-asset repair updates every job that references that shared asset.
+- `R16DownloadSourceResolver` resolves only the persisted, linked provider source
+  for the requested Recording. It checks provider health and DOWNLOAD capability,
+  calls the provider once with download constraints, preserves the resolved
+  stream, and performs no search, ranking, fallback, playback substitution, or
+  media-variant guessing.
+- `SafR16DownloadDestination` is settings-free. It requires the exact persisted
+  SAF tree identity plus retained read/write grant, creates a fresh job-marked
+  pending child without filename lookup, rejects cross-tree/cross-job reuse,
+  copies only a verified private stage, verifies exact length/readability/opening,
+  and shields partial-document cleanup from cancellation. Same-name user files
+  are never adopted. `SafR16ManagedDownloadStorage` separately preserves exact
+  present/absent/failure truth for published-asset removal.
+- Managed-file recognition still uses the existing pre-ingestion filesystem
+  boundary and single Musikr scanner. Exact pending URIs for R16 `PUBLISHING`
+  jobs (including legacy `FINALIZING`) are suppressed before local ingestion;
+  verified managed assets retain canonical Recording/job ownership, while
+  unrelated same-name files pass through normally. The index is a snapshot per
+  scan: a concurrently started scan can miss a pending URI created afterward,
+  so the upcoming worker must call `beginPublishing` before SAF copy and before
+  any reindex it triggers.
+- Focused evidence is green: 32/32 tests with zero failures, errors, or skips
+  (offline repository 17, source repository 2, source resolver 5, SAF destination
+  3, managed storage 3, filtering filesystem 2). Spotless and diff checks are
+  clean. App compilation is green under a temporary 4 GiB in-process override;
+  repository `gradle.properties` was left unchanged and build caches were kept.
+- No R16 worker, coordinator, or WorkManager scheduler exists yet. Complete
+  transfer execution, Media3 asset-open verification, cache promotion/policy,
+  download UI, physical-device/runtime/performance acceptance, durable
+  `ACTIVE`, and M14/cutover remain unimplemented or unverified.
+- UI direction is unchanged: the original Auxio/Shippy theme, typography, rows,
+  navigation rhythm, sheets, drawers, and mini/full-player choreography remain
+  the fidelity boundary. Production stays on R15.3; persisted `R16_ACTIVE`
+  still fails closed to `ACTIVE_UNAVAILABLE`, and M14 has no reachable caller.
+
+## Prior integrated checkpoint evidence (2026-08-20)
+
+- The prior focused cross-slice gate is green: `spotlessCheck` and
+  `:app:compileDebugKotlin` completed successfully, with 60/60 focused tests
+  passing (54 app, 6 data). It covers Queue/Search, Home/Continue/History,
+  system collections, playback/system seams, and the narrowed download path.
+- Refreshed cached `:app:assembleDebug` is BUILD SUCCESSFUL (255 actionable tasks); this
+  is host-build evidence only, not device/runtime acceptance.
+- The Songs contextual-search slice is green: spotless and app compilation pass,
+  `R16LibrarySongsViewModelTest` is 3/3, and `PagingDaoTest` is 4/4 (zero
+  failures). Its transient 4 GiB build settings were restored afterward.
+- Playlist contextual-search V1 passed an independent no-P0/P1 review,
+  `spotlessCheck`, app compilation, and `PagingDaoTest` 4/4. The transient 4 GiB
+  setting was restored exactly; the refreshed 255-task debug assembly remains
+  green.
+- The one-way Now Playing Save-to-Liked slice is green: spotless and app
+  compilation pass, with 2/2 focused data tests. The identity-race correction
+  passes `spotlessCheck` and app compilation under a transient 4 GiB in-process
+  gate; the exact prior `gradle.properties` was restored afterward.
+- The Artists + failed-state Retry checkpoint is green: `spotlessCheck` and
+  `:app:compileDebugKotlin` pass, and 41/41 focused tests pass: PlaybackCoordinator
+  15, SystemBridge 8, NowPlayingMapper 3, BrowserResolver 6,
+  BrowserServiceAdapter 4, and data BrowserRepo 5. Cached
+  `:app:assembleDebug` is BUILD SUCCESSFUL (255 actionable tasks). The temporary
+  Gradle settings were restored to the tracked `gradle.properties` hash
+  `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`.
+- Home pinned-playlist shortcuts V1 is green: `spotlessCheck` and
+  `:app:compileDebugKotlin` pass, and `R16HomeReadRepositoryTest` passes 3/3.
+  Normal `gradle.properties` was restored to tracked hash
+  `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`.
+- Artist Shuffle + playlist layout pin authority is green: `spotlessCheck`,
+  `:app:compileDebugKotlin`, data `R16MediaBrowserRepositoryTest` 6/6, and
+  `R16LibraryMutationRepositoryTest` 3/3 all pass with zero failures. The combined
+  127-task gate completed successfully in 7m18s under transient 4 GiB in-process
+  settings; normal tracked `gradle.properties` was restored to
+  `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`. Normal-settings
+  `:app:assembleDebug` is BUILD SUCCESSFUL (255 actionable tasks). The debug APK is
+  69,076,401 bytes with SHA-256
+  `8240213360494362d576afb2928dbf11ee6e292595fdfe48bf3100266eabf82d`.
+- Library Search V1 first passed `spotlessCheck`, `:app:compileDebugKotlin`,
+  `PagingDaoTest` 5/5, migration 1/1, and BackupRuntime 2/2 (8/8; 127 tasks,
+  5m54s). Review corrections then reran spotless, app compilation, `PagingDaoTest`
+  5/5, and migration 2/2 (7/7; 127 tasks, 4m15s). Normal Gradle content was
+  restored to tracked hash `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`.
+  Normal-settings `:app:assembleDebug` is BUILD SUCCESSFUL (255 actionable tasks,
+  4m53s); debug APK: 69,080,433 bytes, SHA-256
+  `cadd88c0fa36081027c4b9f2e51e5198318feb88daebc2094648d90a33175776`.
+- Playlist lifecycle V1 passes `spotlessCheck`, `:app:compileDebugKotlin`,
+  `R16LibraryMutationRepositoryTest` 8/8, and `R16MediaBrowserRepositoryTest`
+  6/6 (14/14). The 127-task gate completed successfully in 4m15s after one narrow
+  visibility fix. Normal `gradle.properties` was restored to tracked hash
+  `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`; normal-settings
+  `:app:assembleDebug` is BUILD SUCCESSFUL (255 actionable tasks, 2m17s). Debug
+  APK: 69,085,697 bytes, SHA-256
+  `f1ad19c11cedee71a456ce83aa958561fac558194bce11530b27a6a60c51906e`.
+- Playlist-entry removal V1 passed independent P0/P1 review after its summary
+  refresh correction, `spotlessCheck`, `:app:compileDebugKotlin`, and
+  `R16LibraryMutationRepositoryTest` 9/9. The 127-task focused gate completed
+  successfully in 3m24s after one nullable compile correction. Normal
+  `gradle.properties` was restored to tracked hash
+  `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`; normal-settings
+  `:app:assembleDebug` is BUILD SUCCESSFUL (255 actionable tasks, 2m36s). Debug
+  APK: 69,086,677 bytes, SHA-256
+  `4bfb6113178d70e1abce958a61b9fa1624048389ff8fe98db6434adcb925f52e`.
+- Now Playing add-to-playlist V1 passed independent P0/P1 review,
+  `spotlessApply`, `spotlessCheck`, `:app:compileDebugKotlin`, and 19/19 focused
+  data tests with zero failures, errors, or skips: mutation repository 13/13,
+  membership index 2/2, migration 2/2, and backup runtime 2/2. The 129-task gate
+  completed successfully in 4m53s. Normal `gradle.properties` was restored to
+  tracked hash `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`;
+  normal-settings cached `:app:assembleDebug` is BUILD SUCCESSFUL (255 actionable
+  tasks, 3m56s). Debug APK: 69,091,796 bytes, SHA-256
+  `3d1db5b48d106515f90eee36c1699f53b7ee503155da3d66367d8debd044a520`.
+- Playlist-entry adjacent reorder V1 passed independent P0/P1 review with no
+  release-blocking finding. The focused gate passed `spotlessCheck`,
+  `:app:compileDebugKotlin`, CoreDao 7/7, MutationRepo 15/15, and MembershipIndex
+  2/2 (24/24 total); the 129-task build was BUILD SUCCESSFUL in 9m47s. Normal
+  `gradle.properties` was restored to tracked hash
+  `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`; cached normal-settings
+  `:app:assembleDebug` was BUILD SUCCESSFUL in 5m02s with 255 actionable tasks.
+  Debug APK: 69,097,364 bytes, SHA-256
+  `aea64522bcaf845cb199dc1468b9bd9c573434e9964a330e2d40070084f47168`.
+  This is host evidence only; it adds no physical-device, runtime-performance,
+  durable-activation, M14, or cutover claim.
+- Persisted playlist sort and filter-aware playback passed independent final
+  review CLEAN. The focused gate passed `spotlessCheck` and
+  `:app:compileDebugKotlin`, with core 2/2, data 33/33, and app 17/17 tests
+  (52/52 total; zero failure, error, or skip). Normal `gradle.properties` was
+  restored to tracked hash
+  `53e3cb5bf6f2344048eaf16f0f61997b4c826b7f`; normal-settings
+  `:app:assembleDebug` completed successfully in 3m03s with 255 actionable
+  tasks. Debug APK: 69,103,120 bytes, SHA-256
+  `9566c272e55072161c4d78160f325c73c2eb7e8e0c92aea75521f0cb2eb10f3b`.
+  This is host evidence only; physical-device behavior, runtime performance,
+  durable activation, M14, and cutover remain unverified. The 10,000-entry
+  device benchmark is still pending.
+- The prior Kotlin compiler OOM in the download worker/transfer request path was
+  mitigated by narrow source splits. Compilation now succeeds using transient
+  4 GiB in-process Gradle settings; those settings were restored afterward and
+  the local disk/build cache was retained.
+- The new Search/mini-player slice compiles with `:app:compileDebugKotlin` green;
+  `GlobalSearchCoordinatorTest` passes 3/3 and `MiniPlayerUiStateMapperTest`
+  passes 2/2. Integration review found no P0 issue after the provider-retry fix.
+- The playlist vertical has `:app:compileDebugKotlin` and data compilation green;
+  its four focused suites pass 16/16 tests.
+- The Now Playing slice has `spotlessApply` and `:app:compileDebugKotlin` green;
+  focused Now Playing, mini-player, and system-bridge coverage passes 10/10 tests.
+- The focused owner-shaped migration suite is green: 14/14 tests, including
+  bounded restart/resume through verified M13 `READY_TO_SWITCH` and idempotent
+  re-entry.
+- The app R16 namespace gate is green: 78/78 tests passed across 21 suites.
+- `:app:assembleBenchmark` is green.
+- `:macrobenchmark:assembleBenchmark` and
+  `:baselineprofile:assembleBenchmarkBenchmark` are green.
+- The deterministic schema-v2 50,000-recording fixture was built and is
+  cached for benchmark-variant use; this is fixture/build evidence, not a
+  runtime timing result.
+- No physical-device or runtime performance measurements exist yet.
+- No real redacted owner-device v10 database fixture exists yet.
+- The new lifecycle path is host-tested only: attach orders the one spine before
+  system surfaces, attach failure releases both, release orders surfaces before
+  the spine, and listening delivery drains before teardown. Physical playback,
+  MediaSession, notification/widget/Quick Settings behavior, process death, and
+  provider-network retry, authenticated Last.fm delivery, and mini-player behavior
+  remain unverified.
+
+## Historical implementation record
+
+The detailed bullets below are retained for traceability from earlier
+checkpoints. They are not the current gate. Earlier cumulative totals (including
+schema v1/30 entities and the 545-app/42-data test totals) are historical and
+must not be read as current evidence.
 
 - The Aug-19 source archive matches all 1,235 files in the imported worktree.
 - The imported snapshot is committed at `491a1abc0` and tagged
@@ -330,6 +703,15 @@ avoid checklist theatre.
 - Source-neutral checkpoint/restore, occurrence-scoped listening sessions,
   bounded trace retention, long-queue proof, and deterministic randomized
   coordinator runs are implemented behind the inactive R16 boundary.
+- The shared R16 data runtime now exposes a transactional listening-session
+  repository. It idempotently records canonical play history and conditionally
+  queues one deterministic Last.fm outbox entry only when canonical artist/title
+  metadata is usable and not filename-derived. Its focused 3-test data gate is
+  green. The playback coordinator now emits typed finalized sessions with exact
+  occurrence/source identity, reason, audible time, and position; the spine drains
+  persistence after checkpoint and player release. The isolated ACTIVE service
+  schedules the durable Last.fm outbox through WorkManager; device/network/auth
+  delivery remains unverified.
 - Playback materialization now resolves verified managed assets and provider
   sources through the pure ranking policy, stores expiring locators only in a
   bounded process-local registry, projects cache/header keys without persisting
@@ -349,19 +731,28 @@ avoid checklist theatre.
 - The existing canonical Library view now feeds a source-neutral playback
   presentation repository. Large unique-recording sets are observed in bounded
   SQLite query batches, so a 10,000-entry queue cannot overflow one `IN` binding.
+- The legacy audio-only player construction is now shared through one injectable
+  factory without changing its active/standby behavior. Its inert R16 entry point
+  creates exactly one focus-owning Media3 player; no production R16 caller exists
+  yet, so the authority selector still cannot activate playback.
 - An inactive shared system bridge derives traversal, selected/committed occurrence,
   metadata, queue, playback state, notification/widget content, and Quick Settings
   state from one `PlaybackSnapshot`. MediaSession callbacks and system actions submit
   only `PlaybackCommand`; these adapters import neither `Song` nor the legacy manager.
-  The retained R15.3 Android surfaces remain active until their lifecycle wrappers
-  and the single-player cutover gate are complete.
+  The surface runtime exposes its already-created session token without reattachment,
+  and the action mask no longer advertises play-from-ID/search before canonical routing
+  exists.
+  The retained R15.3 Android surfaces remain active in production; the isolated
+  R16 service owner composes equivalent lifecycle wrappers without changing that
+  authority.
 - Inactive lifecycle wrappers now apply that projection through the retained
   MediaSession, playback notification, widget layouts/artwork transformations,
   Android broadcast actions, foreground callback, and Quick Settings rendering.
   Queue and metadata publication reject stale asynchronous work; widget artwork is
   reused across unrelated snapshots and recreated after image/shape setting changes.
   Attach/release is centralized, commands still enter one R16 router, and no wrapper
-  owns a player, queue, or legacy playback state. Production R15.3 wiring is unchanged.
+  owns a player, queue, or legacy playback state. R15.3 remains the sole active
+  playback path.
 
 ## Current blockers
 
@@ -369,17 +760,27 @@ avoid checklist theatre.
   dependent namespace/package migration is locked.
 - A redacted real owner-device v10 database fixture is required before importer
   cutover can be proven.
+- Durable ACTIVE activation remains fail-closed: persisted `R16_ACTIVE` maps to
+  `ACTIVE_UNAVAILABLE`, and M14 has no reachable caller. The isolated composition
+  shares one runtime/player/authority but still lacks device and cutover proof.
 - Physical-device verification remains unavailable until a device is attached;
   it does not block pure core or deterministic migration work.
 
 ## Next exact slice
 
-1. Compose the inactive service runtime, system-surface runtime, and Quick Settings /
-   external-surface lookup behind one explicit process-scoped cutover selector.
-   Prove one authority lifecycle and safe attach/release/recreation without enabling
-   R16 or constructing a second player in production.
+1. Compose an inactive R16 download worker/coordinator/scheduler over the verified
+   job, exact-source, transfer-stage, SAF-destination, publication, and scanner
+   boundaries. Keep durable activation fail-closed and order `beginPublishing`
+   before SAF copy/reindex.
 
 ## Verification level
+
+Current host evidence adds the focused 32/32 offline gate, schema v4 migration,
+and app compilation described above. Earlier evidence covers the migration entry
+host, selector, inactive playback/library seams, benchmark builds, the synthetic
+owner-shaped M0-M13 flow, and the prior 60/60 Queue/Search/Home/system-collections
+integration gate. A redacted owner-device fixture, connected-device behavior,
+instrumented coverage, and runtime performance measurements remain unverified.
 
 Baseline preservation is checksum-verified. Changed app Kotlin and Android
 resources compile. `R16LayoutRegressionTest` passes (2 tests), and the focused
@@ -394,7 +795,7 @@ device-tested, or performance-tested. `:shippy-data:testDebugUnitTest` passes 6
 schema/DAO tests, including duplicate playlist occurrences, orphan rejection,
 exact-source uniqueness/idempotence, asset/Library scoping, and complete-order
 playlist writes, plus canonical Library/playlist read projection and FTS lookup.
-The exported schema contains version 1, 30 entities including FTS, 2 views, and
+Historical report: the exported schema contained version 1, 30 entities including FTS, 2 views, and
 identity hash `44e9cd72ef59268c22b636e7b74d7fdc`. The durable identity/history/checkpoint
 DAO suite adds 3 passing focused tests (9 total data-module tests).
 The download/integration/migration ledger suite adds 3 passing focused tests
@@ -460,9 +861,23 @@ sanitization, scoped partial failure, and cancellation propagation.
 The inactive Phase 5 path now covers the coordinator, bounded engine window,
 checkpoint/restore, listening, trace, QueueEntryId Media3 projection, expiring
 locator materialization, request headers/cache keys, and one bounded source
-fallback. The current full cached gate passes `spotlessCheck`, 26 core tests, 10
-source tests, 42 data tests, 545 app tests (1 skipped), `:app:lintDebug`, and
+fallback. Historical cached-gate report: the earlier full cached gate passed
+`spotlessCheck`, 26 core tests, 10 source tests, 42 data tests, 545 app tests (1 skipped), `:app:lintDebug`, and
 `:app:assembleDebug`. The R16 runtime still has no production authority; M12 and
 provider discovery have explicit callable seams but are not invoked by production
 or recorded complete in bootstrap state. None of this work is instrumented,
 physical-device tested, or performance-profiled.
+
+## 2026-08-26 final local integration checkpoint
+
+The R16 implementation is now production-activatable through the guarded
+READY_TO_SWITCH to M14 cutover and ACTIVE authority path. The final local cached
+gate passed `:shippy-core:test`, `:shippy-data:testDebugUnitTest`, the complete
+`:app:testDebugUnitTest` suite (737 tests, 1 skipped), `:app:lintDebug`, and
+`:app:assembleDebug`. The resulting local debug APK is at
+`app/build/outputs/apk/debug/app-debug.apk`.
+
+No commit or publish was performed. No Android device was attached at this
+checkpoint, so migration, playback, storage, provider, system-surface, and
+performance acceptance on physical hardware remain owner-device checks before
+publication.

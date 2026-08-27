@@ -72,6 +72,8 @@ internal class LegacyPlaylistImporter(private val database: ShippyR16Database) {
                             artworkOverride = row.artworkUri?.trim()?.takeIf(String::isNotEmpty),
                             displaySortMode = "CUSTOM",
                             displaySortDirection = "ASC",
+                            originKind = "LEGACY_SHIPPY",
+                            originKey = row.playlistId,
                             createdAtEpochMs = existing?.createdAtEpochMs ?: importedAtEpochMs,
                             updatedAtEpochMs = importedAtEpochMs,
                         )
@@ -91,7 +93,10 @@ internal class LegacyPlaylistImporter(private val database: ShippyR16Database) {
             updatePlaylistAudit(
                 migrationId = migrationId,
                 warningsJson = appendPlaylistWarnings(audit.warningsJson, warnings),
+                targetCountsJson = audit.targetCountsJson,
                 subphase = "PLAYLISTS",
+                pageToken = "M4:playlists:${last.position}:${last.playlistId}",
+                expectedDelta = MigrationExpectedCountDelta(playlists = rows.size.toLong()),
                 checkpoint =
                     JSONObject()
                         .put("lastPosition", last.position)
@@ -155,7 +160,10 @@ internal class LegacyPlaylistImporter(private val database: ShippyR16Database) {
             updatePlaylistAudit(
                 migrationId = migrationId,
                 warningsJson = audit.warningsJson,
+                targetCountsJson = audit.targetCountsJson,
                 subphase = "ENTRIES",
+                pageToken = "M4:entries:${last.playlistId}:${last.position}:${last.trackId}",
+                expectedDelta = MigrationExpectedCountDelta(playlistEntries = rows.size.toLong()),
                 checkpoint =
                     JSONObject()
                         .put("lastPlaylistId", last.playlistId)
@@ -176,15 +184,26 @@ internal class LegacyPlaylistImporter(private val database: ShippyR16Database) {
     private suspend fun updatePlaylistAudit(
         migrationId: String,
         warningsJson: String,
+        targetCountsJson: String?,
         subphase: String,
+        pageToken: String,
+        expectedDelta: MigrationExpectedCountDelta,
         checkpoint: JSONObject,
     ) {
+        val targetCounts =
+            targetCountsJson?.let { runCatching { JSONObject(it) }.getOrNull() } ?: JSONObject()
+        MigrationExpectedCountEvidence.recordPage(
+            target = targetCounts,
+            phase = LegacyImportPhase.USER_PLAYLISTS,
+            pageToken = pageToken,
+            delta = expectedDelta,
+        )
         database
             .migrationAuditDao()
             .updateProgress(
                 migrationId = migrationId,
                 targetCountsJson =
-                    JSONObject()
+                    targetCounts
                         .put("playlist", database.legacyImportDao().playlistCount())
                         .put("playlistEntry", database.legacyImportDao().playlistEntryCount())
                         .put(

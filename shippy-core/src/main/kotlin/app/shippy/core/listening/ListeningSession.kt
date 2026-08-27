@@ -74,6 +74,8 @@ data class ActiveListeningSession(
     val startedAtWallClock: Instant,
     val audibleTime: AudibleTimeAccumulator,
     val chosenByUser: Boolean,
+    val scrobbleAuthorized: Boolean = false,
+    val accountId: String? = null,
 ) {
     fun startAudible(nowElapsedRealtimeMs: Long, playbackSpeed: Double): ActiveListeningSession =
         copy(audibleTime = audibleTime.start(nowElapsedRealtimeMs, playbackSpeed))

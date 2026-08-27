@@ -108,10 +108,12 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         viewLifecycleOwner.lifecycleScope.launch { refreshDownloadDestinationSafely() }
         renderCrewProfile()
         probeCrewRelayHealth()
+        updatePlaybackCacheSummary()
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        configurePlaybackCachePreferences()
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 launch { lastFmModel.state.collect(::renderLastFm) }
@@ -166,10 +168,7 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
                 downloadDestinationLauncher.launch(null)
             }
             getString(R.string.set_key_clear_playback_cache) -> {
-                viewLifecycleOwner.lifecycleScope.launch {
-                    playbackCache.clear()
-                    requireContext().showToast(R.string.msg_playback_cache_cleared)
-                }
+                showClearPlaybackCacheDialog()
             }
             getString(R.string.set_key_lastfm) -> {
                 when (lastFmModel.state.value) {
@@ -508,6 +507,51 @@ class RootPreferenceFragment : BasePreferenceFragment(R.xml.preferences_root) {
         } catch (_: Exception) {
             requireContext().showToast(R.string.err_no_app)
         }
+    }
+
+    private fun updatePlaybackCacheSummary() {
+        val preference =
+            findPreference<Preference>(getString(R.string.set_key_clear_playback_cache)) ?: return
+        val sizeBytes = playbackCache.sizeBytes()
+        val formattedSize =
+            android.text.format.Formatter.formatFileSize(requireContext(), sizeBytes)
+        preference.summary =
+            getString(R.string.set_clear_playback_cache_desc) + "\n\n" + formattedSize
+    }
+
+    private fun configurePlaybackCachePreferences() {
+        listOf(R.string.set_key_playback_cache_max_size, R.string.set_key_playback_cache_unused_age)
+            .mapNotNull { findPreference<ListPreference>(getString(it)) }
+            .forEach { preference ->
+                preference.setOnPreferenceChangeListener { _, _ ->
+                    // ListPreference persists the accepted value after this callback returns.
+                    view?.post {
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            playbackCache.performConfiguredMaintenance()
+                            updatePlaybackCacheSummary()
+                        }
+                    }
+                    true
+                }
+            }
+    }
+
+    private fun showClearPlaybackCacheDialog() {
+        val sizeBytes = playbackCache.sizeBytes()
+        val formattedSize =
+            android.text.format.Formatter.formatFileSize(requireContext(), sizeBytes)
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.set_clear_playback_cache)
+            .setMessage(getString(R.string.set_clear_playback_cache_desc) + "\n\n" + formattedSize)
+            .setPositiveButton(R.string.set_clear_playback_cache) { _, _ ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    playbackCache.clear()
+                    updatePlaybackCacheSummary()
+                    requireContext().showToast(R.string.msg_playback_cache_cleared)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 }
 

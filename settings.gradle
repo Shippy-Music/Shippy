@@ -24,6 +24,8 @@ apply from: file("media/core_settings.gradle")
 
 rootProject.name = "Shippy"
 include ':app'
+include ':macrobenchmark'
+include ':baselineprofile'
 include ':musikr'
 include ':shippy-core'
 include ':shippy-data'

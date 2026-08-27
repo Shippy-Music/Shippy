@@ -18,7 +18,6 @@
 package org.oxycblt.auxio.playback
 
 import android.annotation.SuppressLint
-import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.MenuItem
@@ -103,6 +102,7 @@ class PlaybackPanelFragment :
     private val playerActionsModel: PlayerActionsViewModel by viewModels()
     private var userAwarePagerCallback: UserAwarePagerCallback? = null
     private var pagerUpdateGeneration = 0
+    private var playbackPresentationGeneration = 0
     private var renderedLyricsState: PlaybackLyricsState = PlaybackLyricsState.None
     private var renderedLyricsLineIndex = Int.MIN_VALUE
     private val reactionViews = mutableSetOf<View>()
@@ -243,13 +243,16 @@ class PlaybackPanelFragment :
         }
 
         // --- VIEWMODEL SETUP --
-        collectImmediately(playbackModel.displayItem, ::updateItem)
+        collectImmediately(
+            playbackModel.displayItem,
+            playbackModel.pagerQueue,
+            ::updatePlaybackPresentation,
+        )
         collectImmediately(playbackModel.parent, ::updateParent)
         collectImmediately(playbackModel.positionDs, ::updatePosition)
         collectImmediately(playbackModel.repeatMode, ::updateRepeat)
         collectImmediately(playbackModel.isPlaying, ::updatePlaying)
         collectImmediately(playbackModel.isShuffled, ::updateShuffled)
-        collectImmediately(playbackModel.pagerQueue, ::updatePager)
         collectImmediately(playerActionsModel.state, ::updateActions)
         collectImmediately(lastFmScrobbleTracker.status, ::updateScrobbleStatus)
         collectImmediately(playbackModel.lyrics, playbackModel.positionDs, ::updateLyrics)
@@ -567,22 +570,18 @@ class PlaybackPanelFragment :
         val visible =
             status.queueItemId != null &&
                 status.queueItemId == currentId &&
-                status.kind != LastFmScrobbleStatusKind.Disabled
+                (status.kind == LastFmScrobbleStatusKind.Retrying ||
+                    status.kind == LastFmScrobbleStatusKind.ReauthRequired)
         binding.playbackScrobbleStatus.isVisible = visible
         if (!visible) return
         binding.playbackScrobbleStatus.text =
             status.message
                 ?: getString(
                     when (status.kind) {
-                        LastFmScrobbleStatusKind.NowPlaying -> R.string.lbl_lastfm_now_playing
-                        LastFmScrobbleStatusKind.Eligible -> R.string.lbl_lastfm_eligible
-                        LastFmScrobbleStatusKind.Queued -> R.string.lbl_lastfm_queued
-                        LastFmScrobbleStatusKind.Scrobbled -> R.string.lbl_lastfm_scrobbled
                         LastFmScrobbleStatusKind.Retrying -> R.string.lbl_lastfm_retrying
-                        LastFmScrobbleStatusKind.Ignored -> R.string.lbl_lastfm_ignored
                         LastFmScrobbleStatusKind.ReauthRequired ->
                             R.string.lbl_lastfm_reauth_required
-                        LastFmScrobbleStatusKind.Disabled -> R.string.lbl_lastfm_disabled
+                        else -> return
                     }
                 )
         val colorAttr =
@@ -743,51 +742,36 @@ class PlaybackPanelFragment :
             .show()
     }
 
-    private fun updatePager(queue: PagerQueue) {
-        // Updates are deliberately delayed until a stable frame. Invalidate every older deferred
-        // callback so an earlier song can never overwrite the current song's artwork afterward.
-        val generation = ++pagerUpdateGeneration
-        // Right now there's easily 140ms of frame skipping when going next/prev. This is primarily
-        // the fault of specifically the nested bottom sheet UI setup, which is intractable to
-        // optimize. If I don't do multiple remeasures/relayouts on every slightest state
-        // instability
-        // I will suddenly encounter insane issues where the sheet fails to measure, appears below
-        // the sidebar, flies away, not changing with ui scale, etc, often only on third-party OEM
-        // ROMs that randomly mangle  SDK APIs and the SystemUI chrome for no reason.
-        //
-        // Historically this was not an issue, as I did not animate next/prev. Now I do, and it's
-        // highly noticeable. So at least for plain next/prev I have to hack around it, do not
-        // execute any transition until the state has fully adjudicated and laid out the UI. It's
-        // not effective for swiping but there's nothing I can do there.
-        //
-        // Eventually one day Claude Fable 6.7 will probably be able to figure out that you need to
-        // reflect into System.FoobaCrumbo::beegieConnector(GoolaUtils.PlubBud) and call it
-        // specifically with 0x189B31FA alongside disabling the AndroidX Helpo SuperCharge by
-        // manually clobbering `BottomSheetM2InternalBoogieCompat::scrimbloManager` to null for it
-        // to not actually randomly mangle the sheets and do it in 1 clean layout, but for now I
-        // must do this to keep my sanity.
-        //
-        // Actual snippet here was codex, just cleaned & adapted it / cognitive ownership
-        requireBinding().playbackPager.apply {
-            if (!isAttachedToWindow) {
-                post { updatePagerImpl(queue, generation) }
-                return
-            }
+    /**
+     * Keeps the text/actions and the large ViewPager cover on the same queue occurrence.
+     *
+     * The pager has its own short, bounded projection. It can arrive after the current item while a
+     * transition is settling, so rendering them independently briefly paired the new title with the
+     * old cover. Waiting until the projection names the same queue occurrence makes the visible
+     * player one atomic presentation without widening the artwork window.
+     */
+    private fun updatePlaybackPresentation(item: PlaybackDisplayItem?, queue: PagerQueue) {
+        val pagerItem = queue.queue.getOrNull(queue.index)
+        if (item?.queueItem?.id != pagerItem?.queueItem?.id) return
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && isHardwareAccelerated) {
-                // New version using post-Q frame hooks
-                viewTreeObserver.registerFrameCommitCallback {
-                    post { postOnAnimation { updatePagerImpl(queue, generation) } }
-                }
-                postInvalidateOnAnimation()
-            } else {
-                // Let current layout happen, then wait for the next to conclude
-                postOnAnimation { postOnAnimation { updatePagerImpl(queue, generation) } }
-            }
+        val generation = ++playbackPresentationGeneration
+        updatePager(queue) { if (generation == playbackPresentationGeneration) updateItem(item) }
+    }
+
+    private fun updatePager(queue: PagerQueue, onCurrentItemApplied: () -> Unit) {
+        val generation = ++pagerUpdateGeneration
+        requireBinding().playbackPager.apply {
+            // Let ViewPager finish its current adapter/layout work, but do not deliberately hold
+            // a completed playback transition behind multiple frame callbacks.
+            post { updatePagerImpl(queue, generation, onCurrentItemApplied) }
         }
     }
 
-    private fun updatePagerImpl(queue: PagerQueue, generation: Int) {
+    private fun updatePagerImpl(
+        queue: PagerQueue,
+        generation: Int,
+        onCurrentItemApplied: () -> Unit,
+    ) {
         // Android insanity means this may be executed after view destruction
         // but only on some devices.
         val binding = binding ?: return
@@ -799,10 +783,27 @@ class PlaybackPanelFragment :
             // A diff may complete asynchronously. Align only after the adapter owns the same
             // canonical queue, and ignore it if a newer playback update arrived meanwhile.
             coverPagerAdapter.update(queue.queue, command.update) {
-                alignPagerToCanonicalItem(queue, generation)
+                finishPagerUpdate(queue, generation, onCurrentItemApplied)
             }
         } else {
+            finishPagerUpdate(queue, generation, onCurrentItemApplied)
+        }
+    }
+
+    private fun finishPagerUpdate(
+        queue: PagerQueue,
+        generation: Int,
+        onCurrentItemApplied: () -> Unit,
+    ) {
+        val pager = binding?.playbackPager ?: return
+        // Adapter notifications are applied by RecyclerView after the update callback returns.
+        // Publish the matching title only after the corresponding cover page has had a layout pass.
+        pager.post {
+            if (generation != pagerUpdateGeneration) return@post
             alignPagerToCanonicalItem(queue, generation)
+            pager.postOnAnimation {
+                if (generation == pagerUpdateGeneration) onCurrentItemApplied()
+            }
         }
     }
 

@@ -25,6 +25,7 @@ import app.shippy.core.asset.AudioTechnicalMetadata
 import app.shippy.core.asset.MediaAssetKind
 import app.shippy.core.identity.ProviderId
 import app.shippy.core.identity.RecordingId
+import app.shippy.core.identity.SourceReferenceId
 import app.shippy.core.identitymatch.RecordingDraft
 import app.shippy.core.music.Explicitness
 import app.shippy.core.music.RecordingVersion
@@ -124,6 +125,8 @@ class RoomR16SourceStateRepositoryTest {
         assertEquals(SourceKind.YOUTUBE, initial.kind)
         assertEquals(AvailabilityState.RESOLVABLE, initial.availability.state)
         assertEquals(initial, sources.observe(recordingId).first().single())
+        assertEquals(initial, sources.get(initial.id))
+        assertEquals(null, sources.get(SourceReferenceId("00000000-0000-0000-0000-000000000099")))
 
         val checkedAt = capturedAt.plusSeconds(60)
         sources.updateAvailability(

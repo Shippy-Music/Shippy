@@ -20,6 +20,8 @@ package app.shippy.data.db
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import app.shippy.data.db.dao.PlaylistAdjacentMoveDirection
+import app.shippy.data.db.dao.PlaylistAdjacentMoveResult
 import app.shippy.data.db.entity.ArtistEntity
 import app.shippy.data.db.entity.LibraryRecordingEntity
 import app.shippy.data.db.entity.MediaAssetEntity
@@ -149,25 +151,101 @@ class CoreDaoTest {
         }
 
     @Test
-    fun `sparse playlist move rebalances only when adjacent keys are exhausted`() = runBlocking {
+    fun `adjacent playlist move swaps only the two exact occurrence keys`() = runBlocking {
         insertRecording("recording-1")
         val playlist = playlist("playlist-1")
-        val first = playlistEntry("entry-1", 0)
+        val first = playlistEntry("entry-1", 1_024)
+        val second = playlistEntry("entry-2", 2_048)
+        val third = playlistEntry("entry-3", 3_072)
+        database.playlistDao().create(playlist, listOf(first, second, third))
+
+        assertEquals(
+            PlaylistAdjacentMoveResult.MOVED,
+            database
+                .playlistDao()
+                .moveAdjacent(
+                    playlistId = playlist.playlistId,
+                    playlistEntryId = third.playlistEntryId,
+                    direction = PlaylistAdjacentMoveDirection.TOWARD_START,
+                ),
+        )
+
+        val moved = database.playlistDao().entries(playlist.playlistId)
+        assertEquals(listOf("entry-1", "entry-3", "entry-2"), moved.map { it.playlistEntryId })
+        assertEquals(listOf(1_024L, 2_048L, 3_072L), moved.map { it.orderKey })
+        assertEquals(
+            PlaylistAdjacentMoveResult.AT_BOUNDARY,
+            database
+                .playlistDao()
+                .moveAdjacent(
+                    playlistId = playlist.playlistId,
+                    playlistEntryId = first.playlistEntryId,
+                    direction = PlaylistAdjacentMoveDirection.TOWARD_START,
+                ),
+        )
+        assertEquals(
+            PlaylistAdjacentMoveResult.NOT_FOUND,
+            database
+                .playlistDao()
+                .moveAdjacent(
+                    playlistId = playlist.playlistId,
+                    playlistEntryId = "missing",
+                    direction = PlaylistAdjacentMoveDirection.TOWARD_END,
+                ),
+        )
+        assertEquals(moved, database.playlistDao().entries(playlist.playlistId))
+    }
+
+    @Test
+    fun `equal adjacent keys rebalance only the affected playlist`() = runBlocking {
+        insertRecording("recording-1")
+        val playlist = playlist("playlist-1")
+        val first = playlistEntry("entry-1", 1)
         val second = playlistEntry("entry-2", 1)
         val third = playlistEntry("entry-3", 2)
         database.playlistDao().create(playlist, listOf(first, second, third))
 
-        database
-            .playlistDao()
-            .moveBetween(
-                playlistId = playlist.playlistId,
-                playlistEntryId = third.playlistEntryId,
-                beforeEntryId = first.playlistEntryId,
-                afterEntryId = second.playlistEntryId,
-            )
+        assertEquals(
+            PlaylistAdjacentMoveResult.MOVED,
+            database
+                .playlistDao()
+                .moveAdjacent(
+                    playlistId = playlist.playlistId,
+                    playlistEntryId = second.playlistEntryId,
+                    direction = PlaylistAdjacentMoveDirection.TOWARD_START,
+                ),
+        )
 
         val reordered = database.playlistDao().entries(playlist.playlistId)
-        assertEquals(listOf("entry-1", "entry-3", "entry-2"), reordered.map { it.playlistEntryId })
+        assertEquals(listOf("entry-2", "entry-1", "entry-3"), reordered.map { it.playlistEntryId })
+        assertEquals(listOf(1_024L, 2_048L, 3_072L), reordered.map { it.orderKey })
+    }
+
+    @Test
+    fun `mixed tied neighbor key preserves exact adjacent intent`() = runBlocking {
+        insertRecording("recording-1")
+        val playlist = playlist("playlist-1")
+        val moving = playlistEntry("entry-z", 1_024)
+        val neighbor = playlistEntry("entry-a", 2_048)
+        val tiedThird = playlistEntry("entry-b", 2_048)
+        database.playlistDao().create(playlist, listOf(moving, neighbor, tiedThird))
+
+        assertEquals(
+            PlaylistAdjacentMoveResult.MOVED,
+            database
+                .playlistDao()
+                .moveAdjacent(
+                    playlistId = playlist.playlistId,
+                    playlistEntryId = moving.playlistEntryId,
+                    direction = PlaylistAdjacentMoveDirection.TOWARD_END,
+                ),
+        )
+
+        val reordered = database.playlistDao().entries(playlist.playlistId)
+        assertEquals(
+            listOf(neighbor.playlistEntryId, moving.playlistEntryId, tiedThird.playlistEntryId),
+            reordered.map { it.playlistEntryId },
+        )
         assertEquals(listOf(1_024L, 2_048L, 3_072L), reordered.map { it.orderKey })
     }
 
@@ -191,7 +269,7 @@ class CoreDaoTest {
         database.playlistDao().create(playlist("playlist-1"), listOf(playlistEntry("entry-1", 10)))
 
         val song = checkNotNull(database.readModelDao().librarySong("recording-1"))
-        val playlistEntry = database.readModelDao().playlistEntries("playlist-1").single()
+        val playlistEntry = checkNotNull(database.readModelDao().playlistEntry("entry-1"))
 
         assertEquals("Artist", song.artistDisplay)
         assertTrue(song.localAssetExists)
@@ -321,6 +399,8 @@ class CoreDaoTest {
             artworkOverride = null,
             displaySortMode = "CUSTOM",
             displaySortDirection = "ASC",
+            originKind = "USER",
+            originKey = null,
             createdAtEpochMs = 1,
             updatedAtEpochMs = 1,
         )

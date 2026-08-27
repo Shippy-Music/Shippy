@@ -27,6 +27,7 @@ import app.shippy.core.identitymatch.MetadataNormalizer
 import app.shippy.core.identitymatch.RecordingDraft
 import app.shippy.core.music.ExternalIdentifierKind
 import app.shippy.core.source.SourceKey
+import app.shippy.core.source.SourceKind
 import app.shippy.sources.asset.ManagedAssetEvidence
 import app.shippy.sources.asset.ManagedAssetMatch
 import app.shippy.sources.observation.ObservedMediaAsset
@@ -233,7 +234,21 @@ private fun SourceTrackObservation.toRecordingDraft(): RecordingDraft? {
 }
 
 private fun SourceTrackObservation.toMatchingFeatures(): MatchingFeatures {
+    val verified =
+        when (sourceKind) {
+            SourceKind.MUSICBRAINZ,
+            SourceKind.JIOSAAVN,
+            SourceKind.YOUTUBE_MUSIC -> true
+            SourceKind.LOCAL_FILE,
+            SourceKind.SHIPPY_DOWNLOAD,
+            SourceKind.YOUTUBE,
+            SourceKind.LASTFM_HINT,
+            SourceKind.IMPORTED_LINK,
+            SourceKind.CREW_PEER -> false
+        }
     val identifiers = externalIdentifiers.groupBy { it.kind }
+    val isrcs = identifiers[ExternalIdentifierKind.ISRC].values()
+    val mbids = identifiers[ExternalIdentifierKind.MUSICBRAINZ_RECORDING].values()
     return MatchingFeatures(
         normalizedTitle = MetadataNormalizer.comparisonKey(title),
         normalizedPrimaryArtist = MetadataNormalizer.comparisonKey(artistNames.firstOrNull()),
@@ -243,10 +258,11 @@ private fun SourceTrackObservation.toMatchingFeatures(): MatchingFeatures {
         durationMs = durationMs,
         version = version,
         explicitness = explicitness,
-        isrcs = identifiers[ExternalIdentifierKind.ISRC].values(),
-        musicBrainzRecordingIds =
-            identifiers[ExternalIdentifierKind.MUSICBRAINZ_RECORDING].values(),
+        isrcs = isrcs,
+        musicBrainzRecordingIds = mbids,
         acoustIds = identifiers[ExternalIdentifierKind.ACOUST_ID].values(),
+        verifiedIsrcs = if (verified) isrcs else emptySet(),
+        verifiedMusicBrainzRecordingIds = if (verified) mbids else emptySet(),
         sourceKeys = setOf(sourceKey),
         fingerprintHashes = setOfNotNull(asset?.fingerprint),
     )

@@ -19,6 +19,7 @@ package org.oxycblt.auxio.playback
 
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.text.Spannable
 import android.text.SpannableStringBuilder
@@ -164,9 +165,16 @@ class LyricsDialog :
             val surface =
                 requireContext().getAttrColorCompat(MR.attr.colorSurfaceContainerHigh).defaultColor
             val onSurface = requireContext().getAttrColorCompat(MR.attr.colorOnSurface).defaultColor
-            binding.root.setBackgroundColor(
-                artworkToneExtractor.mutedColor(artwork, surface, onSurface)
-            )
+            // Keep the whole sheet connected to the current artwork without turning the
+            // lyrics surface into a solid, heavy color field.
+            binding.root.background =
+                GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(
+                        artworkToneExtractor.mutedColor(artwork, surface, onSurface),
+                        surface,
+                    ),
+                )
         }
         binding.lyricsSeekBar.positionDs = positionDs
         val stateChanged = state != renderedState

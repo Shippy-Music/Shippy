@@ -17,7 +17,10 @@
  */
 package org.oxycblt.auxio.shippy.persistence.library
 
+import androidx.sqlite.db.SupportSQLiteDatabase
+import java.lang.reflect.Proxy
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CanonicalTrackMetadataMigrationTest {
@@ -43,5 +46,35 @@ class CanonicalTrackMetadataMigrationTest {
     fun `playlist artwork has an explicit non-destructive v9 to v10 migration`() {
         assertEquals(9, ShippyDatabase.MIGRATION_9_10.startVersion)
         assertEquals(10, ShippyDatabase.MIGRATION_9_10.endVersion)
+    }
+
+    @Test
+    fun `lastfm scrobble outbox has an explicit non-destructive v10 to v11 migration`() {
+        assertEquals(10, ShippyDatabase.MIGRATION_10_11.startVersion)
+        assertEquals(11, ShippyDatabase.MIGRATION_10_11.endVersion)
+    }
+
+    @Test
+    fun `v10 to v11 migration executes alter table adding accountId column`() {
+        val executedStatements = mutableListOf<String>()
+        val dbProxy =
+            Proxy.newProxyInstance(
+                SupportSQLiteDatabase::class.java.classLoader,
+                arrayOf(SupportSQLiteDatabase::class.java),
+            ) { _, method, args ->
+                if (method.name == "execSQL" && args != null && args.isNotEmpty()) {
+                    executedStatements.add(args[0] as String)
+                }
+                null
+            } as SupportSQLiteDatabase
+
+        ShippyDatabase.MIGRATION_10_11.migrate(dbProxy)
+
+        assertEquals(1, executedStatements.size)
+        assertTrue(
+            executedStatements[0].contains(
+                "ALTER TABLE `lastfm_scrobble_outbox` ADD COLUMN `accountId` TEXT NOT NULL DEFAULT ''"
+            )
+        )
     }
 }

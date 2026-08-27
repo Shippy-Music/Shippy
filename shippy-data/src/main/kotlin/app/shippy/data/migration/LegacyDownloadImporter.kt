@@ -88,30 +88,56 @@ internal class LegacyDownloadImporter(
                             warnings = warnings,
                         )
                     }
-                val mappedState = mapState(row, acceptedAsset != null, warnings)
                 val jobId = LegacyIdMapper.downloadJob(row.jobId)
-                database
-                    .downloadDao()
-                    .save(
-                        DownloadJobEntity(
-                            jobId = jobId,
-                            recordingId = recordingId,
-                            requestedSourceReferenceId = requestedSource?.sourceReferenceId,
-                            publishedAssetId = null,
-                            state = if (acceptedAsset == null) mappedState.state else "VERIFYING",
-                            bytesTransferred = progress.bytesTransferred,
-                            expectedBytes = progress.expectedBytes,
-                            failureKind =
-                                if (acceptedAsset == null) mappedState.failureKind else null,
-                            retryAfterEpochMs = null,
-                            pendingLocation = null,
-                            displayFallbackJson = row.toDisplayFallbackJson(),
-                            createdAtEpochMs = validCreatedAt(row, importedAtEpochMs, warnings),
-                            updatedAtEpochMs = importedAtEpochMs,
+                val existingJob = database.downloadDao().get(jobId)
+                // A nullable verifier result is absence of evidence, not proof that a
+                // previously verified asset disappeared. Keep that durable publication until
+                // an explicit unavailable result is supplied by the import authority.
+                val retainedVerifiedJob =
+                    existingJob?.takeIf {
+                        acceptedAsset == null &&
+                            it.state == "AVAILABLE" &&
+                            it.publishedAssetId != null
+                    }
+                val mappedState =
+                    mapState(row, acceptedAsset != null || retainedVerifiedJob != null, warnings)
+                if (retainedVerifiedJob != null) {
+                    database
+                        .downloadDao()
+                        .save(
+                            retainedVerifiedJob.copy(
+                                updatedAtEpochMs =
+                                    maxOf(retainedVerifiedJob.updatedAtEpochMs, importedAtEpochMs)
+                            )
                         )
-                    )
+                } else {
+                    database
+                        .downloadDao()
+                        .save(
+                            DownloadJobEntity(
+                                jobId = jobId,
+                                recordingId = recordingId,
+                                requestedSourceReferenceId = requestedSource?.sourceReferenceId,
+                                requestedMediaVariant = null,
+                                destinationIdentity = null,
+                                publishedAssetId = null,
+                                state =
+                                    if (acceptedAsset == null) mappedState.state else "VERIFYING",
+                                bytesTransferred = progress.bytesTransferred,
+                                expectedBytes = progress.expectedBytes,
+                                failureKind =
+                                    if (acceptedAsset == null) mappedState.failureKind else null,
+                                retryAfterEpochMs = null,
+                                pendingLocation = null,
+                                displayFallbackJson = row.toDisplayFallbackJson(),
+                                createdAtEpochMs = validCreatedAt(row, importedAtEpochMs, warnings),
+                                updatedAtEpochMs = importedAtEpochMs,
+                            )
+                        )
+                }
                 if (acceptedAsset != null) {
                     database.downloadDao().publishVerified(jobId, acceptedAsset, importedAtEpochMs)
+                    database.libraryMembershipDao().refresh(recordingId)
                     verifiedArtifactCount++
                 }
                 check(
@@ -124,12 +150,22 @@ internal class LegacyDownloadImporter(
             }
 
             val last = rows.last()
+            val targetCounts =
+                audit.targetCountsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?: JSONObject()
+            MigrationExpectedCountEvidence.recordPage(
+                target = targetCounts,
+                phase = LegacyImportPhase.DOWNLOADS,
+                pageToken = "M6:${last.jobId}",
+                delta =
+                    MigrationExpectedCountDelta(verifiedDownloads = verifiedArtifactCount.toLong()),
+            )
             database
                 .migrationAuditDao()
                 .updateProgress(
                     migrationId = migrationId,
                     targetCountsJson =
-                        JSONObject()
+                        targetCounts
                             .put("downloadJob", database.legacyImportDao().downloadJobCount())
                             .put(
                                 "availableDownload",

@@ -90,9 +90,48 @@ internal interface LegacyImportDao {
     @Query("SELECT * FROM playlist WHERE playlist_id = :playlistId")
     suspend fun playlist(playlistId: String): PlaylistEntity?
 
+    @Query(
+        """
+        SELECT * FROM playlist
+        WHERE origin_kind = :originKind AND origin_key = :originKey
+        """
+    )
+    suspend fun playlistByOrigin(originKind: String, originKey: String): PlaylistEntity?
+
+    @Query(
+        """
+        SELECT MAX(library_order_key) FROM playlist
+        WHERE origin_kind != :excludedOriginKind
+        """
+    )
+    suspend fun maximumPlaylistOrderExcluding(excludedOriginKind: String): Long?
+
+    @Query("SELECT COUNT(*) FROM playlist WHERE origin_kind = :originKind")
+    suspend fun playlistCountByOrigin(originKind: String): Long
+
+    @Query("SELECT * FROM playlist WHERE origin_kind = :originKind ORDER BY origin_key")
+    suspend fun playlistsByOrigin(originKind: String): List<PlaylistEntity>
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM playlist_entry AS entry
+        INNER JOIN playlist ON playlist.playlist_id = entry.playlist_id
+        WHERE playlist.origin_kind = :originKind
+        """
+    )
+    suspend fun playlistEntryCountByOrigin(originKind: String): Long
+
     @Upsert suspend fun upsertPlaylist(entity: PlaylistEntity)
 
     @Upsert suspend fun upsertLibraryLayout(entity: LibraryLayoutEntryEntity)
+
+    @Query(
+        """
+        DELETE FROM library_layout_entry
+        WHERE target_type = :targetType AND target_id = :targetId
+        """
+    )
+    suspend fun deleteLibraryLayout(targetType: String, targetId: String): Int
 
     @Query(
         """

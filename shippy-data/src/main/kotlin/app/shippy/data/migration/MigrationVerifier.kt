@@ -175,11 +175,22 @@ internal class MigrationVerifier(private val database: ShippyR16Database) {
                     duplicateAssetLocations = duplicateAssetLocations,
                     issues = issues,
                 )
+            val verificationTarget = JSONObject(report.toJson(completedPhases))
+            audit.targetCountsJson
+                ?.let {
+                    runCatching {
+                            JSONObject(it).optJSONObject(MigrationExpectedCountEvidence.JSON_KEY)
+                        }
+                        .getOrNull()
+                }
+                ?.let { evidence ->
+                    verificationTarget.put(MigrationExpectedCountEvidence.JSON_KEY, evidence)
+                }
             database
                 .migrationAuditDao()
                 .updateProgress(
                     migrationId = migrationId,
-                    targetCountsJson = report.toJson(completedPhases),
+                    targetCountsJson = verificationTarget.toString(),
                     warningsJson = appendVerificationWarnings(audit.warningsJson, issues),
                     status = if (report.passed) "READY_TO_SWITCH" else "FAILED_RECOVERABLE",
                 )
@@ -256,21 +267,37 @@ private fun SupportSQLiteDatabase.redirectCycleCount(): Int {
             ->
             buildMap { while (cursor.moveToNext()) put(cursor.getString(0), cursor.getString(1)) }
         }
+    val state = mutableMapOf<String, Int>()
     val cycles = mutableSetOf<String>()
     for (start in redirects.keys) {
-        val visited = linkedMapOf<String, Int>()
+        val path = mutableListOf<String>()
+        val pathIndex = mutableMapOf<String, Int>()
         var current: String? = start
         while (current != null && current in redirects) {
-            val prior = visited.putIfAbsent(current, visited.size)
-            if (prior != null) {
-                cycles += visited.keys.drop(prior).sorted().joinToString("|")
-                break
+            when (state[current]) {
+                REDIRECT_DONE -> break
+                REDIRECT_VISITING -> {
+                    val cycleStart = pathIndex[current]
+                    if (cycleStart != null) {
+                        cycles += path.subList(cycleStart, path.size).sorted().joinToString("|")
+                    }
+                    break
+                }
+                else -> {
+                    state[current] = REDIRECT_VISITING
+                    pathIndex[current] = path.size
+                    path += current
+                    current = redirects[current]
+                }
             }
-            current = redirects[current]
         }
+        path.forEach { node -> state[node] = REDIRECT_DONE }
     }
     return cycles.size
 }
+
+private const val REDIRECT_VISITING = 1
+private const val REDIRECT_DONE = 2
 
 private fun MigrationActualCounts.compareWith(
     expected: MigrationExpectedCounts,

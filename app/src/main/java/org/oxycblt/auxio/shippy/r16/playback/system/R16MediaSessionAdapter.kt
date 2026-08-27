@@ -19,16 +19,21 @@ package org.oxycblt.auxio.shippy.r16.playback.system
 
 import android.net.Uri
 import android.os.Bundle
+import android.os.ResultReceiver
 import android.support.v4.media.MediaDescriptionCompat
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import app.shippy.core.identity.QueueEntryId
+import app.shippy.core.identity.RecordingId
 import app.shippy.core.playback.PlaybackPhase
 import app.shippy.core.playback.RepeatMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.BuildConfig
 import org.oxycblt.auxio.playback.service.PlaybackActions
+import org.oxycblt.auxio.shippy.r16.playback.service.R16QueueMediaCommands
+import org.oxycblt.auxio.shippy.r16.playback.service.R16QueuePageEndpoint
 
 /** Pure Android MediaSession projection of the shared R16 system state. */
 object R16MediaSessionProjection {
@@ -56,6 +61,7 @@ object R16MediaSessionProjection {
             .putText(KEY_PARENT, presentation?.releaseTitle ?: defaultParent)
             .putString(KEY_QUEUE_ENTRY_ID, item.queueEntryId.value)
             .putString(KEY_RECORDING_ID, item.recordingId.value)
+            .putLong(KEY_GENERATION, state.playback.generation)
             .apply {
                 presentation?.artworkLocation?.takeIf(String::isNotBlank)?.let { artwork ->
                     putString(MediaMetadataCompat.METADATA_KEY_ART_URI, artwork)
@@ -127,11 +133,10 @@ object R16MediaSessionProjection {
     const val KEY_QUEUE_POSITION = BuildConfig.APPLICATION_ID + ".r16.metadata.QUEUE_POSITION"
     const val KEY_QUEUE_ENTRY_ID = BuildConfig.APPLICATION_ID + ".r16.metadata.QUEUE_ENTRY_ID"
     const val KEY_RECORDING_ID = BuildConfig.APPLICATION_ID + ".r16.metadata.RECORDING_ID"
+    const val KEY_GENERATION = BuildConfig.APPLICATION_ID + ".r16.metadata.GENERATION"
 
     const val ACTIONS =
-        PlaybackStateCompat.ACTION_PLAY_FROM_MEDIA_ID or
-            PlaybackStateCompat.ACTION_PLAY_FROM_SEARCH or
-            PlaybackStateCompat.ACTION_PLAY or
+        PlaybackStateCompat.ACTION_PLAY or
             PlaybackStateCompat.ACTION_PAUSE or
             PlaybackStateCompat.ACTION_PLAY_PAUSE or
             PlaybackStateCompat.ACTION_SET_REPEAT_MODE or
@@ -152,6 +157,7 @@ class R16MediaSessionCommandCallback(
     private val onPlayFromMediaIdRequested: (String?, Bundle?) -> Unit,
     private val onPlayFromSearchRequested: (String?, Bundle?) -> Unit,
     private val onExitRequested: () -> Unit,
+    private val queueEndpoint: R16QueuePageEndpoint? = null,
 ) : MediaSessionCompat.Callback() {
     override fun onPlayFromMediaId(mediaId: String?, extras: Bundle?) =
         onPlayFromMediaIdRequested(mediaId, extras)
@@ -202,10 +208,114 @@ class R16MediaSessionCommandCallback(
         when (action) {
             PlaybackActions.ACTION_INC_REPEAT_MODE -> submit { commands.cycleRepeat() }
             PlaybackActions.ACTION_INVERT_SHUFFLE -> submit { commands.toggleShuffle() }
+            R16RetryCurrentMediaCommands.RETRY_CURRENT ->
+                submit {
+                    extras.toRetryCurrentRequest()?.let { request ->
+                        commands.retryCurrent(request.queueEntryId, request.recordingId)
+                    }
+                }
+        }
+    }
+
+    override fun onCommand(command: String, extras: Bundle?, cb: ResultReceiver?) {
+        when {
+            R16QueueMediaCommands.isQueueCommand(command) && queueEndpoint != null ->
+                scope.launch {
+                    R16QueueMediaCommands.send(cb, queueEndpoint.handle(command, extras))
+                }
+            command == R16ResumeCurrentMediaCommands.RESUME_CURRENT ->
+                scope.launch {
+                    val result =
+                        extras.toResumeCurrentRequest()?.let { request ->
+                            commands.resumeCurrent(request.queueEntryId, request.recordingId)
+                        } ?: R16ResumeCurrentResult.Rejected(null, null)
+                    R16ResumeCurrentMediaCommands.send(cb, result)
+                }
         }
     }
 
     private fun submit(block: suspend () -> Unit) {
         scope.launch { block() }
     }
+}
+
+/** Stable, narrow MediaSession contract for Home's identity-checked Continue action. */
+object R16ResumeCurrentMediaCommands {
+    const val RESUME_CURRENT = BuildConfig.APPLICATION_ID + ".r16.home.resume_current"
+    const val EXTRA_QUEUE_ENTRY_ID = BuildConfig.APPLICATION_ID + ".r16.home.queue_entry_id"
+    const val EXTRA_RECORDING_ID = BuildConfig.APPLICATION_ID + ".r16.home.recording_id"
+    const val KEY_QUEUE_ENTRY_ID = EXTRA_QUEUE_ENTRY_ID
+    const val KEY_RECORDING_ID = EXTRA_RECORDING_ID
+    const val KEY_GENERATION = BuildConfig.APPLICATION_ID + ".r16.home.generation"
+
+    const val RESULT_ACCEPTED = 0
+    const val RESULT_REJECTED = 1
+
+    fun send(receiver: ResultReceiver?, result: R16ResumeCurrentResult) {
+        val bundle =
+            Bundle().apply {
+                when (result) {
+                    is R16ResumeCurrentResult.Accepted -> {
+                        putString(KEY_QUEUE_ENTRY_ID, result.queueEntryId.value)
+                        putString(KEY_RECORDING_ID, result.recordingId.value)
+                        putLong(KEY_GENERATION, result.generation)
+                    }
+                    is R16ResumeCurrentResult.Rejected -> {
+                        putString(KEY_QUEUE_ENTRY_ID, result.currentQueueEntryId?.value)
+                        putString(KEY_RECORDING_ID, result.currentRecordingId?.value)
+                    }
+                }
+            }
+        receiver?.send(
+            if (result is R16ResumeCurrentResult.Accepted) RESULT_ACCEPTED else RESULT_REJECTED,
+            bundle,
+        )
+    }
+}
+
+/** Stable MediaSession contract for Now Playing's identity-checked retry action. */
+object R16RetryCurrentMediaCommands {
+    const val RETRY_CURRENT = BuildConfig.APPLICATION_ID + ".r16.now_playing.retry_current"
+    const val EXTRA_QUEUE_ENTRY_ID = RETRY_CURRENT + ".queue_entry_id"
+    const val EXTRA_RECORDING_ID = RETRY_CURRENT + ".recording_id"
+
+    fun extras(queueEntryId: QueueEntryId, recordingId: RecordingId): Bundle =
+        Bundle().apply {
+            putString(EXTRA_QUEUE_ENTRY_ID, queueEntryId.value)
+            putString(EXTRA_RECORDING_ID, recordingId.value)
+        }
+}
+
+private data class R16ResumeCurrentRequest(
+    val queueEntryId: QueueEntryId,
+    val recordingId: RecordingId,
+)
+
+private fun Bundle?.toResumeCurrentRequest(): R16ResumeCurrentRequest? {
+    val queueEntryId = this?.getString(R16ResumeCurrentMediaCommands.EXTRA_QUEUE_ENTRY_ID)
+    val recordingId = this?.getString(R16ResumeCurrentMediaCommands.EXTRA_RECORDING_ID)
+    return runCatching {
+            R16ResumeCurrentRequest(
+                queueEntryId = QueueEntryId(checkNotNull(queueEntryId)),
+                recordingId = RecordingId(checkNotNull(recordingId)),
+            )
+        }
+        .getOrNull()
+}
+
+private data class R16RetryCurrentRequest(
+    val queueEntryId: QueueEntryId,
+    val recordingId: RecordingId,
+)
+
+private fun Bundle?.toRetryCurrentRequest(): R16RetryCurrentRequest? {
+    val queueEntryId = this?.getString(R16RetryCurrentMediaCommands.EXTRA_QUEUE_ENTRY_ID)
+    val recordingId = this?.getString(R16RetryCurrentMediaCommands.EXTRA_RECORDING_ID)
+    return runCatching {
+            R16RetryCurrentRequest(
+                queueEntryId = QueueEntryId(checkNotNull(queueEntryId)),
+                recordingId = RecordingId(checkNotNull(recordingId)),
+            )
+        }
+        .getOrNull()
 }

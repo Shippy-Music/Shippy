@@ -24,24 +24,15 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.annotation.OptIn
-import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.decoder.ffmpeg.FfmpegAudioRenderer
-import androidx.media3.exoplayer.BaseRenderer
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.RenderersFactory
-import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
-import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
-import androidx.media3.exoplayer.source.MediaSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
-import javax.inject.Provider
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -1123,8 +1114,7 @@ class ExoPlaybackStateHolder(
         private val canonicalRestore: CanonicalPlaybackRestoreCoordinator,
         private val playbackSettings: PlaybackSettings,
         private val commandFactory: PlaybackCommand.Factory,
-        private val mediaSourceFactory: MediaSource.Factory,
-        private val replayGainProcessorProvider: Provider<ReplayGainAudioProcessor>,
+        private val audioOnlyPlayerFactory: AudioOnlyPlayerFactory,
         private val musicRepository: MusicRepository,
         private val imageSettings: ImageSettings,
         private val playbackRequestHeaders: PlaybackRequestHeaders,
@@ -1132,54 +1122,27 @@ class ExoPlaybackStateHolder(
         private val providerPlaybackLifecycle: ProviderPlaybackLifecycle,
     ) {
         fun create(): ExoPlaybackStateHolder {
-            val activeProcessor = replayGainProcessorProvider.get()
-            val standbyProcessor = replayGainProcessorProvider.get()
-            val exoPlayer = createAudioOnlyPlayer(activeProcessor, handleAudioFocus = true)
-            val standbyPlayer = createAudioOnlyPlayer(standbyProcessor, handleAudioFocus = false)
+            val active = audioOnlyPlayerFactory.create(handleAudioFocus = true)
+            val standby = audioOnlyPlayerFactory.create(handleAudioFocus = false)
 
             return ExoPlaybackStateHolder(
                 context,
-                exoPlayer,
-                standbyPlayer,
+                active.player,
+                standby.player,
                 playbackManager,
                 persistenceRepository,
                 canonicalCheckpoints,
                 canonicalRestore,
                 playbackSettings,
                 commandFactory,
-                activeProcessor,
-                standbyProcessor,
+                active.replayGainProcessor,
+                standby.replayGainProcessor,
                 musicRepository,
                 imageSettings,
                 playbackRequestHeaders,
                 transitionGuard,
                 providerPlaybackLifecycle,
             )
-        }
-
-        private fun createAudioOnlyPlayer(
-            processor: ReplayGainAudioProcessor,
-            handleAudioFocus: Boolean,
-        ): ExoPlayer {
-            val audioRenderer = RenderersFactory { handler, _, audioListener, _, _ ->
-                arrayOf<BaseRenderer>(
-                    FfmpegAudioRenderer(handler, audioListener, processor),
-                    MediaCodecAudioRenderer(
-                        context,
-                        MediaCodecSelector.DEFAULT,
-                        handler,
-                        audioListener,
-                        DefaultAudioSink.Builder(context)
-                            .setAudioProcessors(arrayOf(processor))
-                            .build(),
-                    ),
-                )
-            }
-            return ExoPlayer.Builder(context, audioRenderer)
-                .setMediaSourceFactory(mediaSourceFactory)
-                .setWakeMode(C.WAKE_MODE_LOCAL)
-                .setAudioAttributes(PLAYBACK_AUDIO_ATTRIBUTES, handleAudioFocus)
-                .build()
         }
     }
 
@@ -1188,10 +1151,5 @@ class ExoPlaybackStateHolder(
         const val CROSSFADE_TICK_MS = 50L
         const val CROSSFADE_ARM_TICK_MS = 250L
         const val CROSSFADE_PROMOTION_SAFETY_MS = 150L
-        val PLAYBACK_AUDIO_ATTRIBUTES: AudioAttributes =
-            AudioAttributes.Builder()
-                .setUsage(C.USAGE_MEDIA)
-                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                .build()
     }
 }

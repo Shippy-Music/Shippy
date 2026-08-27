@@ -84,9 +84,24 @@ private class RoomR16IngestionSession(private val database: ShippyR16Database) :
         observation: R16SourceObservation,
         features: MatchingFeatures,
     ): List<R16IdentityCandidate> {
+        val recordings = linkedMapOf<String, RecordingEntity>()
+
+        database
+            .sourceDao()
+            .exact(
+                observation.sourceKey.providerId.value,
+                observation.sourceKey.itemType.name,
+                observation.sourceKey.sourceItemId,
+            )
+            ?.recordingId
+            ?.let { sourceRecordingId ->
+                database.recordingDao().get(sourceRecordingId)?.let {
+                    recordings[it.recordingId] = it
+                }
+            }
+
         val identifiers =
             observation.externalIdentifiers.mapTo(linkedSetOf()) { "${it.kind.name}:${it.value}" }
-        val recordings = linkedMapOf<String, RecordingEntity>()
         if (identifiers.isNotEmpty()) {
             database
                 .recordingDao()
@@ -102,6 +117,32 @@ private class RoomR16IngestionSession(private val database: ShippyR16Database) :
         observation.title?.let { title ->
             database.recordingDao().candidatesByTitle(title, MAX_CANDIDATES).forEach {
                 recordings[it.recordingId] = it
+            }
+        }
+        val normalizedTitle =
+            features.normalizedTitle ?: MetadataNormalizer.comparisonKey(observation.title)
+        if (!normalizedTitle.isNullOrBlank() && recordings.size < MAX_CANDIDATES) {
+            val terms = normalizedTitle.split(" ").filter { it.isNotBlank() && it.length >= 2 }
+            if (terms.isNotEmpty()) {
+                val ftsQuery = terms.joinToString(" ") { "$it*" }
+                val ftsIds = database.searchDao().searchRecordingIds(ftsQuery, MAX_CANDIDATES)
+                val duration = observation.durationMs
+                for (recId in ftsIds) {
+                    if (recordings.size >= MAX_CANDIDATES) break
+                    if (!recordings.containsKey(recId)) {
+                        database.recordingDao().get(recId)?.let { rec ->
+                            val durationMatch =
+                                duration == null ||
+                                    rec.durationMs == null ||
+                                    kotlin.math.abs(duration - rec.durationMs) <= 45_000 ||
+                                    kotlin.math.abs(duration - rec.durationMs).toDouble() /
+                                        maxOf(duration, rec.durationMs) <= 0.25
+                            if (durationMatch) {
+                                recordings[rec.recordingId] = rec
+                            }
+                        }
+                    }
+                }
             }
         }
         val sourceSubjectId = StableIngestionIds.source(observation.sourceKey)
@@ -294,6 +335,7 @@ private class RoomR16IngestionSession(private val database: ShippyR16Database) :
                     updatedAtEpochMs = now,
                 )
             database.assetDao().upsert(existing?.mergeObservation(incoming) ?: incoming)
+            database.libraryMembershipDao().refresh(recordingId)
         }
 
         command.recordingId?.let { recordingId ->
@@ -312,7 +354,18 @@ private class RoomR16IngestionSession(private val database: ShippyR16Database) :
                             ownerId = recordingId.value,
                             scheme = identifier.kind.name,
                             value = identifier.value,
-                            verified = observation.sourceKind == SourceKind.LOCAL_FILE,
+                            verified =
+                                when (observation.sourceKind) {
+                                    SourceKind.MUSICBRAINZ,
+                                    SourceKind.JIOSAAVN,
+                                    SourceKind.YOUTUBE_MUSIC -> true
+                                    SourceKind.LOCAL_FILE,
+                                    SourceKind.SHIPPY_DOWNLOAD,
+                                    SourceKind.YOUTUBE,
+                                    SourceKind.LASTFM_HINT,
+                                    SourceKind.IMPORTED_LINK,
+                                    SourceKind.CREW_PEER -> false
+                                },
                             sourceObservationId = observationId,
                             createdAtEpochMs = now,
                         )
@@ -392,6 +445,9 @@ private suspend fun RecordingEntity.toMatchingFeatures(
         isrcs = identifiers.values(ExternalIdentifierKind.ISRC),
         musicBrainzRecordingIds = identifiers.values(ExternalIdentifierKind.MUSICBRAINZ_RECORDING),
         acoustIds = identifiers.values(ExternalIdentifierKind.ACOUST_ID),
+        verifiedIsrcs = identifiers.filter { it.verified }.values(ExternalIdentifierKind.ISRC),
+        verifiedMusicBrainzRecordingIds =
+            identifiers.filter { it.verified }.values(ExternalIdentifierKind.MUSICBRAINZ_RECORDING),
         sourceKeys =
             sources.mapNotNullTo(linkedSetOf()) { source ->
                 val itemType = runCatching { SourceItemType.valueOf(source.itemType) }.getOrNull()

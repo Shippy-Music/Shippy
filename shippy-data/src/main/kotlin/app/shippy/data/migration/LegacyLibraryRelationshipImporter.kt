@@ -69,6 +69,7 @@ internal class LegacyLibraryRelationshipImporter(private val database: ShippyR16
                             updatedAtEpochMs = importedAtEpochMs,
                         )
                     )
+                database.libraryMembershipDao().refresh(recordingId)
                 check(
                     database
                         .legacyImportDao()
@@ -78,12 +79,24 @@ internal class LegacyLibraryRelationshipImporter(private val database: ShippyR16
                 }
             }
             val lastTrackId = rows.last().trackId
+            val targetCounts =
+                audit.targetCountsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?: JSONObject()
+            MigrationExpectedCountEvidence.recordPage(
+                target = targetCounts,
+                phase = LegacyImportPhase.LIBRARY_RELATIONSHIPS,
+                pageToken = "M3:${lastTrackId}",
+                delta =
+                    MigrationExpectedCountDelta(
+                        liked = rows.count(LegacyLibraryRelationshipRow::liked).toLong()
+                    ),
+            )
             database
                 .migrationAuditDao()
                 .updateProgress(
                     migrationId = migrationId,
                     targetCountsJson =
-                        JSONObject()
+                        targetCounts
                             .put(
                                 "libraryRecording",
                                 database.legacyImportDao().libraryRecordingCount(),
@@ -117,8 +130,11 @@ internal suspend fun requireActiveLegacyAudit(database: ShippyR16Database, migra
         }
         .also { audit ->
             check(audit.completedAtEpochMs == null) { "Completed migration cannot accept new rows" }
-            check(audit.sourceVersion == LEGACY_SCHEMA_VERSION && audit.targetVersion == 1) {
-                "Migration audit versions do not match the R15-to-R16 importer"
+            check(
+                audit.sourceVersion in SUPPORTED_LEGACY_SCHEMA_VERSIONS &&
+                    audit.targetVersion == ShippyR16Database.SCHEMA_VERSION
+            ) {
+                "Migration audit versions (${audit.sourceVersion}->${audit.targetVersion}) do not match the R15-to-R16 importer ($LEGACY_SCHEMA_VERSION->${ShippyR16Database.SCHEMA_VERSION})"
             }
         }
 

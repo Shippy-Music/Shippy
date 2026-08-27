@@ -89,6 +89,54 @@ class R16MigrationBootstrapStoreTest {
         }
     }
 
+    @Test
+    fun `forceRepair recovers from corrupt state and reconstructFromAudit matches audit record`() {
+        val audit =
+            app.shippy.data.db.entity.MigrationAuditEntity(
+                migrationId = "mig-reconstruct",
+                sourceVersion = 10,
+                targetVersion = 4,
+                startedAtEpochMs = 100,
+                completedAtEpochMs = null,
+                sourceCountsJson = "{}",
+                targetCountsJson = "{}",
+                warningsJson = "[]",
+                checksum = null,
+                status = "IMPORTING",
+            )
+        val reconstructed =
+            R16MigrationBootstrapState.reconstructFromAudit(
+                audit = audit,
+                backupSatisfied = true,
+                legacyDatabaseSha256 = "b".repeat(64),
+                nowEpochMs = 200,
+            )
+        assertEquals("mig-reconstruct", reconstructed.migrationId)
+        assertEquals(R16MigrationStatus.IMPORTING, reconstructed.status)
+        assertTrue(reconstructed.backupSatisfied)
+        assertTrue(LegacyImportPhase.PREFLIGHT in reconstructed.completedPhases)
+
+        val file = tempFile()
+        try {
+            file.writeText("corrupt garbage")
+            val store = R16MigrationBootstrapStore(file)
+            assertTrue(store.load() is R16MigrationBootstrapLoadResult.Corrupt)
+
+            store.forceRepair(reconstructed)
+            val loaded = store.load() as R16MigrationBootstrapLoadResult.Loaded
+            assertEquals(reconstructed, loaded.state)
+
+            val reset = store.resetToNotStarted(300)
+            assertEquals(R16MigrationStatus.NOT_STARTED, reset.status)
+            assertEquals(0L, reset.revision)
+            val loadedReset = store.load() as R16MigrationBootstrapLoadResult.Loaded
+            assertEquals(reset, loadedReset.state)
+        } finally {
+            file.delete()
+            File(file.path + ".bak").delete()
+        }
+    }
+
     private fun tempFile(): File {
         val context = ApplicationProvider.getApplicationContext<Context>()
         return File(context.cacheDir, "r16-bootstrap-${UUID.randomUUID()}.json")

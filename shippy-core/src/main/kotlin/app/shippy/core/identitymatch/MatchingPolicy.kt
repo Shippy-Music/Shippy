@@ -110,16 +110,32 @@ class MatchingPolicy {
         durationVeto(incoming.durationMs, candidate.durationMs)?.let {
             return it
         }
+        externalIdVeto(incoming, candidate)?.let {
+            return it
+        }
 
         val evidence = mutableListOf<MatchEvidence>()
-        if (
-            incoming.musicBrainzRecordingIds
-                .intersect(candidate.musicBrainzRecordingIds)
-                .isNotEmpty()
-        ) {
+        val incomingMbids =
+            incoming.musicBrainzRecordingIds.mapNotNullTo(linkedSetOf()) {
+                it.trim().takeIf(String::isNotEmpty)?.lowercase(Locale.ROOT)
+            }
+        val candidateMbids =
+            candidate.musicBrainzRecordingIds.mapNotNullTo(linkedSetOf()) {
+                it.trim().takeIf(String::isNotEmpty)?.lowercase(Locale.ROOT)
+            }
+        if (incomingMbids.intersect(candidateMbids).isNotEmpty()) {
             evidence += evidence(MatchEvidenceKind.MUSICBRAINZ_RECORDING, 0.97)
         }
-        if (incoming.isrcs.intersect(candidate.isrcs).isNotEmpty()) {
+
+        val incomingIsrcs =
+            incoming.isrcs.mapNotNullTo(linkedSetOf()) {
+                it.trim().takeIf(String::isNotEmpty)?.uppercase(Locale.ROOT)
+            }
+        val candidateIsrcs =
+            candidate.isrcs.mapNotNullTo(linkedSetOf()) {
+                it.trim().takeIf(String::isNotEmpty)?.uppercase(Locale.ROOT)
+            }
+        if (incomingIsrcs.intersect(candidateIsrcs).isNotEmpty()) {
             evidence += evidence(MatchEvidenceKind.ISRC, 0.92)
         }
         if (
@@ -213,6 +229,47 @@ class MatchingPolicy {
         } else {
             null
         }
+    }
+
+    private fun externalIdVeto(
+        incoming: MatchingFeatures,
+        candidate: MatchingFeatures,
+    ): MatchAssessment? {
+        val incomingVerifiedMbids =
+            incoming.verifiedMusicBrainzRecordingIds.mapNotNullTo(linkedSetOf()) {
+                it.trim().takeIf(String::isNotEmpty)?.lowercase(Locale.ROOT)
+            }
+        val candidateVerifiedMbids =
+            candidate.verifiedMusicBrainzRecordingIds.mapNotNullTo(linkedSetOf()) {
+                it.trim().takeIf(String::isNotEmpty)?.lowercase(Locale.ROOT)
+            }
+        if (
+            incomingVerifiedMbids.isNotEmpty() &&
+                candidateVerifiedMbids.isNotEmpty() &&
+                incomingVerifiedMbids.intersect(candidateVerifiedMbids).isEmpty()
+        ) {
+            return veto(
+                MatchEvidenceKind.EXTERNAL_ID_CONTRADICTION,
+                "Conflicting MusicBrainz recording IDs",
+            )
+        }
+
+        val incomingVerifiedIsrcs =
+            incoming.verifiedIsrcs.mapNotNullTo(linkedSetOf()) {
+                it.trim().takeIf(String::isNotEmpty)?.uppercase(Locale.ROOT)
+            }
+        val candidateVerifiedIsrcs =
+            candidate.verifiedIsrcs.mapNotNullTo(linkedSetOf()) {
+                it.trim().takeIf(String::isNotEmpty)?.uppercase(Locale.ROOT)
+            }
+        if (
+            incomingVerifiedIsrcs.isNotEmpty() &&
+                candidateVerifiedIsrcs.isNotEmpty() &&
+                incomingVerifiedIsrcs.intersect(candidateVerifiedIsrcs).isEmpty()
+        ) {
+            return veto(MatchEvidenceKind.EXTERNAL_ID_CONTRADICTION, "Conflicting ISRC identifiers")
+        }
+        return null
     }
 
     private fun durationScore(first: Long?, second: Long?): Double? {

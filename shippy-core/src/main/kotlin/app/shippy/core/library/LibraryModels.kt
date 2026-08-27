@@ -22,6 +22,20 @@ import app.shippy.core.identity.PlaylistId
 import app.shippy.core.identity.RecordingId
 import java.time.Instant
 
+/**
+ * Stable rule identifiers for the built-in Library views. These describe queries over canonical
+ * recording relationships/assets; they are deliberately not mutable playlist identities.
+ */
+enum class R16SystemCollection(val id: String) {
+    LIKED("liked"),
+    DOWNLOADS("downloads"),
+    LOCAL("local");
+
+    companion object {
+        fun fromId(id: String): R16SystemCollection? = entries.firstOrNull { it.id == id }
+    }
+}
+
 data class LibraryRelationship(
     val recordingId: RecordingId,
     val liked: Boolean,
@@ -34,12 +48,29 @@ data class LibraryRelationship(
 data class Playlist(
     val id: PlaylistId,
     val name: String,
+    val origin: PlaylistOrigin,
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
     init {
         require(name.isNotBlank()) { "Playlist name cannot be blank" }
         require(updatedAt >= createdAt) { "Playlist update cannot precede creation" }
+    }
+}
+
+enum class PlaylistOriginKind {
+    USER,
+    LEGACY_SHIPPY,
+    MUSIKR_DEVICE,
+    IMPORTED_FILE,
+}
+
+data class PlaylistOrigin(val kind: PlaylistOriginKind, val key: String?) {
+    init {
+        require(kind == PlaylistOriginKind.USER || !key.isNullOrBlank()) {
+            "Imported playlist origin requires a stable key"
+        }
+        require(key == null || key == key.trim()) { "Playlist origin key must be trimmed" }
     }
 }
 

@@ -121,6 +121,117 @@ internal data class R16MigrationBootstrapState(
                 legacyDatabaseSha256 = null,
                 updatedAtEpochMs = nowEpochMs,
             )
+
+        fun reconstructFromAudit(
+            audit: app.shippy.data.db.entity.MigrationAuditEntity,
+            backupSatisfied: Boolean,
+            legacyDatabaseSha256: String?,
+            nowEpochMs: Long,
+        ): R16MigrationBootstrapState {
+            val status =
+                when (audit.status) {
+                    "PREPARING" -> R16MigrationStatus.PREPARING
+                    "IMPORTING" -> R16MigrationStatus.IMPORTING
+                    "VERIFYING" -> R16MigrationStatus.VERIFYING
+                    "READY_TO_SWITCH" -> R16MigrationStatus.READY_TO_SWITCH
+                    "ACTIVE" -> R16MigrationStatus.ACTIVE
+                    else -> R16MigrationStatus.FAILED_RECOVERABLE
+                }
+            val completedPhases = mutableSetOf<LegacyImportPhase>()
+            if (backupSatisfied) completedPhases += LegacyImportPhase.PREFLIGHT
+            if (
+                status == R16MigrationStatus.VERIFYING ||
+                    status == R16MigrationStatus.READY_TO_SWITCH ||
+                    status == R16MigrationStatus.ACTIVE
+            ) {
+                completedPhases.addAll(
+                    LegacyImportPhase.entries.filter {
+                        it.ordinal < LegacyImportPhase.VERIFY.ordinal
+                    }
+                )
+            }
+            if (
+                status == R16MigrationStatus.READY_TO_SWITCH || status == R16MigrationStatus.ACTIVE
+            ) {
+                completedPhases += LegacyImportPhase.VERIFY
+            }
+            if (status == R16MigrationStatus.ACTIVE) {
+                completedPhases += LegacyImportPhase.CUTOVER
+            }
+            val orderedPhases = completedPhases.sortedBy(LegacyImportPhase::ordinal)
+            val prefixPhases = LegacyImportPhase.entries.take(orderedPhases.size).toSet()
+
+            return R16MigrationBootstrapState(
+                revision = 1,
+                status = status,
+                migrationId = audit.migrationId,
+                currentPhase =
+                    if (status == R16MigrationStatus.ACTIVE) null
+                    else LegacyImportPhase.entries.firstOrNull { it !in prefixPhases },
+                completedPhases = prefixPhases,
+                lastStableKey = null,
+                backupSatisfied = backupSatisfied,
+                legacyDatabaseSha256 = legacyDatabaseSha256,
+                updatedAtEpochMs = nowEpochMs,
+            )
+        }
+    }
+}
+
+/**
+ * Structured, actionable diagnosis of the current migration state across bootstrap, DB, and backup.
+ */
+internal sealed interface R16MigrationRecoveryDiagnosis {
+    val summary: String
+
+    data object CleanNotStarted : R16MigrationRecoveryDiagnosis {
+        override val summary: String = "Migration has not started yet."
+    }
+
+    data class Resumable(
+        val phase: LegacyImportPhase?,
+        val completedPhases: Set<LegacyImportPhase>,
+        val backupSatisfied: Boolean,
+    ) : R16MigrationRecoveryDiagnosis {
+        override val summary: String =
+            "Migration was interrupted at phase ${phase?.code ?: "initial"} and can be safely resumed."
+    }
+
+    data object ReadyToSwitch : R16MigrationRecoveryDiagnosis {
+        override val summary: String = "Migration verification complete; ready for user cutover."
+    }
+
+    data object Active : R16MigrationRecoveryDiagnosis {
+        override val summary: String = "R16 is active."
+    }
+
+    data class CorruptBootstrap(val reason: String, val canReconstructFromAudit: Boolean) :
+        R16MigrationRecoveryDiagnosis {
+        override val summary: String =
+            "Bootstrap marker is corrupt ($reason). ${if (canReconstructFromAudit) "Reconstruction from database audit is available." else "Manual reset or restore is required."}"
+    }
+
+    data class MissingDatabase(val expectedPath: String) : R16MigrationRecoveryDiagnosis {
+        override val summary: String = "R16 database file is missing at $expectedPath."
+    }
+
+    data class MissingAudit(val migrationId: String) : R16MigrationRecoveryDiagnosis {
+        override val summary: String =
+            "No migration audit found in database for migration $migrationId."
+    }
+
+    data class AuditMismatch(
+        val sourceVersion: Int,
+        val targetVersion: Int,
+        val expectedSource: Int,
+        val expectedTarget: Int,
+    ) : R16MigrationRecoveryDiagnosis {
+        override val summary: String =
+            "Migration audit versions ($sourceVersion->$targetVersion) do not match expected ($expectedSource->$expectedTarget)."
+    }
+
+    data class MissingBackup(val expectedPath: String) : R16MigrationRecoveryDiagnosis {
+        override val summary: String = "Verified recovery backup is missing at $expectedPath."
     }
 }
 
@@ -226,6 +337,26 @@ internal class R16MigrationBootstrapStore(file: File) {
         }
         write(next)
         return next
+    }
+
+    /**
+     * Atomically repairs or reconstructs a valid bootstrap state from trustworthy external
+     * evidence, overwriting unreadable or corrupted bootstrap data.
+     */
+    @Synchronized
+    fun forceRepair(state: R16MigrationBootstrapState) {
+        write(state)
+    }
+
+    /**
+     * Resets the bootstrap marker to NOT_STARTED when verified evidence confirms no R16 cutover has
+     * occurred, allowing a clean restart without mutating R15 source data.
+     */
+    @Synchronized
+    fun resetToNotStarted(nowEpochMs: Long): R16MigrationBootstrapState {
+        val state = R16MigrationBootstrapState.notStarted(nowEpochMs)
+        write(state)
+        return state
     }
 
     private fun write(state: R16MigrationBootstrapState) {

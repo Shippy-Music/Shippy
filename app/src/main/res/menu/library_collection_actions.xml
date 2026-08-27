@@ -3,7 +3,8 @@
     <item
         android:id="@+id/action_library_edit_order"
         android:icon="@drawable/ic_sort_24"
-        android:title="@string/lbl_edit_order" />
+        android:title="@string/lbl_edit_order"
+        android:visible="false" />
     <item
         android:id="@+id/action_library_pin"
         android:icon="@drawable/ic_pin_24"

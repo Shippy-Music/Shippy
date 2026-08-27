@@ -59,8 +59,7 @@ constructor(
     private val providerRegistry: ProviderRegistry,
     private val providerSettings: ProviderSettings,
 ) {
-    fun providers(): List<ProviderDescriptor> =
-        providerRegistry.supporting(ProviderCapability.SEARCH).map(MusicProvider::descriptor)
+    fun providers(): List<ProviderDescriptor> = searchableProviders().map(MusicProvider::descriptor)
 
     fun preferredProvider(): ProviderDescriptor? {
         val providers = providers()
@@ -72,7 +71,7 @@ constructor(
         val normalizedQuery = query.trim()
         if (normalizedQuery.isEmpty()) return ProviderSearchSnapshot.EMPTY
 
-        val searchableProviders = providerRegistry.supporting(ProviderCapability.SEARCH)
+        val searchableProviders = searchableProviders()
         val byId = searchableProviders.associateBy { it.descriptor.id }
         val selection = providerSettings.selection(byId.keys)
         val selected =
@@ -84,6 +83,16 @@ constructor(
                 .awaitAll()
         }
         return ProviderSearchSnapshot(normalizedQuery, sections)
+    }
+
+    /**
+     * The configured priority is the product order. Registry discovery is intentionally not the
+     * product order: it is only the capability/health eligibility filter.
+     */
+    private fun searchableProviders(): List<MusicProvider> {
+        val eligible = providerRegistry.supporting(ProviderCapability.SEARCH)
+        val byId = eligible.associateBy { it.descriptor.id }
+        return providerSettings.selection(byId.keys).priority.mapNotNull(byId::get)
     }
 
     private suspend fun MusicProvider.searchSection(query: String): ProviderSearchSection =

@@ -70,6 +70,7 @@ class R16CatalogueMaintenanceTest {
             Room.inMemoryDatabaseBuilder(context, ShippyR16Database::class.java)
                 .allowMainThreadQueries()
                 .build()
+        database.openHelper.writableDatabase.execSQL("PRAGMA foreign_keys = ON")
         ingestion = RoomR16IngestionRepository(database)
         maintenance = RoomR16CatalogueMaintenance(database)
     }
@@ -152,6 +153,8 @@ class R16CatalogueMaintenanceTest {
                         artworkOverride = null,
                         displaySortMode = "MANUAL",
                         displaySortDirection = "ASCENDING",
+                        originKind = "USER",
+                        originKey = null,
                         createdAtEpochMs = now.toEpochMilli(),
                         updatedAtEpochMs = now.toEpochMilli(),
                     ),
@@ -263,9 +266,105 @@ class R16CatalogueMaintenanceTest {
                     )
                 )
 
-            assertEquals(emptyList<RecordingId>(), result.deletedRecordingIds)
+            // 8 durable/protected recordings survive, while the expired transient recording with
+            // history is collected
+            assertEquals(listOf(history), result.deletedRecordingIds)
             assertEquals(1, result.skippedProtectedCount)
-            assertEquals(9, tableCount("recording"))
+            assertEquals(8, tableCount("recording"))
+            // Verify history row survived recording deletion
+            assertEquals(1, tableCount("play_history"))
+        }
+
+    @Test
+    fun `transient recording with play history is purged by GC while history survives with snapshots and presentation`() =
+        runBlocking {
+            val now = Instant.parse("2026-08-19T00:00:00Z")
+            val capturedAt = now.minus(Duration.ofDays(65))
+            val transientRecording = ingest(101, capturedAt)
+
+            // Write play history with self-presenting snapshot metadata
+            database
+                .historyDao()
+                .save(
+                    PlayHistoryEntity(
+                        listeningSessionId = "session-transient-1",
+                        recordingId = transientRecording.value,
+                        queueEntryId = "queue-1",
+                        sourceReferenceId = null,
+                        startedAtEpochMs = capturedAt.toEpochMilli(),
+                        endedAtEpochMs = capturedAt.plusSeconds(180).toEpochMilli(),
+                        activeListenedMs = 180_000,
+                        lastPositionMs = 180_000,
+                        completionKind = "NATURAL_END",
+                        chosenByUser = true,
+                        snapshotTitle = "Streamed Indie Song",
+                        snapshotArtistDisplay = "Streamed Indie Artist",
+                        snapshotArtworkLocation = "https://artwork.example.com/streamed.jpg",
+                    )
+                )
+
+            // Prior to GC, presentation queries return metadata from recording or snapshot
+            val beforeGc = database.historyDao().recentFinishedWithPresentation(10)
+            assertEquals(1, beforeGc.size)
+            assertEquals(transientRecording.value, beforeGc.first().recordingId)
+            assertEquals("Fixture 101", beforeGc.first().title)
+
+            // Run GC on expired transient recording
+            val result = maintenance.collectExpiredTransient(R16CatalogueGcRequest(now = now))
+            assertEquals(listOf(transientRecording), result.deletedRecordingIds)
+            assertEquals(0, tableCount("recording"))
+
+            // Verify play history survives with recordingId set to NULL
+            val historyAfterGc = database.historyDao().recent(10)
+            assertEquals(1, historyAfterGc.size)
+            assertNull(historyAfterGc.first().recordingId)
+            assertEquals("Streamed Indie Song", historyAfterGc.first().snapshotTitle)
+            assertEquals("Streamed Indie Artist", historyAfterGc.first().snapshotArtistDisplay)
+            assertEquals(
+                "https://artwork.example.com/streamed.jpg",
+                historyAfterGc.first().snapshotArtworkLocation,
+            )
+
+            // Verify history presentation queries still present the row using snapshots
+            val presentationAfterGc = database.historyDao().recentFinishedWithPresentation(10)
+            assertEquals(1, presentationAfterGc.size)
+            assertNull(presentationAfterGc.first().recordingId)
+            assertEquals("Streamed Indie Song", presentationAfterGc.first().title)
+            assertEquals("Streamed Indie Artist", presentationAfterGc.first().artist)
+            assertEquals(
+                "https://artwork.example.com/streamed.jpg",
+                presentationAfterGc.first().artworkLocation,
+            )
+        }
+
+    @Test
+    fun `actively used transient recordings in active queue retained cache or pending work survive GC even when expired`() =
+        runBlocking {
+            val now = Instant.parse("2026-08-19T00:00:00Z")
+            val capturedAt = now.minus(Duration.ofDays(65))
+            val playing = ingest(201, capturedAt)
+            val cached = ingest(202, capturedAt)
+            val pending = ingest(203, capturedAt)
+            val unreferenced = ingest(204, capturedAt)
+
+            val result =
+                maintenance.collectExpiredTransient(
+                    R16CatalogueGcRequest(
+                        now = now,
+                        protections =
+                            R16CatalogueGcProtections(
+                                activeQueue = setOf(playing),
+                                retainedCache = setOf(cached),
+                                pendingWork = setOf(pending),
+                            ),
+                    )
+                )
+
+            // Only unreferenced expired transient recording is collected; protected ones are
+            // skipped
+            assertEquals(listOf(unreferenced), result.deletedRecordingIds)
+            assertEquals(3, result.skippedProtectedCount)
+            assertEquals(3, tableCount("recording"))
         }
 
     private suspend fun ingest(index: Int, capturedAt: Instant): RecordingId {

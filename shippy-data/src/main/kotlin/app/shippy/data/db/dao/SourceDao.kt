@@ -28,6 +28,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 internal abstract class SourceDao {
+    @Query("SELECT * FROM source_reference WHERE source_reference_id = :sourceReferenceId")
+    abstract suspend fun get(sourceReferenceId: String): SourceReferenceEntity?
+
     @Query(
         """
         SELECT * FROM source_reference
@@ -59,7 +62,7 @@ internal abstract class SourceDao {
     protected abstract suspend fun insertObservation(entity: MetadataObservationEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
-    protected abstract suspend fun insertSource(entity: SourceReferenceEntity)
+    abstract suspend fun insertSource(entity: SourceReferenceEntity)
 
     @Query(
         """
@@ -85,6 +88,50 @@ internal abstract class SourceDao {
         failureRetryable: Boolean?,
         observationId: String,
         updatedAtEpochMs: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE source_reference SET
+            recording_id = :recordingId,
+            identity_status = :identityStatus,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE source_reference_id = :sourceReferenceId
+        """
+    )
+    abstract suspend fun reassignRecordingId(
+        sourceReferenceId: String,
+        recordingId: String,
+        identityStatus: String = "MATCHED",
+        updatedAtEpochMs: Long = System.currentTimeMillis(),
+    ): Int
+
+    @Query(
+        """
+        UPDATE source_reference SET
+            recording_id = :recordingId,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE source_reference_id = :sourceReferenceId
+        """
+    )
+    abstract suspend fun reassignRecordingIdPreservingIdentityStatus(
+        sourceReferenceId: String,
+        recordingId: String,
+        updatedAtEpochMs: Long = System.currentTimeMillis(),
+    ): Int
+
+    @Query(
+        """
+        UPDATE source_reference SET
+            recording_id = :newRecordingId,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE recording_id = :oldRecordingId
+        """
+    )
+    abstract suspend fun reassignSourcesForRecording(
+        oldRecordingId: String,
+        newRecordingId: String,
+        updatedAtEpochMs: Long = System.currentTimeMillis(),
     ): Int
 
     @Query(

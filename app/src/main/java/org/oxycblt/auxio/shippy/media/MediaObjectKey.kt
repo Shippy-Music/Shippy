@@ -72,5 +72,25 @@ value class MediaObjectKey private constructor(val value: String) {
                     .joinToString("") { byte -> "%02x".format(byte) }
             return MediaObjectKey("$CACHE_KEY_PREFIX$digest")
         }
+
+        /** R16 canonical source reference identity for bounded streaming cache. */
+        fun fromSourceReference(
+            sourceReferenceId: app.shippy.core.identity.SourceReferenceId,
+            mediaVariant: String = "DEFAULT",
+        ): MediaObjectKey {
+            val canonical = "$SCHEMA\u0000source\u0000${sourceReferenceId.value}\u0000$mediaVariant"
+            val digest =
+                MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.toByteArray(Charsets.UTF_8))
+                    .joinToString("") { byte -> "%02x".format(byte) }
+            return MediaObjectKey("$CACHE_KEY_PREFIX$digest")
+        }
+
+        fun fromCustomCacheKey(cacheKey: String): MediaObjectKey {
+            require(cacheKey.startsWith(CACHE_KEY_PREFIX)) {
+                "Custom cache key must start with $CACHE_KEY_PREFIX"
+            }
+            return MediaObjectKey(cacheKey)
+        }
     }
 }

@@ -34,6 +34,7 @@ internal class CanonicalWriteTransactions(private val database: ShippyR16Databas
         database.withTransaction {
             database.recordingDao().upsertRecordingGraph(recording, artists, credits)
             database.searchDao().refresh(recording.recordingId)
+            database.libraryMembershipDao().refresh(recording.recordingId)
         }
     }
 

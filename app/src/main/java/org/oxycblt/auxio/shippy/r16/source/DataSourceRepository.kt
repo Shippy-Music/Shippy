@@ -20,6 +20,7 @@ package org.oxycblt.auxio.shippy.r16.source
 import app.shippy.core.identity.RecordingId
 import app.shippy.core.identity.SourceReferenceId
 import app.shippy.core.source.SourceKey
+import app.shippy.core.source.SourceKind
 import app.shippy.core.source.SourceReference
 import app.shippy.data.ingest.R16IngestionRepository
 import app.shippy.data.source.R16SourceStateRepository
@@ -37,6 +38,8 @@ class DataSourceRepository(
     ingestion: R16IngestionRepository,
 ) : SourceRepository {
     private val ingestor = RecordingIngestor(DataRecordingIngestionStore(ingestion))
+    private val exactProviderIngestor =
+        RecordingIngestor(DataRecordingIngestionStore(ingestion, identityMatchingEnabled = false))
 
     override fun observe(recordingId: RecordingId): Flow<List<SourceReference>> =
         state.observe(recordingId)
@@ -45,6 +48,21 @@ class DataSourceRepository(
 
     override suspend fun upsert(observation: SourceTrackObservation): SourceReferenceId {
         ingestor.ingest(observation)
+        return checkNotNull(state.exact(observation.sourceKey)).id
+    }
+
+    /**
+     * Persists an exact provider source without metadata-only cross-provider auto-linking. Existing
+     * identical source keys remain idempotent. New provider keys stay separate until a later
+     * explicit identity-confirmation flow links them.
+     */
+    suspend fun upsertExactProvider(observation: SourceTrackObservation): SourceReferenceId {
+        require(
+            observation.sourceKind !in setOf(SourceKind.LOCAL_FILE, SourceKind.SHIPPY_DOWNLOAD)
+        ) {
+            "Exact provider ingestion requires a provider observation"
+        }
+        exactProviderIngestor.ingest(observation)
         return checkNotNull(state.exact(observation.sourceKey)).id
     }
 

@@ -22,6 +22,8 @@ captures/
 # Codex/local verification output
 /.codex-*.out
 /.codex-*.err
+/.agy-*.log
+/artifacts/
 
 # Release artifacts are attached to GitHub releases, not committed.
 *.apk

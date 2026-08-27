@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="@dimen/spacing_small"
+        android:paddingTop="@dimen/spacing_small"
+        android:paddingEnd="@dimen/spacing_small"
+        android:paddingBottom="@dimen/spacing_small">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/r16_playlist_detail_back"
+            style="@style/Widget.Auxio.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/r16_library_back" />
+
+        <TextView
+            android:id="@+id/r16_playlist_detail_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceTitleLarge"
+            tools:text="Road trip" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/r16_playlist_detail_meta"
+        style="@style/Widget.Auxio.TextView.Item.Secondary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="@dimen/spacing_medium"
+        android:paddingEnd="@dimen/spacing_medium"
+        tools:text="12 tracks" />
+
+    <TextView
+        android:id="@+id/r16_playlist_detail_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="assertive"
+        android:paddingStart="@dimen/spacing_medium"
+        android:paddingEnd="@dimen/spacing_medium"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:visibility="gone" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/lng_search_playlist"
+        android:paddingStart="@dimen/spacing_medium"
+        android:paddingEnd="@dimen/spacing_medium"
+        app:endIconContentDescription="@string/desc_clear_search"
+        app:endIconMode="clear_text">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/r16_playlist_detail_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:imeOptions="actionSearch|flagNoExtractUi"
+            android:inputType="textFilter" />
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/spacing_medium"
+        android:paddingTop="@dimen/spacing_small"
+        android:paddingEnd="@dimen/spacing_medium"
+        android:paddingBottom="@dimen/spacing_small">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_play"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/r16_playlist_play" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_shuffle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:minHeight="48dp"
+                android:text="@string/r16_playlist_shuffle" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_sort"
+                style="@style/Widget.Auxio.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:minHeight="48dp"
+                android:text="@string/r16_playlist_sort" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/r16_playlist_detail_edit_order"
+            style="@style/Widget.Auxio.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:icon="@drawable/ic_sort_24"
+            android:minHeight="48dp"
+            android:text="@string/r16_playlist_edit_order"
+            android:visibility="gone"
+            app:iconGravity="textStart" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_rename"
+                style="@style/Widget.Auxio.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/r16_playlist_rename" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_delete"
+                style="@style/Widget.Auxio.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:minHeight="48dp"
+                android:text="@string/r16_playlist_delete" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/r16_playlist_detail_selection_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/r16_playlist_detail_selection_count"
+                style="@style/Widget.Auxio.TextView.Item.Primary"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                tools:text="3 selected" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_delete_selected"
+                style="@style/Widget.Auxio.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/lbl_delete" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_move_selected_top"
+                style="@style/Widget.Auxio.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:minHeight="48dp"
+                android:text="@string/r16_playlist_move_to_top" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_move_selected_bottom"
+                style="@style/Widget.Auxio.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:minHeight="48dp"
+                android:text="@string/r16_playlist_move_to_bottom" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/r16_playlist_detail_clear_selection"
+                style="@style/Widget.Auxio.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_small"
+                android:minHeight="48dp"
+                android:text="@android:string/cancel" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/r16_playlist_detail_entries"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+        tools:listitem="@layout/item_song" />
+
+    <TextView
+        android:id="@+id/r16_playlist_detail_empty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:padding="@dimen/spacing_medium"
+        android:text="@string/r16_playlist_empty"
+        android:textAlignment="center"
+        android:textAppearance="?attr/textAppearanceBodyLarge"
+        android:visibility="gone" />
+</LinearLayout>

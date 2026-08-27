@@ -47,16 +47,29 @@ import org.oxycblt.auxio.shippy.media.MediaObjectKey
  */
 @Singleton
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-class PlaybackCacheManager internal constructor(private val cache: SimpleCache) {
+class PlaybackCacheManager
+internal constructor(
+    private val cache: SimpleCache,
+    private val context: Context? = null,
+    private val settings: PlaybackCacheSettings? = null,
+) {
+    private val protectedKeys: MutableSet<String> =
+        java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     @Inject
     constructor(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        settings: PlaybackCacheSettings,
     ) : this(
         SimpleCache(
-            File(context.cacheDir, DIRECTORY_NAME),
-            LeastRecentlyUsedCacheEvictor(DEFAULT_MAX_BYTES),
+            File(context.cacheDir, DIRECTORY_NAME).apply { mkdirs() },
+            // The evictor is the absolute upper bound. The selected lower bound is enforced by
+            // maintenance immediately after a preference change and by periodic maintenance.
+            LeastRecentlyUsedCacheEvictor(MAX_CONFIGURED_BYTES),
             StandaloneDatabaseProvider(context),
-        )
+        ),
+        context,
+        settings,
     )
 
     fun dataSourceFactory(upstreamFactory: DataSource.Factory): DataSource.Factory {
@@ -65,8 +78,25 @@ class PlaybackCacheManager internal constructor(private val cache: SimpleCache) 
                 .setCache(cache)
                 .setUpstreamDataSourceFactory(upstreamFactory)
                 .setFlags(CacheDataSource.FLAG_BLOCK_ON_CACHE)
-        return DataSource.Factory { ProviderCacheDataSource(cachedFactory, upstreamFactory) }
+        return DataSource.Factory {
+            ProviderCacheDataSource(
+                cachedFactory,
+                upstreamFactory,
+                { key -> protectedKeys.add(key) },
+                { key -> protectedKeys.remove(key) },
+            )
+        }
     }
+
+    fun protectKey(key: MediaObjectKey) {
+        protectedKeys.add(key.value)
+    }
+
+    fun unprotectKey(key: MediaObjectKey) {
+        protectedKeys.remove(key.value)
+    }
+
+    fun isProtected(key: MediaObjectKey): Boolean = protectedKeys.contains(key.value)
 
     fun hasComplete(key: MediaObjectKey, expectedLength: Long? = null): Boolean {
         val length = contentLength(key, expectedLength) ?: return false
@@ -86,47 +116,152 @@ class PlaybackCacheManager internal constructor(private val cache: SimpleCache) 
             val length = contentLength(key, expectedLength) ?: return@withContext null
             if (length <= 0L || !cache.isCached(key.value, 0L, length)) return@withContext null
 
-            val source =
-                CacheDataSource(
-                    cache,
-                    /* upstreamDataSource= */ null,
-                    CacheDataSource.FLAG_BLOCK_ON_CACHE,
-                )
+            protectKey(key)
             try {
-                source.open(
-                    DataSpec.Builder()
-                        .setUri(Uri.parse("cache://shippy/${key.value}"))
-                        .setKey(key.value)
-                        .setLength(length)
-                        .build()
-                )
-                val buffer = ByteArray(BUFFER_SIZE)
-                var copied = 0L
-                while (copied < length) {
-                    val read =
-                        source.read(buffer, 0, minOf(buffer.size.toLong(), length - copied).toInt())
-                    if (read == C.RESULT_END_OF_INPUT) return@withContext null
-                    output.write(buffer, 0, read)
-                    copied += read
-                }
-                output.flush()
-                copied.takeIf { it == length }
-            } catch (_: Exception) {
-                null
-            } finally {
+                val source =
+                    CacheDataSource(
+                        cache,
+                        /* upstreamDataSource= */ null,
+                        CacheDataSource.FLAG_BLOCK_ON_CACHE,
+                    )
                 try {
-                    source.close()
+                    source.open(
+                        DataSpec.Builder()
+                            .setUri(Uri.parse("cache://shippy/${key.value}"))
+                            .setKey(key.value)
+                            .setLength(length)
+                            .build()
+                    )
+                    val buffer = ByteArray(BUFFER_SIZE)
+                    var copied = 0L
+                    while (copied < length) {
+                        val read =
+                            source.read(
+                                buffer,
+                                0,
+                                minOf(buffer.size.toLong(), length - copied).toInt(),
+                            )
+                        if (read == C.RESULT_END_OF_INPUT) return@withContext null
+                        output.write(buffer, 0, read)
+                        copied += read
+                    }
+                    output.flush()
+                    copied.takeIf { it == length }
                 } catch (_: Exception) {
-                    // The cache copy was already rejected above if a read failed.
+                    null
+                } finally {
+                    try {
+                        source.close()
+                    } catch (_: Exception) {
+                        // The cache copy was already rejected above if a read failed.
+                    }
                 }
+            } finally {
+                unprotectKey(key)
             }
         }
 
     /**
-     * Clears only the bounded playback-object cache. Durable downloads, local files, and Crew
-     * temporary media live elsewhere; no settings UI calls this yet.
+     * Evicts cached spans older than [maxAgeMs], respecting active eviction protections. Returns
+     * total bytes evicted.
      */
-    suspend fun clear() = withContext(Dispatchers.IO) { cache.keys.forEach(cache::removeResource) }
+    fun evictOlderThan(maxAgeMs: Long, nowEpochMs: Long = System.currentTimeMillis()): Long {
+        var evictedBytes = 0L
+        for (key in cache.keys) {
+            if (protectedKeys.contains(key)) continue
+            val spans = cache.getCachedSpans(key)
+            for (span in spans) {
+                if (span.lastTouchTimestamp < nowEpochMs - maxAgeMs) {
+                    val spanLength = span.length
+                    cache.removeSpan(span)
+                    evictedBytes += spanLength
+                }
+            }
+        }
+        return evictedBytes
+    }
+
+    /**
+     * Evicts oldest unprotected spans when free space is below [minFreeBytes]. Returns total bytes
+     * evicted.
+     */
+    fun enforceFreeSpaceFloor(minFreeBytes: Long, getUsableSpace: () -> Long): Long {
+        var evictedBytes = 0L
+        if (getUsableSpace() >= minFreeBytes) return 0L
+
+        val allSpans = mutableListOf<androidx.media3.datasource.cache.CacheSpan>()
+        for (key in cache.keys) {
+            if (protectedKeys.contains(key)) continue
+            allSpans.addAll(cache.getCachedSpans(key))
+        }
+        allSpans.sortBy { it.lastTouchTimestamp }
+
+        for (span in allSpans) {
+            if (getUsableSpace() >= minFreeBytes) break
+            val len = span.length
+            cache.removeSpan(span)
+            evictedBytes += len
+        }
+        return evictedBytes
+    }
+
+    /** Evicts oldest unprotected spans until the selected cache target is satisfied. */
+    fun enforceMaximumSize(maxBytes: Long): Long {
+        require(maxBytes > 0L) { "Cache maximum must be positive" }
+        if (cache.cacheSpace <= maxBytes) return 0L
+        var evictedBytes = 0L
+        val spans =
+            cache.keys
+                .asSequence()
+                .filterNot(protectedKeys::contains)
+                .flatMap { cache.getCachedSpans(it).asSequence() }
+                .sortedBy { it.lastTouchTimestamp }
+                .toList()
+        for (span in spans) {
+            if (cache.cacheSpace <= maxBytes) break
+            cache.removeSpan(span)
+            evictedBytes += span.length
+        }
+        return evictedBytes
+    }
+
+    /**
+     * Clears only unprotected resources in the bounded playback-object cache. Protected active
+     * items, durable downloads, local files, and Crew temporary media are never affected.
+     */
+    suspend fun clear() =
+        withContext(Dispatchers.IO) {
+            for (key in cache.keys) {
+                if (protectedKeys.contains(key)) continue
+                cache.removeResource(key)
+            }
+        }
+
+    /**
+     * Runs bounded cache maintenance using Media3 span access timestamps for optional age eviction.
+     * Protected active items are preserved throughout, even when that leaves the cache above
+     * target.
+     */
+    fun performMaintenance(
+        maxAgeMs: Long? = DEFAULT_MAX_AGE_MS,
+        maxBytes: Long = DEFAULT_MAX_BYTES,
+        minFreeBytes: Long = DEFAULT_MIN_FREE_BYTES,
+        getUsableSpace: () -> Long = { context?.cacheDir?.usableSpace ?: Long.MAX_VALUE },
+    ): Long {
+        var evictedBytes = 0L
+        if (maxAgeMs != null) {
+            evictedBytes += evictOlderThan(maxAgeMs)
+        }
+        evictedBytes += enforceMaximumSize(maxBytes)
+        evictedBytes += enforceFreeSpaceFloor(minFreeBytes, getUsableSpace)
+        return evictedBytes
+    }
+
+    fun performConfiguredMaintenance(): Long =
+        performMaintenance(
+            maxAgeMs = if (settings == null) DEFAULT_MAX_AGE_MS else settings.unusedMaxAgeMs,
+            maxBytes = settings?.maximumBytes ?: DEFAULT_MAX_BYTES,
+        )
 
     fun sizeBytes(): Long = cache.cacheSpace
 
@@ -143,7 +278,10 @@ class PlaybackCacheManager internal constructor(private val cache: SimpleCache) 
 
     private companion object {
         const val DIRECTORY_NAME = "shippy-playback-cache-v1"
-        const val DEFAULT_MAX_BYTES = 512L * 1024L * 1024L
+        const val DEFAULT_MAX_BYTES = 2L * 1024L * 1024L * 1024L // 2 GB
+        const val MAX_CONFIGURED_BYTES = 5L * 1024L * 1024L * 1024L // 5 GB
+        const val DEFAULT_MAX_AGE_MS = 30L * 24L * 60L * 60L * 1000L // 30 days
+        const val DEFAULT_MIN_FREE_BYTES = 500L * 1024L * 1024L // 500 MB
         const val BUFFER_SIZE = 64 * 1024
     }
 }
@@ -153,9 +291,12 @@ class PlaybackCacheManager internal constructor(private val cache: SimpleCache) 
 private class ProviderCacheDataSource(
     private val cachedFactory: DataSource.Factory,
     private val upstreamFactory: DataSource.Factory,
+    private val protectKey: (String) -> Unit,
+    private val unprotectKey: (String) -> Unit,
 ) : DataSource {
     private val listeners = mutableListOf<TransferListener>()
     private var delegate: DataSource? = null
+    private var protectedKey: String? = null
 
     override fun addTransferListener(transferListener: TransferListener) {
         listeners += transferListener
@@ -168,13 +309,28 @@ private class ProviderCacheDataSource(
         val factory =
             if (dataSpec.key?.startsWith(MediaObjectKey.CACHE_KEY_PREFIX) == true) cachedFactory
             else upstreamFactory
-        return factory
-            .createDataSource()
-            .also { source ->
-                listeners.forEach(source::addTransferListener)
-                delegate = source
-            }
-            .open(dataSpec)
+        val cacheKey = dataSpec.key?.takeIf { it.startsWith(MediaObjectKey.CACHE_KEY_PREFIX) }
+        cacheKey?.let(protectKey)
+        protectedKey = cacheKey
+        return try {
+            factory
+                .createDataSource()
+                .also { source ->
+                    listeners.forEach(source::addTransferListener)
+                    delegate = source
+                }
+                .open(dataSpec)
+        } catch (error: IOException) {
+            delegate = null
+            protectedKey?.let(unprotectKey)
+            protectedKey = null
+            throw error
+        } catch (error: RuntimeException) {
+            delegate = null
+            protectedKey?.let(unprotectKey)
+            protectedKey = null
+            throw error
+        }
     }
 
     @Throws(IOException::class)
@@ -190,6 +346,11 @@ private class ProviderCacheDataSource(
     override fun close() {
         val open = delegate ?: return
         delegate = null
-        open.close()
+        try {
+            open.close()
+        } finally {
+            protectedKey?.let(unprotectKey)
+            protectedKey = null
+        }
     }
 }

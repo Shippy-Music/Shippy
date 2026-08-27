@@ -139,3 +139,47 @@ data class PlaylistEntryRowView(
     @ColumnInfo(name = "download_state") val downloadState: String,
     @ColumnInfo(name = "availability_summary") val availabilitySummary: String,
 )
+
+/**
+ * Finite playlist-list projection. This is a query POJO rather than a database view so adding
+ * summary counts does not change the Room schema.
+ */
+data class PlaylistSummaryRowView(
+    @ColumnInfo(name = "playlist_id") val playlistId: String,
+    val name: String,
+    val pinned: Boolean,
+    @ColumnInfo(name = "library_order_key") val libraryOrderKey: Long,
+    @ColumnInfo(name = "artwork_override") val artworkOverride: String?,
+    @ColumnInfo(name = "display_sort_mode") val displaySortMode: String,
+    @ColumnInfo(name = "display_sort_direction") val displaySortDirection: String,
+    @ColumnInfo(name = "entry_count") val entryCount: Int,
+    @ColumnInfo(name = "total_duration_ms") val totalDurationMs: Long,
+)
+
+/**
+ * Finite artist-list projection. The recording count is derived from current Library membership,
+ * not from saved-artist state or the complete catalogue.
+ */
+data class ArtistLibrarySummaryRow(
+    @ColumnInfo(name = "artist_id") val artistId: String,
+    @ColumnInfo(name = "canonical_name") val canonicalName: String,
+    @ColumnInfo(name = "recording_count") val recordingCount: Int,
+)
+
+/**
+ * Finite album-list projection. The recording count and artwork are derived from current Library
+ * membership.
+ */
+data class AlbumLibrarySummaryRow(
+    @ColumnInfo(name = "release_id") val releaseId: String,
+    @ColumnInfo(name = "canonical_title") val canonicalTitle: String,
+    @ColumnInfo(name = "artist_display") val artistDisplay: String,
+    @ColumnInfo(name = "artwork_location") val artworkLocation: String?,
+    @ColumnInfo(name = "recording_count") val recordingCount: Int,
+)
+
+/** Finite genre-list projection derived from Library songs. */
+data class GenreLibrarySummaryRow(
+    val genre: String,
+    @ColumnInfo(name = "recording_count") val recordingCount: Int,
+)

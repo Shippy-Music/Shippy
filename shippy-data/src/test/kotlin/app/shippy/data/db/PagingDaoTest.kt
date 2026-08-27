@@ -30,6 +30,9 @@ import app.shippy.data.db.entity.PlaylistEntryEntity
 import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.transaction.CanonicalWriteTransactions
+import app.shippy.data.library.R16LibraryPlaylistQuery
+import app.shippy.data.library.R16LibrarySongQuery
+import app.shippy.data.library.RoomR16LibraryReadRepository
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -50,6 +53,8 @@ class PagingDaoTest {
                     ApplicationProvider.getApplicationContext<Context>(),
                     ShippyR16Database::class.java,
                 )
+                .addCallback(R16LibraryMembershipTriggers)
+                .addCallback(R16PlaylistSearchTriggers)
                 .allowMainThreadQueries()
                 .build()
     }
@@ -108,6 +113,8 @@ class PagingDaoTest {
                     artworkOverride = null,
                     displaySortMode = "CUSTOM",
                     displaySortDirection = "ASC",
+                    originKind = "USER",
+                    originKey = null,
                     createdAtEpochMs = 1,
                     updatedAtEpochMs = 1,
                 ),
@@ -128,9 +135,120 @@ class PagingDaoTest {
                 it.playlistEntryId
             },
         )
+        val repository = RoomR16LibraryReadRepository(database)
+        assertEquals(
+            listOf("entry-1", "entry-2", "entry-3"),
+            repository.playlistEntries("playlist-1").loadPage().map { it.playlistEntryId },
+        )
+        assertEquals(
+            listOf("entry-1", "entry-3"),
+            repository
+                .playlistEntries("playlist-1", R16LibraryPlaylistQuery("Target"))
+                .loadPage()
+                .map { it.playlistEntryId },
+        )
+        assertTrue(
+            repository
+                .playlistEntries("playlist-1", R16LibraryPlaylistQuery("---"))
+                .loadPage()
+                .isEmpty()
+        )
         assertEquals(
             listOf("recording-1"),
             database.readModelDao().searchLibrary("Target*").loadPage().map { it.recordingId },
+        )
+    }
+
+    @Test
+    fun `Library Songs repository keeps search contextual and paged`() = runBlocking {
+        insertRecording("recording-1", "The River")
+        insertRecording("recording-2", "River of Dreams")
+        insertRecording("recording-3", "Unrelated")
+        database.libraryDao().upsertRelationship(libraryRelationship("recording-1"))
+        database.assetDao().upsert(asset("asset-2", "recording-2", "LOCAL_FILE"))
+
+        val repository = RoomR16LibraryReadRepository(database)
+
+        assertEquals(
+            listOf("recording-2", "recording-1"),
+            repository.songs().loadPage().map { it.recordingId },
+        )
+        assertEquals(
+            listOf("recording-2", "recording-1"),
+            repository.songs(R16LibrarySongQuery("river")).loadPage().map { it.recordingId },
+        )
+        assertEquals(
+            listOf("recording-2"),
+            repository.songs(R16LibrarySongQuery("river dreams")).loadPage().map { it.recordingId },
+        )
+    }
+
+    @Test
+    fun `Library Songs search removes FTS operators from user text`() {
+        assertEquals("river* dreams*", R16LibrarySongQuery("river + dreams").ftsMatchOrNull())
+        assertEquals(null, R16LibrarySongQuery("---").ftsMatchOrNull())
+    }
+
+    @Test
+    fun `dedicated Library Search pages durable songs artists and playlist titles`() = runBlocking {
+        insertRecording("recording-1", "Night Drive")
+        insertRecording("recording-2", "Other Drive")
+        insertRecording("recording-transient", "Night Transit")
+        database.libraryDao().upsertRelationship(libraryRelationship("recording-1"))
+        database.libraryDao().upsertRelationship(libraryRelationship("recording-2"))
+        database
+            .playlistDao()
+            .create(
+                PlaylistEntity(
+                    playlistId = "playlist-1",
+                    name = "Road Trips",
+                    pinned = false,
+                    libraryOrderKey = 1,
+                    artworkOverride = null,
+                    displaySortMode = "CUSTOM",
+                    displaySortDirection = "ASC",
+                    originKind = "USER",
+                    originKey = null,
+                    createdAtEpochMs = 1,
+                    updatedAtEpochMs = 1,
+                ),
+                emptyList(),
+            )
+        val repository = RoomR16LibraryReadRepository(database)
+
+        assertEquals(
+            listOf("recording-1"),
+            repository.songs(R16LibrarySongQuery("night")).loadPage().map { it.recordingId },
+        )
+        assertEquals(
+            listOf("artist-1" to 2),
+            repository
+                .searchArtists(app.shippy.data.library.R16LibrarySearchQuery("artist"))
+                .loadPage()
+                .map { it.artistId to it.recordingCount },
+        )
+        assertEquals(
+            listOf("playlist-1"),
+            repository
+                .searchPlaylists(app.shippy.data.library.R16LibrarySearchQuery("road"))
+                .loadPage()
+                .map { it.playlistId },
+        )
+        database.openHelper.writableDatabase.execSQL(
+            "UPDATE playlist SET name = 'Commute' WHERE playlist_id = 'playlist-1'"
+        )
+        assertTrue(
+            repository
+                .searchPlaylists(app.shippy.data.library.R16LibrarySearchQuery("road"))
+                .loadPage()
+                .isEmpty()
+        )
+        assertEquals(
+            listOf("playlist-1"),
+            repository
+                .searchPlaylists(app.shippy.data.library.R16LibrarySearchQuery("commute"))
+                .loadPage()
+                .map { it.playlistId },
         )
     }
 

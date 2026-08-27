@@ -18,6 +18,7 @@
 package org.oxycblt.auxio.shippy.lastfm
 
 import java.security.MessageDigest
+import java.util.Locale
 import org.oxycblt.auxio.shippy.domain.QueueItem
 import org.oxycblt.auxio.shippy.domain.QueueItemId
 import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleEntity
@@ -71,6 +72,16 @@ data class LastFmTrack(
     }
 }
 
+object LastFmAccountId {
+    fun hash(username: String): String {
+        val normalized = username.trim().lowercase(Locale.ROOT)
+        require(normalized.isNotEmpty()) { "Last.fm username cannot be blank" }
+        return MessageDigest.getInstance("SHA-256")
+            .digest(normalized.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+    }
+}
+
 object LastFmSigning {
     fun signature(parameters: Map<String, String>, secret: String): String {
         val input = parameters.toSortedMap().entries.joinToString("") { it.key + it.value } + secret
@@ -82,12 +93,14 @@ object LastFmSigning {
 
 internal fun LastFmTrack.outbox(
     queueItemId: QueueItemId,
+    accountId: String,
     startedAtEpochSeconds: Long,
     nowEpochMs: Long,
 ): LastFmScrobbleEntity {
     require(startedAtEpochSeconds > 0)
     return LastFmScrobbleEntity(
         "queue-item:${queueItemId.value}",
+        accountId,
         artist,
         title,
         album,
@@ -96,3 +109,13 @@ internal fun LastFmTrack.outbox(
         nowEpochMs,
     )
 }
+
+internal fun LastFmScrobbleEntity.payload() =
+    LastFmScrobblePayload(
+        id = id,
+        artist = artist,
+        track = track,
+        album = album,
+        durationSeconds = durationSeconds?.toLong(),
+        startedAtEpochSeconds = startedAtEpochSeconds,
+    )

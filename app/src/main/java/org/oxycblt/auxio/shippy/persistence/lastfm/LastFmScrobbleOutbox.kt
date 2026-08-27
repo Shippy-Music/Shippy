@@ -28,6 +28,7 @@ import androidx.room.Query
 @Entity(tableName = "lastfm_scrobble_outbox", indices = [Index("queuedAtEpochMs")])
 data class LastFmScrobbleEntity(
     @PrimaryKey val id: String,
+    val accountId: String,
     val artist: String,
     val track: String,
     val album: String?,
@@ -38,8 +39,10 @@ data class LastFmScrobbleEntity(
 
 @Dao
 interface LastFmScrobbleDao {
-    @Query("SELECT * FROM lastfm_scrobble_outbox ORDER BY queuedAtEpochMs ASC, id ASC LIMIT :limit")
-    suspend fun oldest(limit: Int): List<LastFmScrobbleEntity>
+    @Query(
+        "SELECT * FROM lastfm_scrobble_outbox WHERE accountId = :accountId ORDER BY queuedAtEpochMs ASC, id ASC LIMIT :limit"
+    )
+    suspend fun oldest(accountId: String, limit: Int): List<LastFmScrobbleEntity>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insert(entry: LastFmScrobbleEntity)
 

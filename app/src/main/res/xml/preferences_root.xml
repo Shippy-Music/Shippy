@@ -72,6 +72,22 @@
             app:summary="@string/set_download_destination_unselected"
             app:title="@string/set_download_destination" />
 
+        <ListPreference
+            app:defaultValue="2147483648"
+            app:entries="@array/set_playback_cache_max_size_entries"
+            app:entryValues="@array/set_playback_cache_max_size_values"
+            app:key="@string/set_key_playback_cache_max_size"
+            app:title="@string/set_playback_cache_max_size"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            app:defaultValue="2592000000"
+            app:entries="@array/set_playback_cache_unused_age_entries"
+            app:entryValues="@array/set_playback_cache_unused_age_values"
+            app:key="@string/set_key_playback_cache_unused_age"
+            app:title="@string/set_playback_cache_unused_age"
+            app:useSimpleSummaryProvider="true" />
+
         <Preference
             app:key="@string/set_key_clear_playback_cache"
             app:summary="@string/set_clear_playback_cache_desc"

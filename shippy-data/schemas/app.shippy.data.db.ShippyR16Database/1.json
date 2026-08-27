@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "44e9cd72ef59268c22b636e7b74d7fdc",
+    "identityHash": "380e115fb92568875e5e2794203fff40",
     "entities": [
       {
         "tableName": "recording",
@@ -1284,8 +1284,66 @@
         ]
       },
       {
+        "tableName": "library_membership_index",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recording_id` TEXT NOT NULL, `title_sort_key` TEXT NOT NULL, PRIMARY KEY(`recording_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleSortKey",
+            "columnName": "title_sort_key",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recording_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_library_membership_recording",
+            "unique": false,
+            "columnNames": [
+              "recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_library_membership_recording` ON `${TABLE_NAME}` (`recording_id`)"
+          },
+          {
+            "name": "index_library_membership_order",
+            "unique": true,
+            "columnNames": [
+              "title_sort_key",
+              "recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_library_membership_order` ON `${TABLE_NAME}` (`title_sort_key`, `recording_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
         "tableName": "playlist",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`playlist_id` TEXT NOT NULL, `name` TEXT NOT NULL, `pinned` INTEGER NOT NULL, `library_order_key` INTEGER NOT NULL, `artwork_override` TEXT, `display_sort_mode` TEXT NOT NULL, `display_sort_direction` TEXT NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`playlist_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`playlist_id` TEXT NOT NULL, `name` TEXT NOT NULL, `pinned` INTEGER NOT NULL, `library_order_key` INTEGER NOT NULL, `artwork_override` TEXT, `display_sort_mode` TEXT NOT NULL, `display_sort_direction` TEXT NOT NULL, `origin_kind` TEXT NOT NULL, `origin_key` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`playlist_id`))",
         "fields": [
           {
             "fieldPath": "playlistId",
@@ -1329,6 +1387,17 @@
             "notNull": true
           },
           {
+            "fieldPath": "originKind",
+            "columnName": "origin_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originKey",
+            "columnName": "origin_key",
+            "affinity": "TEXT"
+          },
+          {
             "fieldPath": "createdAtEpochMs",
             "columnName": "created_at_epoch_ms",
             "affinity": "INTEGER",
@@ -1360,6 +1429,16 @@
               "ASC"
             ],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_playlist_library_order` ON `${TABLE_NAME}` (`pinned` DESC, `library_order_key` ASC)"
+          },
+          {
+            "name": "index_playlist_origin",
+            "unique": true,
+            "columnNames": [
+              "origin_kind",
+              "origin_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_playlist_origin` ON `${TABLE_NAME}` (`origin_kind`, `origin_key`)"
           }
         ]
       },
@@ -2110,7 +2189,7 @@
       },
       {
         "tableName": "download_job",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`job_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `requested_source_reference_id` TEXT, `published_asset_id` TEXT, `state` TEXT NOT NULL, `bytes_transferred` INTEGER NOT NULL, `expected_bytes` INTEGER, `failure_kind` TEXT, `retry_after_epoch_ms` INTEGER, `pending_location` TEXT, `display_fallback_json` TEXT NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`job_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`requested_source_reference_id`) REFERENCES `source_reference`(`source_reference_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`published_asset_id`) REFERENCES `media_asset`(`asset_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`job_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `requested_source_reference_id` TEXT, `published_asset_id` TEXT, `state` TEXT NOT NULL, `bytes_transferred` INTEGER NOT NULL, `expected_bytes` INTEGER, `failure_kind` TEXT, `retry_after_epoch_ms` INTEGER, `pending_location` TEXT, `display_fallback_json` TEXT NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, `requested_media_variant` TEXT, `destination_identity` TEXT, PRIMARY KEY(`job_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`requested_source_reference_id`) REFERENCES `source_reference`(`source_reference_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`published_asset_id`) REFERENCES `media_asset`(`asset_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
         "fields": [
           {
             "fieldPath": "jobId",
@@ -2183,6 +2262,16 @@
             "columnName": "updated_at_epoch_ms",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "requestedMediaVariant",
+            "columnName": "requested_media_variant",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "destinationIdentity",
+            "columnName": "destination_identity",
+            "affinity": "TEXT"
           }
         ],
         "primaryKey": {
@@ -2698,6 +2787,42 @@
           "preferredOrder": "ASC"
         },
         "contentSyncTriggers": []
+      },
+      {
+        "tableName": "playlist_fts",
+        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`playlist_id` TEXT NOT NULL, `name` TEXT NOT NULL, tokenize=unicode61, notindexed=`playlist_id`)",
+        "fields": [
+          {
+            "fieldPath": "playlistId",
+            "columnName": "playlist_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": []
+        },
+        "ftsVersion": "FTS4",
+        "ftsOptions": {
+          "tokenizer": "unicode61",
+          "tokenizerArgs": [],
+          "contentTable": "",
+          "languageIdColumnName": "",
+          "matchInfo": "FTS4",
+          "notIndexedColumns": [
+            "playlist_id"
+          ],
+          "prefixSizes": [],
+          "preferredOrder": "ASC"
+        },
+        "contentSyncTriggers": []
       }
     ],
     "views": [
@@ -2712,7 +2837,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '44e9cd72ef59268c22b636e7b74d7fdc')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '380e115fb92568875e5e2794203fff40')"
     ]
   }
 }

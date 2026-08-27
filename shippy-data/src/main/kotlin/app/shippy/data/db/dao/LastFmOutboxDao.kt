@@ -39,6 +39,16 @@ internal interface LastFmOutboxDao {
 
     @Query(
         """
+        SELECT * FROM lastfm_scrobble_outbox
+        WHERE account_id = :accountId
+        ORDER BY queued_at_epoch_ms, outbox_id
+        LIMIT :limit
+        """
+    )
+    suspend fun oldest(accountId: String, limit: Int): List<LastFmScrobbleOutboxEntity>
+
+    @Query(
+        """
         UPDATE lastfm_scrobble_outbox SET
             attempt_count = attempt_count + 1,
             last_attempt_at_epoch_ms = :attemptedAtEpochMs

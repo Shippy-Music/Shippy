@@ -74,9 +74,16 @@ internal class ManagedDownloadFileIndex(identities: Collection<ManagedDownloadFi
     companion object {
         val EMPTY = ManagedDownloadFileIndex(emptyList())
 
-        fun from(context: Context, downloads: List<PersistedDownload>): ManagedDownloadFileIndex =
+        fun from(
+            context: Context,
+            downloads: List<PersistedDownload>,
+            r16PendingLocations: Collection<String> = emptyList(),
+        ): ManagedDownloadFileIndex =
             ManagedDownloadFileIndex(
                 buildList {
+                    r16PendingLocations.forEach { location ->
+                        add(identity(context, location, contentLength = null))
+                    }
                     downloads.forEach { download ->
                         download.pendingDocument?.let { pending ->
                             add(identity(context, pending.contentUri, contentLength = null))

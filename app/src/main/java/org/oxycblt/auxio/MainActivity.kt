@@ -20,20 +20,32 @@ package org.oxycblt.auxio
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.view.WindowCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import dagger.Lazy
 import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import javax.inject.Inject
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.databinding.ActivityMainBinding
+import org.oxycblt.auxio.databinding.ActivityR16MigrationBinding
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.shippy.playback.PlaybackStartResult
 import org.oxycblt.auxio.shippy.playback.ShippyPlaybackController
+import org.oxycblt.auxio.shippy.r16.authority.R16AuthorityEntryPoint
+import org.oxycblt.auxio.shippy.r16.authority.R16AuthorityMode
+import org.oxycblt.auxio.shippy.r16.migration.R16MigrationProcessGate
+import org.oxycblt.auxio.shippy.r16.search.R16GlobalSearchFragment
 import org.oxycblt.auxio.shippy.share.ShippyTrackLinkCodec
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.isNight
@@ -45,49 +57,214 @@ import timber.log.Timber as L
  * Auxio's single [AppCompatActivity].
  *
  * @author Alexander Capehart (OxygenCobalt)
- *
- * TODO: Add error screens
- * TODO: Custom language support
- * TODO: Use proper material attributes (Not the weird dimen attributes I currently have)
- * TODO: Migrate to material animation system
- * TODO: Unit testing
- * TODO: Fix UID naming
- * TODO: Leverage FlexibleListAdapter more in dialogs (Disable item anims)
- * TODO: Improve multi-threading support in shared objects
  */
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
     private val playbackModel: PlaybackViewModel by viewModels()
+    private var authorityMode = R16AuthorityMode.ACTIVE_UNAVAILABLE
+    private var activeTabId: Int = R.id.shippy_home_fragment
     @Inject lateinit var uiSettings: UISettings
-    @Inject lateinit var shippyPlaybackController: ShippyPlaybackController
+    @Inject lateinit var migrationGate: R16MigrationProcessGate
+    @Inject lateinit var shippyPlaybackController: Lazy<ShippyPlaybackController>
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        // Activity field injection happens from Hilt's super.onCreate(). Resolve the selector
+        // from the already-created application component because host selection must happen first
+        // to decide whether Fragment state is safe to restore.
+        authorityMode =
+            EntryPointAccessors.fromApplication(
+                    applicationContext,
+                    R16AuthorityEntryPoint::class.java,
+                )
+                .authoritySelector()
+                .select()
+        // Allow state restoration for LEGACY and ACTIVE hosts; isolated hosts (like MIGRATION)
+        // do not restore legacy child trees.
+        super.onCreate(
+            savedInstanceState.takeIf {
+                authorityMode == R16AuthorityMode.LEGACY || authorityMode == R16AuthorityMode.ACTIVE
+            }
+        )
         setupTheme()
-        // Inflate the views after setting up the theme so that the theme attributes are applied.
-        val binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        setupEdgeToEdge(binding.root)
-        L.d("Activity created")
+        when (authorityMode) {
+            R16AuthorityMode.LEGACY -> {
+                // Inflate the views after setting up the theme so that the theme attributes are
+                // applied.
+                val binding = ActivityMainBinding.inflate(layoutInflater)
+                setContentView(binding.root)
+                setupEdgeToEdge(binding.root)
+                L.d("Activity created")
+            }
+            R16AuthorityMode.ACTIVE_UNAVAILABLE -> {
+                setContentView(R.layout.activity_r16_unavailable)
+                setupEdgeToEdge(findViewById(android.R.id.content))
+                L.w("R16 is active but its runtime is unavailable; activity failed closed")
+            }
+            R16AuthorityMode.ACTIVE -> {
+                // This host contains only canonical R16 UI; it never restores the legacy graph.
+                setContentView(R.layout.activity_r16_active)
+                setupEdgeToEdge(findViewById(android.R.id.content))
+                val bottomNav =
+                    findViewById<com.google.android.material.bottomnavigation.BottomNavigationView>(
+                        R.id.r16_bottom_nav
+                    )
+                val miniPlayerContainer = findViewById<View>(R.id.r16_mini_player_container)
+
+                val tabHomeTag = "r16-tab-home"
+                val tabSearchTag = "r16-tab-search"
+                val tabLibraryTag = "r16-tab-library"
+                val tabCrewTag = "r16-tab-crew"
+
+                val tabs =
+                    listOf(
+                        R.id.shippy_home_fragment to tabHomeTag,
+                        R.id.search_fragment to tabSearchTag,
+                        R.id.library_fragment to tabLibraryTag,
+                        R.id.crew_fragment to tabCrewTag,
+                    )
+
+                fun instantiateTab(tabId: Int): Fragment =
+                    when (tabId) {
+                        R.id.shippy_home_fragment ->
+                            org.oxycblt.auxio.shippy.r16.home.R16HomeFragment()
+                        R.id.search_fragment -> R16GlobalSearchFragment()
+                        R.id.library_fragment ->
+                            org.oxycblt.auxio.shippy.r16.library.R16LibraryFragment()
+                        R.id.crew_fragment -> org.oxycblt.auxio.shippy.crew.ui.CrewFragment()
+                        else -> org.oxycblt.auxio.shippy.r16.home.R16HomeFragment()
+                    }
+
+                fun selectTab(tabId: Int, popBackStack: Boolean = true) {
+                    if (popBackStack) {
+                        supportFragmentManager.popBackStack(
+                            null,
+                            FragmentManager.POP_BACK_STACK_INCLUSIVE,
+                        )
+                    }
+                    val targetTag = tabs.firstOrNull { it.first == tabId }?.second ?: tabHomeTag
+                    val transaction = supportFragmentManager.beginTransaction()
+
+                    var targetFrag = supportFragmentManager.findFragmentByTag(targetTag)
+                    if (targetFrag == null) {
+                        targetFrag = instantiateTab(tabId)
+                        transaction.add(R.id.r16_active_content, targetFrag, targetTag)
+                    }
+
+                    for ((_, tag) in tabs) {
+                        val frag = supportFragmentManager.findFragmentByTag(tag) ?: continue
+                        if (tag == targetTag) {
+                            transaction.show(frag)
+                            transaction.setMaxLifecycle(frag, Lifecycle.State.RESUMED)
+                        } else {
+                            transaction.hide(frag)
+                            transaction.setMaxLifecycle(frag, Lifecycle.State.STARTED)
+                        }
+                    }
+                    transaction.commit()
+                    activeTabId = tabId
+                    if (bottomNav.selectedItemId != tabId) {
+                        bottomNav.selectedItemId = tabId
+                    }
+                }
+
+                bottomNav.setOnItemSelectedListener { item ->
+                    selectTab(item.itemId)
+                    true
+                }
+
+                val initialTab =
+                    savedInstanceState?.getInt(KEY_ACTIVE_TAB_ID, R.id.shippy_home_fragment)
+                        ?: R.id.shippy_home_fragment
+                selectTab(initialTab, popBackStack = false)
+
+                onBackPressedDispatcher.addCallback(
+                    this,
+                    object : OnBackPressedCallback(true) {
+                        override fun handleOnBackPressed() {
+                            val currentFrag =
+                                supportFragmentManager.findFragmentById(R.id.r16_active_content)
+                            if (
+                                currentFrag
+                                    is
+                                    org.oxycblt.auxio.shippy.r16.playback.ui.R16NowPlayingFragment
+                            ) {
+                                supportFragmentManager.popBackStack()
+                                return
+                            }
+                            if (supportFragmentManager.backStackEntryCount > 0) {
+                                supportFragmentManager.popBackStack()
+                                return
+                            }
+                            if (activeTabId != R.id.shippy_home_fragment) {
+                                selectTab(R.id.shippy_home_fragment, popBackStack = false)
+                                return
+                            }
+                            isEnabled = false
+                            onBackPressedDispatcher.onBackPressed()
+                            isEnabled = true
+                        }
+                    },
+                )
+
+                supportFragmentManager.addOnBackStackChangedListener {
+                    val isNowPlaying =
+                        supportFragmentManager.fragments.any {
+                            it.id == R.id.r16_active_content &&
+                                it is org.oxycblt.auxio.shippy.r16.playback.ui.R16NowPlayingFragment
+                        }
+                    miniPlayerContainer.isVisible = !isNowPlaying
+                    bottomNav.isVisible = !isNowPlaying
+                }
+                L.i("R16 ACTIVE Home host created")
+            }
+            else -> {
+                val binding = ActivityR16MigrationBinding.inflate(layoutInflater)
+                setContentView(binding.root)
+                setupEdgeToEdge(binding.root)
+                L.i("R16 migration host created; legacy navigation was not inflated")
+            }
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (authorityMode == R16AuthorityMode.ACTIVE) {
+            outState.putInt(KEY_ACTIVE_TAB_ID, activeTabId)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-
-        startService(
-            Intent(this, AuxioService::class.java)
-                .setAction(AuxioService.ACTION_START)
-                .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
-        )
-
-        if (!startIntentAction(intent)) {
-            // No intent action to do, just restore the previously saved state.
-            playbackModel.playDeferred(DeferredPlayback.RestoreState(false))
+        when (authorityMode) {
+            R16AuthorityMode.ACTIVE -> {
+                startService(
+                    Intent(this, AuxioService::class.java)
+                        .setAction(AuxioService.ACTION_START)
+                        .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
+                )
+                return
+            }
+            R16AuthorityMode.LEGACY -> Unit
+            else -> return
         }
+
+        migrationGate.runWithLegacyAccess {
+            startService(
+                Intent(this, AuxioService::class.java)
+                    .setAction(AuxioService.ACTION_START)
+                    .putExtra(AuxioService.INTENT_KEY_START_ID, IntegerTable.START_ID_ACTIVITY)
+            )
+
+            if (!startIntentActionAllowed(intent)) {
+                // No intent action to do, just restore the previously saved state.
+                playbackModel.playDeferred(DeferredPlayback.RestoreState(false))
+            }
+        } ?: L.w("Skipping legacy playback while R16 migration is active")
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (authorityMode != R16AuthorityMode.LEGACY) return
         startIntentAction(intent)
     }
 
@@ -125,6 +302,15 @@ class MainActivity : AppCompatActivity() {
      *   otherwise.
      */
     private fun startIntentAction(intent: Intent?): Boolean {
+        if (authorityMode != R16AuthorityMode.LEGACY) return false
+        return migrationGate.runWithLegacyAccess { startIntentActionAllowed(intent) }
+            ?: run {
+                L.w("Skipping legacy intent while R16 migration is active")
+                false
+            }
+    }
+
+    private fun startIntentActionAllowed(intent: Intent?): Boolean {
         if (intent == null) {
             // Nothing to do.
             L.d("No intent to handle")
@@ -146,10 +332,12 @@ class MainActivity : AppCompatActivity() {
                 showToast(R.string.err_shippy_track_link)
             } else {
                 lifecycleScope.launch {
-                    when (shippyPlaybackController.play(track)) {
-                        is PlaybackStartResult.Started -> Unit
-                        is PlaybackStartResult.Failed ->
-                            showToast(R.string.msg_shippy_track_unavailable)
+                    migrationGate.withLegacyAccess {
+                        when (shippyPlaybackController.get().play(track)) {
+                            is PlaybackStartResult.Started -> Unit
+                            is PlaybackStartResult.Failed ->
+                                showToast(R.string.msg_shippy_track_unavailable)
+                        }
                     }
                 }
             }
@@ -176,5 +364,23 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val KEY_INTENT_USED = BuildConfig.APPLICATION_ID + ".key.FILE_INTENT_USED"
+        const val KEY_ACTIVE_TAB_ID = "key_r16_active_tab_id"
     }
+}
+
+/**
+ * Adds an R16 destination above its caller without replacing the caller. This keeps the exact
+ * root/detail Fragment instance (and its in-memory scroll/search state) alive until Back.
+ */
+fun Fragment.pushR16Destination(destination: Fragment, backStackName: String) {
+    val manager = requireActivity().supportFragmentManager
+    val origin = manager.findFragmentById(R.id.r16_active_content) ?: return
+    manager
+        .beginTransaction()
+        .hide(origin)
+        .setMaxLifecycle(origin, Lifecycle.State.STARTED)
+        .add(R.id.r16_active_content, destination)
+        .setMaxLifecycle(destination, Lifecycle.State.RESUMED)
+        .addToBackStack(backStackName)
+        .commit()
 }

@@ -144,10 +144,14 @@ class R16PlaybackLocatorResolver(
                             mimeType = stream.mimeType,
                             headers = stream.headers,
                             cacheKey =
-                                MediaObjectKey.from(
-                                        sourceCandidate,
-                                        mimeType = stream.mimeType,
-                                        bitrateBps = stream.bitrateBps ?: preferredBitrateBps(),
+                                MediaObjectKey.fromSourceReference(
+                                        source.id,
+                                        listOfNotNull(
+                                                stream.mimeType,
+                                                stream.bitrateBps?.toString(),
+                                            )
+                                            .joinToString("-")
+                                            .ifEmpty { "DEFAULT" },
                                     )
                                     .value,
                             expiresAtEpochMs = stream.expiresAtEpochMs,

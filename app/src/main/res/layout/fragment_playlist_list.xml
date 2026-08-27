@@ -71,7 +71,10 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minHeight="@dimen/size_touchable_small"
-            android:text="@string/lbl_edit_order" />
+            android:text="@string/lbl_edit_order"
+            android:visibility="gone"
+            app:icon="@drawable/ic_sort_24"
+            app:iconGravity="textStart" />
     </LinearLayout>
 
     <LinearLayout

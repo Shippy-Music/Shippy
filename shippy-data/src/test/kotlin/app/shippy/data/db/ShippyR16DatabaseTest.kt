@@ -49,7 +49,7 @@ class ShippyR16DatabaseTest {
     }
 
     @Test
-    fun `schema version one creates the identity and asset foundation`() {
+    fun `current schema creates the identity and asset foundation`() {
         val sqlite = database.openHelper.writableDatabase
         val names = mutableSetOf<String>()
         sqlite.query("SELECT name FROM sqlite_master WHERE type = 'table'").use { cursor ->
@@ -103,11 +103,24 @@ class ShippyR16DatabaseTest {
             """
             INSERT INTO playlist (
                 playlist_id, name, pinned, library_order_key, artwork_override,
-                display_sort_mode, display_sort_direction, created_at_epoch_ms, updated_at_epoch_ms
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                display_sort_mode, display_sort_direction, origin_kind, origin_key,
+                created_at_epoch_ms, updated_at_epoch_ms
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
                 .trimIndent(),
-            arrayOf<Any?>("playlist-1", "Mix", false, 1L, null, "CUSTOM", "ASC", 1L, 1L),
+            arrayOf<Any?>(
+                "playlist-1",
+                "Mix",
+                false,
+                1L,
+                null,
+                "CUSTOM",
+                "ASC",
+                "USER",
+                null,
+                1L,
+                1L,
+            ),
         )
         sqlite.execSQL(
             "INSERT INTO playlist_entry VALUES (?, ?, ?, ?, ?)",
@@ -205,6 +218,7 @@ class ShippyR16DatabaseTest {
                 "media_asset",
                 "audio_fingerprint",
                 "library_recording",
+                "library_membership_index",
                 "playlist",
                 "playlist_entry",
                 "library_layout_entry",
@@ -223,6 +237,7 @@ class ShippyR16DatabaseTest {
                 "saved_source_entity",
                 "migration_audit",
                 "recording_fts",
+                "playlist_fts",
             )
         val EXPECTED_VIEWS = setOf("library_song_view", "playlist_entry_view")
     }

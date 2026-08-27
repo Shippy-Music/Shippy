@@ -47,3 +47,30 @@ dependencies {
     testImplementation 'androidx.test:core-ktx:1.7.0'
     testImplementation 'org.robolectric:robolectric:4.16.1'
 }
+
+def r16BenchmarkFixtureDirectory = layout.buildDirectory.dir('generated/r16BenchmarkFixture')
+def r16BenchmarkFixtureFile =
+        r16BenchmarkFixtureDirectory.map { it.file('r16-benchmark-fixture-v2.db') }
+
+afterEvaluate {
+    def ordinaryUnitTest = tasks.named('testDebugUnitTest', Test).get()
+    tasks.register('generateR16BenchmarkFixture', Test) {
+        group = 'verification'
+        description = 'Exports the deterministic 50k R16 database used only by benchmark builds.'
+        dependsOn {
+            ordinaryUnitTest.taskDependencies.getDependencies(ordinaryUnitTest)
+        }
+        testClassesDirs = ordinaryUnitTest.testClassesDirs
+        classpath = ordinaryUnitTest.classpath
+        filter {
+            includeTestsMatching(
+                    'app.shippy.data.performance.R16PerformanceFixtureExportTest'
+            )
+        }
+        systemProperty(
+                'shippy.r16.benchmarkFixtureOutput',
+                r16BenchmarkFixtureFile.get().asFile.absolutePath
+        )
+        outputs.file(r16BenchmarkFixtureFile)
+    }
+}

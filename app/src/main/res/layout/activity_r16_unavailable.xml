@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:gravity="center"
+    android:padding="32dp"
+    android:text="@string/r16_unavailable_message"
+    android:textColor="?attr/colorOnSurface"
+    android:textSize="18sp" />

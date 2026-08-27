@@ -65,8 +65,41 @@ internal abstract class IdentityDao {
     @Query("SELECT * FROM entity_redirect WHERE old_recording_id = :recordingId")
     protected abstract suspend fun directRedirect(recordingId: String): EntityRedirectEntity?
 
+    @Query("SELECT * FROM entity_redirect WHERE old_recording_id = :recordingId")
+    abstract suspend fun redirectFrom(recordingId: String): EntityRedirectEntity?
+
     @Query("SELECT * FROM merge_audit WHERE merge_audit_id = :mergeAuditId")
     abstract suspend fun mergeAudit(mergeAuditId: String): MergeAuditEntity?
+
+    @Query(
+        """
+        SELECT * FROM merge_audit
+        WHERE survivor_recording_id = :recordingId AND reversed_at_epoch_ms IS NULL
+        ORDER BY created_at_epoch_ms DESC
+        """
+    )
+    abstract suspend fun activeMergeAuditsForSurvivor(recordingId: String): List<MergeAuditEntity>
+
+    @Query(
+        """
+        SELECT * FROM merge_audit
+        WHERE (survivor_recording_id = :recordingId OR merged_recording_id = :recordingId)
+          AND reversed_at_epoch_ms IS NULL
+        ORDER BY created_at_epoch_ms DESC
+        """
+    )
+    abstract suspend fun activeMergeAuditsForRecording(recordingId: String): List<MergeAuditEntity>
+
+    @Query(
+        """
+        DELETE FROM identity_decision
+        WHERE subject_type = :subjectType AND subject_id = :subjectId
+        """
+    )
+    abstract suspend fun deleteDecisionsForSubject(subjectType: String, subjectId: String): Int
+
+    @Query("DELETE FROM identity_decision WHERE decision_id = :decisionId")
+    abstract suspend fun deleteDecision(decisionId: String): Int
 
     @Query("SELECT COUNT(*) FROM recording WHERE recording_id = :recordingId")
     protected abstract suspend fun recordingCount(recordingId: String): Int

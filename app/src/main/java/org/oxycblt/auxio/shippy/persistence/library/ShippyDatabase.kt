@@ -49,7 +49,7 @@ import org.oxycblt.auxio.shippy.persistence.playback.PlaybackCheckpointItemEntit
             PlaybackCheckpointItemEntity::class,
             SavedProviderEntityRecord::class,
         ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 internal abstract class ShippyDatabase : RoomDatabase() {
@@ -335,6 +335,13 @@ internal abstract class ShippyDatabase : RoomDatabase() {
         val MIGRATION_9_10 =
             Migration(9, 10) { database ->
                 database.execSQL("ALTER TABLE `user_playlist` ADD COLUMN `artworkUri` TEXT")
+            }
+
+        val MIGRATION_10_11 =
+            Migration(10, 11) { database ->
+                database.execSQL(
+                    "ALTER TABLE `lastfm_scrobble_outbox` ADD COLUMN `accountId` TEXT NOT NULL DEFAULT ''"
+                )
             }
     }
 }

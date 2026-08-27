@@ -71,6 +71,8 @@ data class DownloadJobEntity(
     @ColumnInfo(name = "display_fallback_json") val displayFallbackJson: String,
     @ColumnInfo(name = "created_at_epoch_ms") val createdAtEpochMs: Long,
     @ColumnInfo(name = "updated_at_epoch_ms") val updatedAtEpochMs: Long,
+    @ColumnInfo(name = "requested_media_variant") val requestedMediaVariant: String? = null,
+    @ColumnInfo(name = "destination_identity") val destinationIdentity: String? = null,
 )
 
 @Entity(
@@ -96,6 +98,7 @@ data class DownloadJobEntity(
 )
 data class LastFmScrobbleOutboxEntity(
     @PrimaryKey @ColumnInfo(name = "outbox_id") val outboxId: String,
+    @ColumnInfo(name = "account_id", defaultValue = "''") val accountId: String = "",
     @ColumnInfo(name = "listening_session_id") val listeningSessionId: String,
     @ColumnInfo(name = "recording_id") val recordingId: String,
     val artist: String,

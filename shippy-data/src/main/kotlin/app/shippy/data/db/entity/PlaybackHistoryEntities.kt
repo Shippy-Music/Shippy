@@ -31,6 +31,7 @@ import androidx.room.PrimaryKey
                 entity = RecordingEntity::class,
                 parentColumns = ["recording_id"],
                 childColumns = ["recording_id"],
+                onDelete = ForeignKey.SET_NULL,
             )
         ],
     indices =
@@ -49,7 +50,7 @@ import androidx.room.PrimaryKey
 )
 data class PlayHistoryEntity(
     @PrimaryKey @ColumnInfo(name = "listening_session_id") val listeningSessionId: String,
-    @ColumnInfo(name = "recording_id") val recordingId: String,
+    @ColumnInfo(name = "recording_id") val recordingId: String?,
     @ColumnInfo(name = "queue_entry_id") val queueEntryId: String,
     @ColumnInfo(name = "source_reference_id") val sourceReferenceId: String?,
     @ColumnInfo(name = "started_at_epoch_ms") val startedAtEpochMs: Long,
@@ -58,7 +59,26 @@ data class PlayHistoryEntity(
     @ColumnInfo(name = "last_position_ms") val lastPositionMs: Long,
     @ColumnInfo(name = "completion_kind") val completionKind: String,
     @ColumnInfo(name = "chosen_by_user") val chosenByUser: Boolean,
+    @ColumnInfo(name = "snapshot_title") val snapshotTitle: String? = null,
+    @ColumnInfo(name = "snapshot_artist_display") val snapshotArtistDisplay: String? = null,
+    @ColumnInfo(name = "snapshot_artwork_location") val snapshotArtworkLocation: String? = null,
+    @ColumnInfo(name = "scrobble_disposition", defaultValue = "'LEGACY_UNKNOWN'")
+    val scrobbleDisposition: String = ScrobbleDisposition.LEGACY_UNKNOWN.name,
 )
+
+enum class ScrobbleDisposition {
+    /**
+     * A durable, still-open listening-session checkpoint. It records progress but is never eligible
+     * to create an outbox row; finalization replaces it with the final disposition.
+     */
+    ACTIVE_CHECKPOINT,
+    ENQUEUED,
+    NOT_AUTHORIZED,
+    INELIGIBLE_DURATION,
+    INELIGIBLE_ACTIVE_TIME,
+    METADATA_UNIDENTIFIED,
+    LEGACY_UNKNOWN,
+}
 
 @Entity(tableName = "playback_checkpoint")
 data class PlaybackCheckpointEntity(

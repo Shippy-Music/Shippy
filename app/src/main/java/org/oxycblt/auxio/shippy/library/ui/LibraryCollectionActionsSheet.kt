@@ -66,7 +66,7 @@ class LibraryCollectionActionsSheet :
         SupportMenuInflater(requireContext()).inflate(R.menu.library_collection_actions, menu)
         menu.findItem(R.id.action_library_pin).title =
             getString(if (isPinned) R.string.lbl_unpin else R.string.lbl_pin)
-        menu.findItem(R.id.action_library_edit_order).isVisible = !isSystem
+        menu.findItem(R.id.action_library_edit_order).isVisible = false
         menu.findItem(R.id.action_library_rename).isVisible = !isSystem
         menu.findItem(R.id.action_library_artwork).isVisible = !isSystem
         menu.findItem(R.id.action_library_delete).isVisible = !isSystem

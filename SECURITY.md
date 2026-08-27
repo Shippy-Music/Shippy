@@ -1,6 +1,6 @@
 # Security policy
 
-Shippy is currently alpha software. Security fixes target the latest alpha
+Shippy is currently beta software. Security fixes target the latest beta
 branch and release only.
 
 Please report vulnerabilities privately through GitHub's

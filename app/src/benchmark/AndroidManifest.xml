@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <profileable
+            android:shell="true"
+            tools:targetApi="29" />
+
+        <!--
+            This provider is benchmark-only. It installs and verifies the deterministic R16 scale
+            fixture before the instrumentation harness collects scale-dependent timings or
+            profiles. The provider and fixture asset are not packaged by release variants.
+        -->
+        <provider
+            android:name="org.oxycblt.auxio.benchmark.R16BenchmarkFixtureProvider"
+            android:authorities="org.oxycblt.auxio.r16.benchmark-fixture"
+            android:exported="true"
+            android:grantUriPermissions="false" />
+    </application>
+</manifest>

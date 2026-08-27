@@ -520,12 +520,16 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
         size: Size,
         shapeAppearanceModel: ShapeAppearanceModel,
     ) {
+        val fallback =
+            StyledDrawable(context, context.getDrawableCompat(errorRes), iconSize).asImage()
         val request =
             ImageRequest.Builder(context)
                 .data(img(size))
-                .error(
-                    StyledDrawable(context, context.getDrawableCompat(errorRes), iconSize).asImage()
-                )
+                // A previous cover is never a valid placeholder for a new queue occurrence.
+                // Coil cancels the old request below; this also clears its rendered bitmap before
+                // the replacement is available.
+                .placeholder(fallback)
+                .error(fallback)
                 .target(image)
 
         val bounds = RectF(0f, 0f, size.width.toFloat(), size.height.toFloat())

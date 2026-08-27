@@ -76,6 +76,16 @@ internal interface AssetDao {
 
     @Query(
         """
+        DELETE FROM media_asset
+        WHERE asset_id = :assetId
+          AND recording_id = :recordingId
+          AND asset_kind = 'SHIPPY_DOWNLOAD'
+        """
+    )
+    suspend fun deleteManagedDownload(assetId: String, recordingId: String): Int
+
+    @Query(
+        """
         UPDATE media_asset SET
             asset_state = :state,
             updated_at_epoch_ms = :updatedAtEpochMs,
@@ -88,5 +98,33 @@ internal interface AssetDao {
         state: String,
         updatedAtEpochMs: Long,
         verifiedAtEpochMs: Long?,
+    ): Int
+
+    @Query(
+        """
+        UPDATE media_asset SET
+            recording_id = :newRecordingId,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE asset_id = :assetId
+        """
+    )
+    suspend fun reassignAssetById(
+        assetId: String,
+        newRecordingId: String,
+        updatedAtEpochMs: Long = System.currentTimeMillis(),
+    ): Int
+
+    @Query(
+        """
+        UPDATE media_asset SET
+            recording_id = :newRecordingId,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE recording_id = :oldRecordingId
+        """
+    )
+    suspend fun reassignAssetsForRecording(
+        oldRecordingId: String,
+        newRecordingId: String,
+        updatedAtEpochMs: Long = System.currentTimeMillis(),
     ): Int
 }

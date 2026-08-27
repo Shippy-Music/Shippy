@@ -301,7 +301,7 @@ class PlaylistListFragment :
             )
         )
         val binding = requireBinding()
-        binding.homeCollectionEditStart.isVisible = !orderEditing && rows.isNotEmpty()
+        binding.homeCollectionEditStart.isVisible = false
         binding.homeRecycler.isInvisible = false
         binding.homeNoMusic.isInvisible = true
     }
@@ -325,7 +325,7 @@ class PlaylistListFragment :
         orderEditing = false
         orderBackCallback?.isEnabled = false
         playlistDragHelper?.attachToRecyclerView(null)
-        requireBinding().homeCollectionEditStart.isVisible = currentCollectionRows().isNotEmpty()
+        requireBinding().homeCollectionEditStart.isVisible = false
         requireBinding().homeCollectionEditActions.isVisible = false
     }
 
@@ -335,7 +335,7 @@ class PlaylistListFragment :
         orderEditing = false
         orderBackCallback?.isEnabled = false
         playlistDragHelper?.attachToRecyclerView(null)
-        requireBinding().homeCollectionEditStart.isVisible = currentCollectionRows().isNotEmpty()
+        requireBinding().homeCollectionEditStart.isVisible = false
         requireBinding().homeCollectionEditActions.isVisible = false
         if (reorderedRows != null && !collectionsModel.reorderCollections(reorderedRows)) {
             collectionAdapter.rejectPending(currentCollectionRows())

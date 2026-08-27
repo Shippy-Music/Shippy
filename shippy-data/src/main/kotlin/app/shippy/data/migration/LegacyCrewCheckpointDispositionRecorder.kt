@@ -51,28 +51,24 @@ internal class LegacyCrewCheckpointDispositionRecorder(private val database: Shi
         val result = row.toDisposition()
         database.withTransaction {
             val audit = requireActiveLegacyAudit(database, migrationId)
+            val targetCounts =
+                audit.targetCountsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?: JSONObject()
+            targetCounts
+                .put(
+                    "crewCheckpoint",
+                    JSONObject()
+                        .put("present", row != null)
+                        .put("disposition", result.disposition.name)
+                        .put("legacyProtocolVersion", result.legacyProtocolVersion)
+                        .put("requiresLegacyLeaseExpiry", result.requiresLegacyLeaseExpiry),
+                )
+                .put("checkpoint", JSONObject().put("phase", LegacyImportPhase.CREW.code))
             database
                 .migrationAuditDao()
                 .updateProgress(
                     migrationId = migrationId,
-                    targetCountsJson =
-                        JSONObject()
-                            .put(
-                                "crewCheckpoint",
-                                JSONObject()
-                                    .put("present", row != null)
-                                    .put("disposition", result.disposition.name)
-                                    .put("legacyProtocolVersion", result.legacyProtocolVersion)
-                                    .put(
-                                        "requiresLegacyLeaseExpiry",
-                                        result.requiresLegacyLeaseExpiry,
-                                    ),
-                            )
-                            .put(
-                                "checkpoint",
-                                JSONObject().put("phase", LegacyImportPhase.CREW.code),
-                            )
-                            .toString(),
+                    targetCountsJson = targetCounts.toString(),
                     warningsJson =
                         result.warning?.let { appendCrewWarning(audit.warningsJson, it) }
                             ?: audit.warningsJson,

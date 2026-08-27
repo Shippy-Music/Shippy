@@ -82,6 +82,7 @@ internal class LegacyLastFmOutboxImporter(private val database: ShippyR16Databas
                     .enqueue(
                         LastFmScrobbleOutboxEntity(
                             outboxId = LegacyIdMapper.lastFmOutbox(row.id),
+                            accountId = "legacy_default",
                             listeningSessionId = LegacyIdMapper.lastFmListeningSession(row.id),
                             recordingId = recordingId,
                             artist = artist,
@@ -107,12 +108,21 @@ internal class LegacyLastFmOutboxImporter(private val database: ShippyR16Databas
             }
 
             val last = rows.last()
+            val targetCounts =
+                audit.targetCountsJson?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?: JSONObject()
+            MigrationExpectedCountEvidence.recordPage(
+                target = targetCounts,
+                phase = LegacyImportPhase.LASTFM_OUTBOX,
+                pageToken = "M8:${last.queuedAtEpochMs}:${last.id}",
+                delta = MigrationExpectedCountDelta(lastFmOutbox = acceptedCount.toLong()),
+            )
             database
                 .migrationAuditDao()
                 .updateProgress(
                     migrationId = migrationId,
                     targetCountsJson =
-                        JSONObject()
+                        targetCounts
                             .put("lastFmOutbox", database.lastFmOutboxDao().count())
                             .put(
                                 "checkpoint",
@@ -189,6 +199,7 @@ internal class LegacyLastFmOutboxImporter(private val database: ShippyR16Databas
                 updatedAtEpochMs = importedAtEpochMs,
             )
         )
+        database.libraryMembershipDao().refresh(recordingId)
         dao.deleteArtistCredits(recordingId)
         dao.upsertArtistCredits(
             listOf(

@@ -24,6 +24,7 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +35,7 @@ import org.oxycblt.auxio.home.HomeSettings
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.shippy.download.DownloadDestinationReconciler
+import org.oxycblt.auxio.shippy.r16.migration.R16MigrationProcessGate
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.CopyleftNoticeTree
 import timber.log.Timber
@@ -51,21 +53,18 @@ class Auxio : Application(), Configuration.Provider {
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var homeSettings: HomeSettings
     @Inject lateinit var workerFactory: HiltWorkerFactory
-    @Inject lateinit var downloadDestinationReconciler: DownloadDestinationReconciler
+    @Inject lateinit var migrationGate: R16MigrationProcessGate
+    @Inject lateinit var downloadDestinationReconciler: Lazy<DownloadDestinationReconciler>
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
 
     override fun onCreate() {
         super.onCreate()
-        @Suppress("KotlinConstantConditions")
-        if (
-            BuildConfig.APPLICATION_ID != "org.oxycblt.auxio" &&
-                BuildConfig.APPLICATION_ID != "org.oxycblt.auxio.debug"
-        ) {
-            Timber.plant(CopyleftNoticeTree())
-        } else if (BuildConfig.DEBUG) {
+        if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
+        } else {
+            Timber.plant(CopyleftNoticeTree())
         }
 
         // Migrate any settings that may have changed in an app update.
@@ -73,7 +72,10 @@ class Auxio : Application(), Configuration.Provider {
         playbackSettings.migrate()
         uiSettings.migrate()
         homeSettings.migrate()
-        applicationScope.launch { downloadDestinationReconciler.reconcile() }
+        org.oxycblt.auxio.shippy.r16.maintenance.CatalogueGcWorker.schedule(this)
+        applicationScope.launch {
+            migrationGate.withLegacyAccess { downloadDestinationReconciler.get().reconcile() }
+        }
         // Adding static shortcuts in a dynamic manner is better than declaring them
         // manually, as it will properly handle the difference between debug and release
         // Auxio instances.

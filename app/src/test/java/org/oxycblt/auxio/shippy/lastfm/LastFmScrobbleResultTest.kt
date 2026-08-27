@@ -88,8 +88,8 @@ class LastFmScrobbleResultTest {
     @Test
     fun `outbox identity is deterministic per queue occurrence`() {
         val track = LastFmTrack("Artist", "Title", null, 60_000)
-        val first = track.outbox(QueueItemId("occurrence"), 10, 20)
-        val second = track.outbox(QueueItemId("occurrence"), 11, 21)
+        val first = track.outbox(QueueItemId("occurrence"), "test_account", 10, 20)
+        val second = track.outbox(QueueItemId("occurrence"), "test_account", 11, 21)
 
         assertEquals(first.id, second.id)
         assertTrue(first.id.startsWith("queue-item:"))

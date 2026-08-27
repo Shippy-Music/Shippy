@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingHorizontal="@dimen/spacing_medium"
+    android:paddingVertical="@dimen/spacing_small">
+
+    <Button
+        android:id="@+id/r16_playlist_destination_back"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:minWidth="48dp"
+        android:text="@string/r16_now_playing_back" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/r16_playlist_destination_title"
+        android:textAppearance="?attr/textAppearanceHeadline5" />
+
+    <TextView
+        android:id="@+id/r16_playlist_destination_target"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textAppearance="?attr/textAppearanceSubtitle1" />
+
+    <TextView
+        android:id="@+id/r16_playlist_destination_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/r16_playlist_destination_loading"
+        android:textAppearance="?attr/textAppearanceCaption" />
+
+    <LinearLayout
+        android:id="@+id/r16_playlist_destination_liked_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/ui_item_bg"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:minHeight="48dp"
+        android:orientation="horizontal"
+        android:paddingHorizontal="@dimen/spacing_medium"
+        android:paddingVertical="@dimen/spacing_mid_medium">
+
+        <ImageView
+            android:id="@+id/r16_playlist_destination_liked_icon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="@dimen/spacing_medium"
+            android:src="@drawable/ic_favorite_border_24"
+            android:contentDescription="@null" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/r16_playlist_destination_liked_title"
+                style="@style/Widget.Auxio.TextView.Item.Primary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/r16_playlist_destination_liked_title" />
+
+            <TextView
+                android:id="@+id/r16_playlist_destination_liked_status"
+                style="@style/Widget.Auxio.TextView.Item.Secondary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/r16_playlist_destination_liked_unsaved" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/r16_playlist_destination_retry"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:minHeight="48dp"
+        android:minWidth="48dp"
+        android:text="@string/r16_library_search_retry"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/r16_playlist_destination_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/r16_playlist_destination_empty"
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/r16_playlist_destination_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>

@@ -62,14 +62,18 @@ internal class LegacyCanonicalTrackImporter(private val database: ShippyR16Datab
                 database.migrationAuditDao().get(migrationId)
                     ?: error("Migration audit must exist before importing")
             check(audit.completedAtEpochMs == null) { "Completed migration cannot accept new rows" }
-            check(audit.sourceVersion == LEGACY_SCHEMA_VERSION && audit.targetVersion == 1) {
-                "Migration audit versions do not match the R15-to-R16 importer"
+            check(
+                audit.sourceVersion in SUPPORTED_LEGACY_SCHEMA_VERSIONS &&
+                    audit.targetVersion == ShippyR16Database.SCHEMA_VERSION
+            ) {
+                "Migration audit versions (${audit.sourceVersion}->${audit.targetVersion}) do not match the R15-to-R16 importer ($LEGACY_SCHEMA_VERSION->${ShippyR16Database.SCHEMA_VERSION})"
             }
             for (track in mapped) {
                 val dao = database.legacyImportDao()
                 track.release?.let { dao.upsertRelease(it) }
                 dao.upsertArtists(track.artists)
                 dao.upsertRecording(track.recording)
+                database.libraryMembershipDao().refresh(track.recording.recordingId)
                 dao.deleteArtistCredits(track.recording.recordingId)
                 dao.upsertArtistCredits(track.credits)
                 track.releaseTrack?.let { dao.upsertReleaseTrack(it) }

@@ -21,7 +21,6 @@ import java.io.ByteArrayInputStream
 import java.io.IOException
 import javax.inject.Inject
 import javax.xml.parsers.DocumentBuilderFactory
-import org.oxycblt.auxio.shippy.persistence.lastfm.LastFmScrobbleEntity
 import org.oxycblt.auxio.shippy.provider.http.ProviderHttpMethod
 import org.oxycblt.auxio.shippy.provider.http.ProviderHttpRequest
 import org.oxycblt.auxio.shippy.provider.http.ProviderHttpResponse
@@ -35,6 +34,16 @@ enum class LastFmDelivery {
 }
 
 data class LastFmIgnoredScrobble(val id: String, val code: Int, val message: String)
+
+/** Transport-neutral scrobble input shared by the legacy and R16 durable outboxes. */
+data class LastFmScrobblePayload(
+    val id: String,
+    val artist: String,
+    val track: String,
+    val album: String?,
+    val durationSeconds: Long?,
+    val startedAtEpochSeconds: Long,
+)
 
 sealed interface LastFmScrobbleResult {
     data class Delivered(val acceptedIds: Set<String>, val ignored: List<LastFmIgnoredScrobble>) :
@@ -52,7 +61,7 @@ class LastFmClient @Inject constructor(private val transport: ProviderHttpTransp
         post(signed(base("track.updateNowPlaying", credentials) + track.params(), credentials))
 
     suspend fun scrobble(
-        entries: List<LastFmScrobbleEntity>,
+        entries: List<LastFmScrobblePayload>,
         credentials: LastFmCredentials,
     ): LastFmScrobbleResult {
         require(entries.isNotEmpty() && entries.size <= 50)
@@ -86,7 +95,7 @@ class LastFmClient @Inject constructor(private val transport: ProviderHttpTransp
                             .toByteArray(),
                     )
                 ),
-                entries.map(LastFmScrobbleEntity::id),
+                entries.map(LastFmScrobblePayload::id),
             )
         } catch (_: IOException) {
             LastFmScrobbleResult.Retry("network")
@@ -135,26 +144,40 @@ class LastFmClient @Inject constructor(private val transport: ProviderHttpTransp
 
     private fun response(
         r: org.oxycblt.auxio.shippy.provider.http.ProviderHttpResponse
-    ): LastFmDelivery {
-        val body = r.bodyAsUtf8()
-        val code =
-            Regex("<error[^>]*code=\\\"(\\d+)\\\"").find(body)?.groupValues?.get(1)?.toIntOrNull()
-        return when (code) {
-            null ->
-                if (r.statusCode in 200..299 && body.contains("<lfm status=\"ok\""))
-                    LastFmDelivery.DELIVERED
-                else LastFmDelivery.RETRY
-            9 -> LastFmDelivery.REAUTH
-            11,
-            16 -> LastFmDelivery.RETRY
-            else -> LastFmDelivery.DROP
-        }
-    }
+    ): LastFmDelivery = parseLastFmDeliveryResponse(r)
 
     companion object {
         private const val URL = "https://ws.audioscrobbler.com/2.0/"
 
         private fun encode(s: String) = java.net.URLEncoder.encode(s, "UTF-8")
+    }
+}
+
+internal fun parseLastFmDeliveryResponse(response: ProviderHttpResponse): LastFmDelivery {
+    val body = response.bodyAsUtf8()
+    if (body.toByteArray(Charsets.UTF_8).size > MAX_RESPONSE_BYTES) return LastFmDelivery.RETRY
+    val errorCode =
+        Regex("<error\\b[^>]*\\bcode\\s*=\\s*['\"](\\d+)['\"]", RegexOption.IGNORE_CASE)
+            .find(body)
+            ?.groupValues
+            ?.get(1)
+            ?.toIntOrNull()
+    return when (errorCode) {
+        9 -> LastFmDelivery.REAUTH
+        11,
+        16,
+        29 -> LastFmDelivery.RETRY
+        null ->
+            if (
+                response.statusCode in 200..299 &&
+                    Regex("<lfm\\b[^>]*\\bstatus\\s*=\\s*['\"]ok['\"]", RegexOption.IGNORE_CASE)
+                        .containsMatchIn(body)
+            ) {
+                LastFmDelivery.DELIVERED
+            } else {
+                LastFmDelivery.RETRY
+            }
+        else -> LastFmDelivery.DROP
     }
 }
 

@@ -184,6 +184,120 @@ class RoomR16IngestionRepositoryTest {
     }
 
     @Test
+    fun `identityCandidates discovers title variants through normalized and FTS retrieval`() =
+        runBlocking {
+            val original =
+                command(RECORDING_ONE, "source-orig", "content://media/audio/1")
+                    .copy(
+                        observation =
+                            command(RECORDING_ONE, "source-orig", "content://media/audio/1")
+                                .observation
+                                .copy(title = "See You Again", artistNames = listOf("Wiz Khalifa")),
+                        newRecording =
+                            RecordingDraft(
+                                "See You Again",
+                                "Wiz Khalifa",
+                                180_000,
+                                RecordingVersion(VersionKind.ORIGINAL),
+                            ),
+                    )
+            repository.transaction { persist(original) }
+
+            val variantObservation =
+                original.observation.copy(
+                    sourceKey =
+                        SourceKey(ProviderId("youtube"), SourceItemType.RECORDING, "yt-variant"),
+                    sourceKind = SourceKind.YOUTUBE,
+                    title = "See You Again (feat. Charlie Puth)",
+                    artistNames = listOf("Wiz Khalifa", "Charlie Puth"),
+                    externalIdentifiers = emptySet(),
+                    asset = null,
+                )
+
+            repository.transaction {
+                val candidates =
+                    identityCandidates(variantObservation, variantObservation.toMatchingFeatures())
+                assertEquals(1, candidates.size)
+                assertEquals(RECORDING_ONE, candidates.single().recordingId)
+            }
+        }
+
+    @Test
+    fun `conflicting external identifiers veto automatic link`() = runBlocking {
+        val original =
+            command(RECORDING_ONE, "source-mbid-1", "content://media/audio/1")
+                .copy(
+                    observation =
+                        command(RECORDING_ONE, "source-mbid-1", "content://media/audio/1")
+                            .observation
+                            .copy(
+                                sourceKind = SourceKind.MUSICBRAINZ,
+                                sourceKey =
+                                    SourceKey(
+                                        ProviderId("musicbrainz"),
+                                        SourceItemType.RECORDING,
+                                        "source-mbid-1",
+                                    ),
+                                externalIdentifiers =
+                                    setOf(
+                                        ExternalIdentifier(
+                                            ExternalIdentifierKind.MUSICBRAINZ_RECORDING,
+                                            "00000000-0000-0000-0000-000000000001",
+                                        )
+                                    ),
+                            )
+                )
+        repository.transaction { persist(original) }
+
+        val conflictingVerifiedObservation =
+            original.observation.copy(
+                sourceKey =
+                    SourceKey(ProviderId("musicbrainz"), SourceItemType.RECORDING, "source-mbid-2"),
+                externalIdentifiers =
+                    setOf(
+                        ExternalIdentifier(
+                            ExternalIdentifierKind.MUSICBRAINZ_RECORDING,
+                            "00000000-0000-0000-0000-000000000002",
+                        )
+                    ),
+                asset = null,
+            )
+
+        val policy = app.shippy.core.identitymatch.MatchingPolicy()
+        val verifiedAssessment =
+            policy.assess(
+                conflictingVerifiedObservation.toMatchingFeatures(),
+                original.observation.toMatchingFeatures(),
+            )
+        assertEquals(
+            app.shippy.core.identitymatch.MatchDecision.KEEP_SEPARATE,
+            verifiedAssessment.decision,
+        )
+        assertTrue(verifiedAssessment.vetoed)
+
+        val unverifiedLocalObservation =
+            original.observation.copy(
+                sourceKind = SourceKind.LOCAL_FILE,
+                sourceKey =
+                    SourceKey(ProviderId("local-file"), SourceItemType.LOCAL_FILE, "source-mbid-3"),
+                externalIdentifiers =
+                    setOf(
+                        ExternalIdentifier(
+                            ExternalIdentifierKind.MUSICBRAINZ_RECORDING,
+                            "00000000-0000-0000-0000-000000000003",
+                        )
+                    ),
+                asset = null,
+            )
+        val unverifiedAssessment =
+            policy.assess(
+                unverifiedLocalObservation.toMatchingFeatures(),
+                original.observation.toMatchingFeatures(),
+            )
+        org.junit.Assert.assertFalse(unverifiedAssessment.vetoed)
+    }
+
+    @Test
     fun `local reindex audit preserves prior counts and resumes exact checkpoint`() = runBlocking {
         database
             .migrationAuditDao()
@@ -191,7 +305,7 @@ class RoomR16IngestionRepositoryTest {
                 MigrationAuditEntity(
                     migrationId = "migration-1",
                     sourceVersion = 10,
-                    targetVersion = 1,
+                    targetVersion = ShippyR16Database.SCHEMA_VERSION,
                     startedAtEpochMs = 1,
                     completedAtEpochMs = null,
                     sourceCountsJson = "{}",
@@ -301,8 +415,32 @@ class RoomR16IngestionRepositoryTest {
             )
         }
 
-        fun R16SourceObservation.toMatchingFeatures() =
-            MatchingFeatures(
+        fun R16SourceObservation.toMatchingFeatures(): MatchingFeatures {
+            val verified =
+                when (sourceKind) {
+                    SourceKind.MUSICBRAINZ,
+                    SourceKind.JIOSAAVN,
+                    SourceKind.YOUTUBE_MUSIC -> true
+                    SourceKind.LOCAL_FILE,
+                    SourceKind.SHIPPY_DOWNLOAD,
+                    SourceKind.YOUTUBE,
+                    SourceKind.LASTFM_HINT,
+                    SourceKind.IMPORTED_LINK,
+                    SourceKind.CREW_PEER -> false
+                }
+            val mbids =
+                externalIdentifiers
+                    .filter { it.kind == ExternalIdentifierKind.MUSICBRAINZ_RECORDING }
+                    .mapTo(linkedSetOf()) { it.value }
+            val isrcs =
+                externalIdentifiers
+                    .filter { it.kind == ExternalIdentifierKind.ISRC }
+                    .mapTo(linkedSetOf()) { it.value }
+            val acoustIds =
+                externalIdentifiers
+                    .filter { it.kind == ExternalIdentifierKind.ACOUST_ID }
+                    .mapTo(linkedSetOf()) { it.value }
+            return MatchingFeatures(
                 normalizedTitle = MetadataNormalizer.comparisonKey(title),
                 normalizedPrimaryArtist = MetadataNormalizer.comparisonKey(artistNames.first()),
                 normalizedArtistSet =
@@ -311,12 +449,14 @@ class RoomR16IngestionRepositoryTest {
                 durationMs = durationMs,
                 version = version,
                 explicitness = explicitness,
-                musicBrainzRecordingIds =
-                    externalIdentifiers
-                        .filter { it.kind == ExternalIdentifierKind.MUSICBRAINZ_RECORDING }
-                        .mapTo(linkedSetOf()) { it.value },
+                isrcs = isrcs,
+                musicBrainzRecordingIds = mbids,
+                acoustIds = acoustIds,
+                verifiedIsrcs = if (verified) isrcs else emptySet(),
+                verifiedMusicBrainzRecordingIds = if (verified) mbids else emptySet(),
                 sourceKeys = setOf(sourceKey),
                 fingerprintHashes = setOfNotNull(asset?.fingerprintId),
             )
+        }
     }
 }

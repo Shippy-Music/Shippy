@@ -37,14 +37,20 @@ import app.shippy.sources.ingest.RecordingIngestionWrite
 import app.shippy.sources.observation.ObservedMediaAsset
 import app.shippy.sources.observation.SourceTrackObservation
 
-class DataRecordingIngestionStore(private val repository: R16IngestionRepository) :
-    RecordingIngestionStore {
+class DataRecordingIngestionStore(
+    private val repository: R16IngestionRepository,
+    private val identityMatchingEnabled: Boolean = true,
+) : RecordingIngestionStore {
     override suspend fun <T> transaction(block: suspend RecordingIngestionTransaction.() -> T): T =
-        repository.transaction { block(DataRecordingIngestionTransaction(this)) }
+        repository.transaction {
+            block(DataRecordingIngestionTransaction(this, identityMatchingEnabled))
+        }
 }
 
-private class DataRecordingIngestionTransaction(private val session: R16IngestionSession) :
-    RecordingIngestionTransaction {
+private class DataRecordingIngestionTransaction(
+    private val session: R16IngestionSession,
+    private val identityMatchingEnabled: Boolean,
+) : RecordingIngestionTransaction {
     override suspend fun exactSource(
         sourceKey: app.shippy.core.source.SourceKey
     ): ExistingSourceLink? =
@@ -60,9 +66,13 @@ private class DataRecordingIngestionTransaction(private val session: R16Ingestio
         observation: SourceTrackObservation,
         features: app.shippy.core.identitymatch.MatchingFeatures,
     ): List<IngestionIdentityCandidate> =
-        session
-            .identityCandidates(observation.toDataObservation(), features)
-            .map(R16IdentityCandidate::toCandidate)
+        if (!identityMatchingEnabled) {
+            emptyList()
+        } else {
+            session
+                .identityCandidates(observation.toDataObservation(), features)
+                .map(R16IdentityCandidate::toCandidate)
+        }
 
     override suspend fun persist(write: RecordingIngestionWrite) {
         session.persist(

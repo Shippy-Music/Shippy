@@ -53,6 +53,7 @@ object ShippyPersistenceModule {
                 ShippyDatabase.MIGRATION_7_8,
                 ShippyDatabase.MIGRATION_8_9,
                 ShippyDatabase.MIGRATION_9_10,
+                ShippyDatabase.MIGRATION_10_11,
             )
             .build()
 

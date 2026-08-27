@@ -1,165 +1,19 @@
-<animated-vector xmlns:tools="http://schemas.android.com/tools"
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt">
     <aapt:attr name="android:drawable">
-        <vector
-            android:width="432dp"
-            android:height="432dp"
-            android:viewportWidth="432"
-            android:viewportHeight="432">
-            <group
-                android:name="bg"
-                android:pivotX="56"
-                android:pivotY="56">
-                <path
-                    android:fillColor="#00000000"
-                    android:strokeColor="#00000000"
-                    android:pathData="M 408,216
-A 192,192 0 0 1 216,408 192,192 0 0 1 24,216 192,192 0 0 1 216,24 192,192 0 0 1 408,216
-Z" />
-            </group>
-
-            <group
-                android:scaleX="8.5"
-                android:scaleY="8.5"
-                android:translateX="114"
-                android:translateY="114">
-                <path
-                    android:fillColor="@android:color/transparent"
-                    android:pathData="M13 4l4 4m-4-4v13m0 0l-3 3-3-3 3-3"
-                    android:strokeWidth="2"
-                    android:strokeColor="#80808080"
-                    android:strokeLineCap="round"
-                    android:strokeLineJoin="round" />
-            </group>
-
-            <group
-                android:scaleX="8.5"
-                android:scaleY="8.5"
-                android:translateX="114"
-                android:translateY="114">
-                <path
-                    android:name="base"
-                    android:fillColor="@android:color/transparent"
-                    android:pathData="m 13,17 -3,3 -3,-3 3,-3"
-                    android:strokeWidth="0"
-                    android:strokeColor="#004894"
-                    android:strokeLineCap="round"
-                    android:strokeLineJoin="round" />
-            </group>
-
-            <group
-                android:scaleX="8.5"
-                android:scaleY="8.5"
-                android:translateX="114"
-                android:translateY="114">
-
-                <path
-                    android:name="lower_stem"
-                    android:fillColor="@android:color/transparent"
-                    android:pathData="M 13,10.5 V 17"
-                    android:strokeWidth="0"
-                    android:strokeColor="#1a61ae"
-                    android:strokeLineCap="round"
-                    android:strokeLineJoin="round" />
-            </group>
-
-            <group
-                android:scaleX="8.5"
-                android:scaleY="8.5"
-                android:translateX="114"
-                android:translateY="114">
-
-                <path
-                    android:name="upper_stem"
-                    android:fillColor="@android:color/transparent"
-                    android:pathData="m 13,4v 6.5"
-                    android:strokeWidth="0"
-                    android:strokeColor="#357ac9"
-                    android:strokeLineCap="round"
-                    android:strokeLineJoin="round" />
-            </group>
-
-            <group
-                android:scaleX="8.5"
-                android:scaleY="8.5"
-                android:translateX="114"
-                android:translateY="114">
-
-                <path
-                    android:name="tail"
-                    android:fillColor="@android:color/transparent"
-                    android:pathData="m 13,4 4,4"
-                    android:strokeWidth="0"
-                    android:strokeColor="#5093e4"
-                    android:strokeLineCap="round"
-                    android:strokeLineJoin="round" />
+        <vector android:width="432dp" android:height="432dp" android:viewportWidth="432" android:viewportHeight="432">
+            <group android:name="earbuds" android:pivotX="216" android:pivotY="216" android:scaleX="0.82" android:scaleY="0.82">
+                <path android:fillColor="#4DD9EB" android:pathData="M106,139 C106,111 129,88 157,88 L183,88 C201,88 216,103 216,121 L216,207 L170,207 C135,207 106,184 106,156 Z M216,207 L216,324 L187,324 L187,207 Z M326,139 C326,111 303,88 275,88 L249,88 C231,88 216,103 216,121 L216,207 L262,207 C297,207 326,184 326,156 Z M216,207 L216,324 L245,324 L245,207 Z" />
+                <path android:fillColor="#0079B8" android:pathData="M140,148 A10,10 0,1 0,160 148 A10,10 0,1 0,140 148 M272,148 A10,10 0,1 0,292 148 A10,10 0,1 0,272 148 M187,286 L216,286 L216,299 L187,299 Z M216,286 L245,286 L245,299 L216,299 Z" />
             </group>
         </vector>
     </aapt:attr>
-    <target android:name="bg">
+    <target android:name="earbuds">
         <aapt:attr name="android:animation">
-            <set />
-        </aapt:attr>
-    </target>
-    <target android:name="tail">
-        <aapt:attr name="android:animation">
-            <set>
-                <objectAnimator
-                    android:duration="850"
-                    android:interpolator="@interpolator/m3_sys_motion_easing_emphasized_decelerate"
-                    android:propertyName="strokeWidth"
-                    android:startOffset="150"
-                    android:valueFrom="0"
-                    android:valueTo="2"
-                    android:valueType="floatType"
-                    tools:ignore="PrivateResource" />
-            </set>
-        </aapt:attr>
-    </target>
-    <target android:name="upper_stem">
-        <aapt:attr name="android:animation">
-            <set>
-                <objectAnimator
-                    android:duration="850"
-                    android:interpolator="@interpolator/m3_sys_motion_easing_emphasized_decelerate"
-                    android:propertyName="strokeWidth"
-                    android:startOffset="150"
-                    android:valueFrom="0"
-                    android:valueTo="2"
-                    android:valueType="floatType"
-                    tools:ignore="PrivateResource" />
-            </set>
-        </aapt:attr>
-    </target>
-
-    <target android:name="lower_stem">
-        <aapt:attr name="android:animation">
-            <set>
-                <objectAnimator
-                    android:duration="850"
-                    android:interpolator="@interpolator/m3_sys_motion_easing_emphasized_decelerate"
-                    android:propertyName="strokeWidth"
-                    android:startOffset="150"
-                    android:valueFrom="0"
-                    android:valueTo="2"
-                    android:valueType="floatType"
-                    tools:ignore="PrivateResource" />
-            </set>
-        </aapt:attr>
-    </target>
-    <target android:name="base">
-        <aapt:attr name="android:animation">
-            <set>
-                <objectAnimator
-                    android:duration="850"
-                    android:interpolator="@interpolator/m3_sys_motion_easing_emphasized_decelerate"
-                    android:propertyName="strokeWidth"
-                    android:startOffset="150"
-                    android:valueFrom="0"
-                    android:valueTo="2"
-                    android:valueType="floatType"
-                    tools:ignore="PrivateResource" />
+            <set android:ordering="together">
+                <objectAnimator android:duration="650" android:interpolator="@android:interpolator/decelerate_cubic" android:propertyName="scaleX" android:valueFrom="0.82" android:valueTo="1" android:valueType="floatType" />
+                <objectAnimator android:duration="650" android:interpolator="@android:interpolator/decelerate_cubic" android:propertyName="scaleY" android:valueFrom="0.82" android:valueTo="1" android:valueType="floatType" />
             </set>
         </aapt:attr>
     </target>

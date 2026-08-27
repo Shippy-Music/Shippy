@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/spacing_medium">
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/lng_search_library"
+            app:endIconContentDescription="@string/desc_clear_search"
+            app:endIconMode="clear_text">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/r16_library_songs_input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionSearch|flagNoExtractUi"
+                android:inputType="textFilter" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <org.oxycblt.auxio.list.recycler.FastScrollRecyclerView
+            android:id="@+id/r16_library_songs_recycler"
+            style="@style/Widget.Auxio.RecyclerView.Grid.WithAdaptiveFab"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:listitem="@layout/item_song" />
+    </LinearLayout>
+
+    <org.oxycblt.auxio.ui.EdgeFrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:id="@+id/r16_library_songs_empty"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="@dimen/spacing_medium"
+            android:visibility="invisible">
+
+            <org.oxycblt.auxio.home.list.CookieImageView
+                android:id="@+id/r16_library_songs_placeholder"
+                android:layout_width="@dimen/size_fast_scroll_popup"
+                android:layout_height="@dimen/size_fast_scroll_popup"
+                android:layout_marginBottom="@dimen/spacing_small"
+                android:backgroundTint="?attr/colorSurfaceVariant"
+                android:src="@drawable/ic_song_48"
+                app:tint="?attr/colorOnSurfaceVariant"
+                tools:ignore="ContentDescription" />
+
+            <TextView
+                android:layout_width="256dp"
+                android:layout_height="wrap_content"
+                android:text="@string/lng_empty_songs"
+                android:textAlignment="center"
+                android:textAppearance="?attr/textAppearanceBodyLarge" />
+        </LinearLayout>
+    </org.oxycblt.auxio.ui.EdgeFrameLayout>
+</FrameLayout>

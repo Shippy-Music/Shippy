@@ -21,8 +21,24 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import app.shippy.core.identity.RecordingId
+import app.shippy.data.backup.R16PortableSettingsProvider
+import app.shippy.data.backup.R16PortableSettingsSnapshot
+import app.shippy.data.backup.R16SanitizedLastFmConfig
+import app.shippy.data.backup.R16SanitizedLastFmConfigProvider
 import app.shippy.data.db.ShippyR16Database
 import app.shippy.data.db.entity.MigrationAuditEntity
+import app.shippy.data.migration.pipeline.R16MigrationCallbackPageResult
+import app.shippy.data.migration.pipeline.R16MusikrDevicePlaylistPageRequest
+import app.shippy.data.migration.pipeline.R16MusikrLocalReindexPageRequest
+import app.shippy.data.migration.pipeline.R16MusikrMigrationBridge
+import app.shippy.data.migration.precutover.R16MigrationFolderCheck
+import app.shippy.data.migration.precutover.R16MigrationFolderInspection
+import app.shippy.data.migration.precutover.R16MigrationFolderInspectionProvider
+import app.shippy.data.migration.precutover.R16MigrationPreCutoverComposition
+import app.shippy.data.migration.precutover.R16MigrationPreCutoverOutcome
+import app.shippy.data.migration.precutover.R16MigrationPreCutoverPhase
+import app.shippy.data.migration.precutover.R16MigrationPreCutoverRuntime
 import java.io.File
 import java.util.UUID
 import org.junit.After
@@ -43,7 +59,7 @@ class LegacyImportFoundationTest {
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
-        legacyFile = File(context.cacheDir, "legacy-${UUID.randomUUID()}.db")
+        legacyFile = File.createTempFile("legacy-${UUID.randomUUID()}-", ".db")
         database =
             Room.inMemoryDatabaseBuilder(context, ShippyR16Database::class.java)
                 .allowMainThreadQueries()
@@ -385,7 +401,10 @@ class LegacyImportFoundationTest {
             val playlistA = LegacyIdMapper.playlist("playlist-a").value
             val playlistB = LegacyIdMapper.playlist("playlist-b").value
             assertEquals(2, playlistResult.importedCount)
-            assertEquals("Mix", checkNotNull(database.legacyImportDao().playlist(playlistA)).name)
+            val importedPlaylistA = checkNotNull(database.legacyImportDao().playlist(playlistA))
+            assertEquals("Mix", importedPlaylistA.name)
+            assertEquals("LEGACY_SHIPPY", importedPlaylistA.originKind)
+            assertEquals("playlist-a", importedPlaylistA.originKey)
             assertEquals(
                 "Untitled",
                 checkNotNull(database.legacyImportDao().playlist(playlistB)).name,
@@ -419,6 +438,110 @@ class LegacyImportFoundationTest {
         }
 
     @Test
+    fun `M5 imports ordered duplicate Musikr occurrences idempotently and removes stale origins`() =
+        kotlinx.coroutines.runBlocking {
+            startAudit("migration-5")
+            LegacyCanonicalTrackImporter(database)
+                .importPage(
+                    "migration-5",
+                    listOf(
+                        legacyTrack("track-a", "Alpha", "6:Artist", null),
+                        legacyTrack("track-b", "Beta", "6:Artist", null),
+                    ),
+                    1_000,
+                )
+            val recordingA = RecordingId(LegacyIdMapper.recording("track-a").value)
+            val recordingB = RecordingId(LegacyIdMapper.recording("track-b").value)
+            LegacyPlaylistImporter(database)
+                .importPlaylistPage(
+                    "migration-5",
+                    listOf(
+                        LegacyUserPlaylistRow(
+                            playlistId = "musikr-legacy",
+                            name = "M4-owned",
+                            pinned = true,
+                            position = 0,
+                            artworkUri = null,
+                            orderOrdinal = 0,
+                        )
+                    ),
+                    1_500,
+                )
+            val importer = RoomR16DevicePlaylistImportRepository(database)
+            val firstSnapshot = setOf("musikr-a", "musikr-b", "musikr-legacy")
+            val firstPage =
+                listOf(
+                    R16DevicePlaylistImport(
+                        originKey = "musikr-a",
+                        name = "Device Mix",
+                        orderedRecordingIds = listOf(recordingA, recordingB, recordingA),
+                    ),
+                    R16DevicePlaylistImport(
+                        originKey = "musikr-b",
+                        name = " ",
+                        orderedRecordingIds = listOf(recordingB),
+                    ),
+                    R16DevicePlaylistImport(
+                        originKey = "musikr-legacy",
+                        name = "Device name must not replace M4",
+                        orderedRecordingIds = emptyList(),
+                    ),
+                )
+
+            val first = importer.importPage("migration-5", firstSnapshot, 0, firstPage, 2_000)
+            val playlistA =
+                checkNotNull(
+                    database.legacyImportDao().playlistByOrigin("MUSIKR_DEVICE", "musikr-a")
+                )
+            assertEquals(2, first.importedPlaylistCount)
+            assertEquals(1, first.reusedPlaylistCount)
+            assertEquals(4, first.importedEntryCount)
+            assertTrue(first.complete)
+            assertEquals("MUSIKR_DEVICE", playlistA.originKind)
+            assertEquals(
+                listOf(recordingA.value, recordingB.value, recordingA.value),
+                database.playlistDao().entries(playlistA.playlistId).map { it.recordingId },
+            )
+            assertEquals(
+                listOf(1_024L, 2_048L, 3_072L),
+                database.playlistDao().entries(playlistA.playlistId).map { it.orderKey },
+            )
+            val firstEntryAddedAt =
+                database.playlistDao().entries(playlistA.playlistId).map { it.addedAtEpochMs }
+            assertEquals("DURABLE", database.recordingDao().get(recordingA.value)?.retentionKind)
+            assertEquals(
+                null,
+                database.legacyImportDao().playlistByOrigin("MUSIKR_DEVICE", "musikr-legacy"),
+            )
+            assertEquals(
+                "M4-owned",
+                database.legacyImportDao().playlistByOrigin("LEGACY_SHIPPY", "musikr-legacy")?.name,
+            )
+
+            val repeated = importer.importPage("migration-5", firstSnapshot, 0, firstPage, 3_000)
+            assertEquals(0, repeated.importedPlaylistCount)
+            assertEquals(3, repeated.reusedPlaylistCount)
+            assertEquals(2L, database.legacyImportDao().playlistCountByOrigin("MUSIKR_DEVICE"))
+            assertEquals(4L, database.legacyImportDao().playlistEntryCountByOrigin("MUSIKR_DEVICE"))
+            assertEquals(
+                firstEntryAddedAt,
+                database.playlistDao().entries(playlistA.playlistId).map { it.addedAtEpochMs },
+            )
+
+            val retainedOnly = firstPage.take(1)
+            importer.importPage("migration-5", setOf("musikr-a"), 0, retainedOnly, 4_000)
+            assertEquals(1L, database.legacyImportDao().playlistCountByOrigin("MUSIKR_DEVICE"))
+            assertEquals(
+                null,
+                database.legacyImportDao().playlistByOrigin("MUSIKR_DEVICE", "musikr-b"),
+            )
+            assertEquals(
+                "M4-owned",
+                database.legacyImportDao().playlistByOrigin("LEGACY_SHIPPY", "musikr-legacy")?.name,
+            )
+        }
+
+    @Test
     fun `M6 verifies managed downloads reuses exact assets and repairs stale availability`() =
         kotlinx.coroutines.runBlocking {
             startAudit("migration-6")
@@ -448,11 +571,12 @@ class LegacyImportFoundationTest {
                     legacyDownload("job-b", artifactUri = "content://legacy/download-b"),
                     legacyDownload("job-c", artifactUri = null),
                 )
+            var allowVerification = true
             val importer =
                 LegacyDownloadImporter(
                     database,
                     LegacyDownloadArtifactVerifier { row ->
-                        if (row.artifactUri == null) {
+                        if (row.artifactUri == null || !allowVerification) {
                             null
                         } else {
                             VerifiedLegacyAsset(
@@ -483,9 +607,15 @@ class LegacyImportFoundationTest {
             assertEquals(null, jobA.pendingLocation)
             assertFalse(jobA.displayFallbackJson.contains("content://legacy"))
 
+            val publishedAssetId = checkNotNull(jobA.publishedAssetId)
+            allowVerification = false
             importer.importPage("migration-6", rows, 3_000)
             assertEquals(3L, database.legacyImportDao().downloadJobCount())
             assertEquals(1L, database.legacyImportDao().assetCount())
+            assertEquals(2L, database.downloadDao().availablePublishedCount())
+            val retriedJobA = checkNotNull(database.downloadDao().get(jobA.jobId))
+            assertEquals("AVAILABLE", retriedJobA.state)
+            assertEquals(publishedAssetId, retriedJobA.publishedAssetId)
         }
 
     @Test
@@ -700,6 +830,103 @@ class LegacyImportFoundationTest {
                 database.migrationAuditDao().get("migration-13")?.status,
             )
         }
+
+    @Test
+    fun `owner shaped v10 fixture resumes bounded import then verifies idempotently`() =
+        kotlinx.coroutines.runBlocking {
+            createLegacyDatabase()
+            val bootstrap = File(legacyFile.parentFile, "${legacyFile.name}.bootstrap.json")
+            val recoveryArchive = File(legacyFile.parentFile, "${legacyFile.name}.recovery.zip")
+
+            val firstComposition = ownerFixtureComposition(bootstrap, recoveryArchive)
+            val first =
+                R16MigrationPreCutoverRuntime.forTesting(
+                    bootstrapFile = bootstrap,
+                    orchestrator = firstComposition.orchestrator(),
+                    composition = firstComposition,
+                )
+            val partial = first.run("owner-fixture")
+            assertEquals(R16MigrationPreCutoverOutcome.IMPORTING, partial.outcome)
+            assertEquals(R16MigrationPreCutoverPhase.CANONICAL_TRACKS, partial.state.currentPhase)
+            assertTrue(partial.state.checkpointPresent)
+            first.close()
+
+            val resumedComposition = ownerFixtureComposition(bootstrap, recoveryArchive)
+            val resumed =
+                R16MigrationPreCutoverRuntime.forTesting(
+                    bootstrapFile = bootstrap,
+                    orchestrator = resumedComposition.orchestrator(),
+                    composition = resumedComposition,
+                )
+            try {
+                var result = resumed.run("owner-fixture")
+                while (result.outcome == R16MigrationPreCutoverOutcome.IMPORTING) {
+                    result = resumed.run("owner-fixture")
+                }
+
+                val audit = database.migrationAuditDao().get("owner-fixture")
+                assertEquals(R16MigrationPreCutoverOutcome.READY_TO_SWITCH, result.outcome)
+                assertEquals(
+                    R16MigrationPreCutoverPhase.entries.size,
+                    result.state.completedPhaseCount,
+                )
+                assertTrue(recoveryArchive.isFile)
+                assertEquals("READY_TO_SWITCH", audit?.status)
+                assertEquals(2L, database.legacyImportDao().recordingCount())
+                assertEquals(2L, database.legacyImportDao().playlistCount())
+                assertEquals(2L, database.legacyImportDao().playlistEntryCount())
+                assertEquals(1L, database.legacyImportDao().downloadJobCount())
+                assertEquals(1, database.lastFmOutboxDao().count())
+                assertEquals(1, database.playbackCheckpointDao().load("active")?.entries?.size)
+
+                val idempotent = resumed.run("owner-fixture")
+                assertEquals(R16MigrationPreCutoverOutcome.READY_TO_SWITCH, idempotent.outcome)
+                assertEquals(2L, database.legacyImportDao().playlistEntryCount())
+                assertEquals(1, database.lastFmOutboxDao().count())
+            } finally {
+                resumed.close()
+            }
+        }
+
+    private fun ownerFixtureComposition(
+        bootstrap: File,
+        recoveryArchive: File,
+    ): R16MigrationPreCutoverComposition =
+        R16MigrationPreCutoverComposition(
+            bootstrap = R16MigrationBootstrapStore(bootstrap),
+            database = database,
+            legacyDatabase = legacyFile,
+            snapshotDirectory =
+                File(legacyFile.parentFile, "${legacyFile.name}.snapshots").also {
+                    check(it.mkdirs() || it.isDirectory)
+                },
+            recoveryArchive = recoveryArchive,
+            folderInspectionProvider =
+                R16MigrationFolderInspectionProvider {
+                    R16MigrationFolderInspection(
+                        checks =
+                            listOf(
+                                R16MigrationFolderCheck(
+                                    label = "legacy-db",
+                                    exists = true,
+                                    readable = true,
+                                    writable = false,
+                                    required = true,
+                                )
+                            )
+                    )
+                },
+            assetVerifier = LegacyAssetVerifier { null },
+            artifactVerifier = LegacyDownloadArtifactVerifier { null },
+            musikrBridge = OwnerFixtureMusikrBridge(database),
+            importedAtEpochMs = { 2_000L },
+            nowEpochMs = { 2_000L },
+            pageSize = 1,
+            portableSettingsProvider =
+                R16PortableSettingsProvider { R16PortableSettingsSnapshot(emptyMap()) },
+            sanitizedLastFmConfigProvider =
+                R16SanitizedLastFmConfigProvider { R16SanitizedLastFmConfig(username = null) },
+        )
 
     private fun createLegacyDatabase() {
         SQLiteDatabase.openOrCreateDatabase(legacyFile, null).use { database ->
@@ -1155,7 +1382,7 @@ class LegacyImportFoundationTest {
                 MigrationAuditEntity(
                     migrationId = migrationId,
                     sourceVersion = 10,
-                    targetVersion = 1,
+                    targetVersion = ShippyR16Database.SCHEMA_VERSION,
                     startedAtEpochMs = 1,
                     completedAtEpochMs = null,
                     sourceCountsJson = "{}",
@@ -1298,6 +1525,29 @@ class LegacyImportFoundationTest {
             pinned = providerId == "jiosaavn",
             savedAtEpochMs = 500,
         )
+
+    private class OwnerFixtureMusikrBridge(database: ShippyR16Database) : R16MusikrMigrationBridge {
+        private val devicePlaylists = RoomR16DevicePlaylistImportRepository(database)
+
+        override suspend fun importDevicePlaylistPage(
+            request: R16MusikrDevicePlaylistPageRequest
+        ): R16MigrationCallbackPageResult {
+            check(request.lastStableKey == null)
+            val page =
+                devicePlaylists.importPage(
+                    migrationId = request.migrationId,
+                    snapshotOriginKeys = emptySet(),
+                    startOrdinal = 0,
+                    playlists = emptyList(),
+                    importedAtEpochMs = request.importedAtEpochMs,
+                )
+            return R16MigrationCallbackPageResult(page.complete, null)
+        }
+
+        override suspend fun reindexLocalPage(
+            request: R16MusikrLocalReindexPageRequest
+        ): R16MigrationCallbackPageResult = R16MigrationCallbackPageResult(true, null)
+    }
 
     private companion object {
         val LEGACY_TABLES =

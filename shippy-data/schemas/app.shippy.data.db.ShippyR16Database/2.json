@@ -1,0 +1,2797 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "2059fae1a74020a0376f2b18591ada69",
+    "entities": [
+      {
+        "tableName": "recording",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recording_id` TEXT NOT NULL, `canonical_title` TEXT NOT NULL, `duration_ms` INTEGER, `version_kind` TEXT NOT NULL, `version_label` TEXT, `explicitness` TEXT NOT NULL, `preferred_release_id` TEXT, `preferred_artwork_id` TEXT, `retention_kind` TEXT NOT NULL, `retained_until_epoch_ms` INTEGER, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`recording_id`), FOREIGN KEY(`preferred_release_id`) REFERENCES `release`(`release_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalTitle",
+            "columnName": "canonical_title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "duration_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "versionKind",
+            "columnName": "version_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "versionLabel",
+            "columnName": "version_label",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "explicitness",
+            "columnName": "explicitness",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "preferredReleaseId",
+            "columnName": "preferred_release_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "preferredArtworkId",
+            "columnName": "preferred_artwork_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "retentionKind",
+            "columnName": "retention_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "retainedUntilEpochMs",
+            "columnName": "retained_until_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recording_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recording_title",
+            "unique": false,
+            "columnNames": [
+              "canonical_title"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recording_title` ON `${TABLE_NAME}` (`canonical_title`)"
+          },
+          {
+            "name": "index_recording_retention",
+            "unique": false,
+            "columnNames": [
+              "retention_kind",
+              "retained_until_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recording_retention` ON `${TABLE_NAME}` (`retention_kind`, `retained_until_epoch_ms`)"
+          },
+          {
+            "name": "index_recording_preferred_release",
+            "unique": false,
+            "columnNames": [
+              "preferred_release_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recording_preferred_release` ON `${TABLE_NAME}` (`preferred_release_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "release",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "preferred_release_id"
+            ],
+            "referencedColumns": [
+              "release_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "artist",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`artist_id` TEXT NOT NULL, `canonical_name` TEXT NOT NULL, `sort_name` TEXT, `disambiguation` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`artist_id`))",
+        "fields": [
+          {
+            "fieldPath": "artistId",
+            "columnName": "artist_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalName",
+            "columnName": "canonical_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortName",
+            "columnName": "sort_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "disambiguation",
+            "columnName": "disambiguation",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "artist_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_artist_name",
+            "unique": false,
+            "columnNames": [
+              "canonical_name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_artist_name` ON `${TABLE_NAME}` (`canonical_name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "recording_artist_credit",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recording_id` TEXT NOT NULL, `position` INTEGER NOT NULL, `artist_id` TEXT NOT NULL, `credited_name` TEXT NOT NULL, `join_phrase` TEXT NOT NULL, PRIMARY KEY(`recording_id`, `position`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`artist_id`) REFERENCES `artist`(`artist_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistId",
+            "columnName": "artist_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creditedName",
+            "columnName": "credited_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "joinPhrase",
+            "columnName": "join_phrase",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recording_id",
+            "position"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_recording_artist_credit_artist",
+            "unique": false,
+            "columnNames": [
+              "artist_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_recording_artist_credit_artist` ON `${TABLE_NAME}` (`artist_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          },
+          {
+            "table": "artist",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "artist_id"
+            ],
+            "referencedColumns": [
+              "artist_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "release",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`release_id` TEXT NOT NULL, `canonical_title` TEXT NOT NULL, `release_type` TEXT NOT NULL, `release_year` INTEGER, `artwork_id` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`release_id`))",
+        "fields": [
+          {
+            "fieldPath": "releaseId",
+            "columnName": "release_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalTitle",
+            "columnName": "canonical_title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseType",
+            "columnName": "release_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseYear",
+            "columnName": "release_year",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "artworkId",
+            "columnName": "artwork_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "release_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_release_title",
+            "unique": false,
+            "columnNames": [
+              "canonical_title"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_release_title` ON `${TABLE_NAME}` (`canonical_title`)"
+          }
+        ]
+      },
+      {
+        "tableName": "release_track",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`release_track_id` TEXT NOT NULL, `release_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `disc_number` INTEGER, `track_number` INTEGER, `display_title` TEXT, `order_key` INTEGER NOT NULL, PRIMARY KEY(`release_track_id`), FOREIGN KEY(`release_id`) REFERENCES `release`(`release_id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "releaseTrackId",
+            "columnName": "release_track_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseId",
+            "columnName": "release_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "discNumber",
+            "columnName": "disc_number",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trackNumber",
+            "columnName": "track_number",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "displayTitle",
+            "columnName": "display_title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "orderKey",
+            "columnName": "order_key",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "release_track_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_release_track_release_order",
+            "unique": false,
+            "columnNames": [
+              "release_id",
+              "order_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_release_track_release_order` ON `${TABLE_NAME}` (`release_id`, `order_key`)"
+          },
+          {
+            "name": "index_release_track_recording",
+            "unique": false,
+            "columnNames": [
+              "recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_release_track_recording` ON `${TABLE_NAME}` (`recording_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "release",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "release_id"
+            ],
+            "referencedColumns": [
+              "release_id"
+            ]
+          },
+          {
+            "table": "recording",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "source_reference",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`source_reference_id` TEXT NOT NULL, `recording_id` TEXT, `provider_id` TEXT NOT NULL, `source_kind` TEXT NOT NULL, `item_type` TEXT NOT NULL, `source_item_id` TEXT NOT NULL, `original_url` TEXT, `availability_state` TEXT NOT NULL, `availability_checked_at_epoch_ms` INTEGER, `availability_expires_at_epoch_ms` INTEGER, `failure_kind` TEXT, `failure_retryable` INTEGER, `identity_status` TEXT NOT NULL, `raw_metadata_observation_id` TEXT NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`source_reference_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "sourceReferenceId",
+            "columnName": "source_reference_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "providerId",
+            "columnName": "provider_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceKind",
+            "columnName": "source_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemType",
+            "columnName": "item_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceItemId",
+            "columnName": "source_item_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalUrl",
+            "columnName": "original_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "availabilityState",
+            "columnName": "availability_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "availabilityCheckedAtEpochMs",
+            "columnName": "availability_checked_at_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "availabilityExpiresAtEpochMs",
+            "columnName": "availability_expires_at_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "failureKind",
+            "columnName": "failure_kind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "failureRetryable",
+            "columnName": "failure_retryable",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "identityStatus",
+            "columnName": "identity_status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rawMetadataObservationId",
+            "columnName": "raw_metadata_observation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "source_reference_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_source_reference_exact_key",
+            "unique": true,
+            "columnNames": [
+              "provider_id",
+              "item_type",
+              "source_item_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_source_reference_exact_key` ON `${TABLE_NAME}` (`provider_id`, `item_type`, `source_item_id`)"
+          },
+          {
+            "name": "index_source_reference_recording",
+            "unique": false,
+            "columnNames": [
+              "recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_source_reference_recording` ON `${TABLE_NAME}` (`recording_id`)"
+          },
+          {
+            "name": "index_source_reference_availability",
+            "unique": false,
+            "columnNames": [
+              "provider_id",
+              "availability_state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_source_reference_availability` ON `${TABLE_NAME}` (`provider_id`, `availability_state`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "metadata_observation",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`observation_id` TEXT NOT NULL, `source_type` TEXT NOT NULL, `source_reference_id` TEXT, `asset_id` TEXT, `title` TEXT, `artist_credit_json` TEXT, `release_title` TEXT, `release_artist` TEXT, `duration_ms` INTEGER, `artwork_json` TEXT, `release_year` INTEGER, `track_number` INTEGER, `disc_number` INTEGER, `genres_json` TEXT, `version_hints_json` TEXT, `external_ids_json` TEXT, `extras_json` TEXT, `captured_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`observation_id`))",
+        "fields": [
+          {
+            "fieldPath": "observationId",
+            "columnName": "observation_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceType",
+            "columnName": "source_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceReferenceId",
+            "columnName": "source_reference_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "asset_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artistCreditJson",
+            "columnName": "artist_credit_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseTitle",
+            "columnName": "release_title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseArtist",
+            "columnName": "release_artist",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "duration_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "artworkJson",
+            "columnName": "artwork_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "releaseYear",
+            "columnName": "release_year",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trackNumber",
+            "columnName": "track_number",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "discNumber",
+            "columnName": "disc_number",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "genresJson",
+            "columnName": "genres_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "versionHintsJson",
+            "columnName": "version_hints_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "externalIdsJson",
+            "columnName": "external_ids_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "extrasJson",
+            "columnName": "extras_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "capturedAtEpochMs",
+            "columnName": "captured_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "observation_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_metadata_observation_source",
+            "unique": false,
+            "columnNames": [
+              "source_reference_id",
+              "captured_at_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_metadata_observation_source` ON `${TABLE_NAME}` (`source_reference_id`, `captured_at_epoch_ms`)"
+          },
+          {
+            "name": "index_metadata_observation_asset",
+            "unique": false,
+            "columnNames": [
+              "asset_id",
+              "captured_at_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_metadata_observation_asset` ON `${TABLE_NAME}` (`asset_id`, `captured_at_epoch_ms`)"
+          }
+        ]
+      },
+      {
+        "tableName": "external_identifier",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`external_identifier_id` TEXT NOT NULL, `owner_type` TEXT NOT NULL, `owner_id` TEXT NOT NULL, `scheme` TEXT NOT NULL, `value` TEXT NOT NULL, `verified` INTEGER NOT NULL, `source_observation_id` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`external_identifier_id`))",
+        "fields": [
+          {
+            "fieldPath": "externalIdentifierId",
+            "columnName": "external_identifier_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerType",
+            "columnName": "owner_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerId",
+            "columnName": "owner_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scheme",
+            "columnName": "scheme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "verified",
+            "columnName": "verified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceObservationId",
+            "columnName": "source_observation_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "external_identifier_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_external_identifier_owner_scheme_value",
+            "unique": true,
+            "columnNames": [
+              "owner_type",
+              "owner_id",
+              "scheme",
+              "value"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_external_identifier_owner_scheme_value` ON `${TABLE_NAME}` (`owner_type`, `owner_id`, `scheme`, `value`)"
+          },
+          {
+            "name": "index_external_identifier_lookup",
+            "unique": false,
+            "columnNames": [
+              "scheme",
+              "value"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_external_identifier_lookup` ON `${TABLE_NAME}` (`scheme`, `value`)"
+          }
+        ]
+      },
+      {
+        "tableName": "artwork_reference",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`artwork_id` TEXT NOT NULL, `owner_type` TEXT NOT NULL, `owner_id` TEXT NOT NULL, `location_type` TEXT NOT NULL, `location` TEXT NOT NULL, `width` INTEGER, `height` INTEGER, `source_observation_id` TEXT, `preferred` INTEGER NOT NULL, `content_hash` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, `last_verified_at_epoch_ms` INTEGER, PRIMARY KEY(`artwork_id`))",
+        "fields": [
+          {
+            "fieldPath": "artworkId",
+            "columnName": "artwork_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerType",
+            "columnName": "owner_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerId",
+            "columnName": "owner_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationType",
+            "columnName": "location_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sourceObservationId",
+            "columnName": "source_observation_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "preferred",
+            "columnName": "preferred",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentHash",
+            "columnName": "content_hash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastVerifiedAtEpochMs",
+            "columnName": "last_verified_at_epoch_ms",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "artwork_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_artwork_owner",
+            "unique": false,
+            "columnNames": [
+              "owner_type",
+              "owner_id",
+              "preferred"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_artwork_owner` ON `${TABLE_NAME}` (`owner_type`, `owner_id`, `preferred`)"
+          }
+        ]
+      },
+      {
+        "tableName": "media_asset",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`asset_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `source_reference_id` TEXT, `asset_kind` TEXT NOT NULL, `asset_state` TEXT NOT NULL, `location_type` TEXT NOT NULL, `location` TEXT NOT NULL, `document_id` TEXT, `media_store_id` INTEGER, `display_name` TEXT, `mime_type` TEXT, `container` TEXT, `codec` TEXT, `bitrate_bps` INTEGER, `sample_rate_hz` INTEGER, `channel_count` INTEGER, `content_length` INTEGER, `content_checksum` TEXT, `fingerprint_id` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, `last_verified_at_epoch_ms` INTEGER, `normalized_path_token` TEXT, `last_modified_epoch_ms` INTEGER, `download_job_id` TEXT, PRIMARY KEY(`asset_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`source_reference_id`) REFERENCES `source_reference`(`source_reference_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "assetId",
+            "columnName": "asset_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceReferenceId",
+            "columnName": "source_reference_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "assetKind",
+            "columnName": "asset_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetState",
+            "columnName": "asset_state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationType",
+            "columnName": "location_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "location",
+            "columnName": "location",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "documentId",
+            "columnName": "document_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaStoreId",
+            "columnName": "media_store_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mime_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "container",
+            "columnName": "container",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "codec",
+            "columnName": "codec",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "bitrateBps",
+            "columnName": "bitrate_bps",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sampleRateHz",
+            "columnName": "sample_rate_hz",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "channelCount",
+            "columnName": "channel_count",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "contentLength",
+            "columnName": "content_length",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "contentChecksum",
+            "columnName": "content_checksum",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fingerprintId",
+            "columnName": "fingerprint_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastVerifiedAtEpochMs",
+            "columnName": "last_verified_at_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "normalizedPathToken",
+            "columnName": "normalized_path_token",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastModifiedEpochMs",
+            "columnName": "last_modified_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "downloadJobId",
+            "columnName": "download_job_id",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "asset_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_asset_location",
+            "unique": true,
+            "columnNames": [
+              "location_type",
+              "location"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_media_asset_location` ON `${TABLE_NAME}` (`location_type`, `location`)"
+          },
+          {
+            "name": "index_media_asset_recording_kind_state",
+            "unique": false,
+            "columnNames": [
+              "recording_id",
+              "asset_kind",
+              "asset_state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_recording_kind_state` ON `${TABLE_NAME}` (`recording_id`, `asset_kind`, `asset_state`)"
+          },
+          {
+            "name": "index_media_asset_checksum",
+            "unique": false,
+            "columnNames": [
+              "content_checksum"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_checksum` ON `${TABLE_NAME}` (`content_checksum`)"
+          },
+          {
+            "name": "index_media_asset_document",
+            "unique": false,
+            "columnNames": [
+              "document_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_document` ON `${TABLE_NAME}` (`document_id`)"
+          },
+          {
+            "name": "index_media_asset_media_store",
+            "unique": false,
+            "columnNames": [
+              "media_store_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_media_store` ON `${TABLE_NAME}` (`media_store_id`)"
+          },
+          {
+            "name": "index_media_asset_download_job",
+            "unique": false,
+            "columnNames": [
+              "download_job_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_download_job` ON `${TABLE_NAME}` (`download_job_id`)"
+          },
+          {
+            "name": "index_media_asset_path_stat",
+            "unique": false,
+            "columnNames": [
+              "normalized_path_token",
+              "content_length",
+              "last_modified_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_path_stat` ON `${TABLE_NAME}` (`normalized_path_token`, `content_length`, `last_modified_epoch_ms`)"
+          },
+          {
+            "name": "index_media_asset_source",
+            "unique": false,
+            "columnNames": [
+              "source_reference_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_asset_source` ON `${TABLE_NAME}` (`source_reference_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          },
+          {
+            "table": "source_reference",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "source_reference_id"
+            ],
+            "referencedColumns": [
+              "source_reference_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "audio_fingerprint",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`fingerprint_id` TEXT NOT NULL, `asset_id` TEXT NOT NULL, `algorithm` TEXT NOT NULL, `algorithm_version` TEXT NOT NULL, `duration_seconds` INTEGER NOT NULL, `compressed_fingerprint` BLOB NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`fingerprint_id`), FOREIGN KEY(`asset_id`) REFERENCES `media_asset`(`asset_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "fingerprintId",
+            "columnName": "fingerprint_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetId",
+            "columnName": "asset_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "algorithm",
+            "columnName": "algorithm",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "algorithmVersion",
+            "columnName": "algorithm_version",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationSeconds",
+            "columnName": "duration_seconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "compressedFingerprint",
+            "columnName": "compressed_fingerprint",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "fingerprint_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_audio_fingerprint_asset_algorithm",
+            "unique": true,
+            "columnNames": [
+              "asset_id",
+              "algorithm",
+              "algorithm_version"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_audio_fingerprint_asset_algorithm` ON `${TABLE_NAME}` (`asset_id`, `algorithm`, `algorithm_version`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media_asset",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "asset_id"
+            ],
+            "referencedColumns": [
+              "asset_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "library_recording",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recording_id` TEXT NOT NULL, `liked` INTEGER NOT NULL, `explicitly_saved` INTEGER NOT NULL, `user_edited` INTEGER NOT NULL, `manually_identified` INTEGER NOT NULL, `first_added_at_epoch_ms` INTEGER, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`recording_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "liked",
+            "columnName": "liked",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "explicitlySaved",
+            "columnName": "explicitly_saved",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userEdited",
+            "columnName": "user_edited",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "manuallyIdentified",
+            "columnName": "manually_identified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstAddedAtEpochMs",
+            "columnName": "first_added_at_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recording_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_library_recording_liked",
+            "unique": false,
+            "columnNames": [
+              "liked"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_library_recording_liked` ON `${TABLE_NAME}` (`liked`)"
+          },
+          {
+            "name": "index_library_recording_saved",
+            "unique": false,
+            "columnNames": [
+              "explicitly_saved"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_library_recording_saved` ON `${TABLE_NAME}` (`explicitly_saved`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "library_membership_index",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recording_id` TEXT NOT NULL, `title_sort_key` TEXT NOT NULL, PRIMARY KEY(`recording_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "titleSortKey",
+            "columnName": "title_sort_key",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recording_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_library_membership_recording",
+            "unique": false,
+            "columnNames": [
+              "recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_library_membership_recording` ON `${TABLE_NAME}` (`recording_id`)"
+          },
+          {
+            "name": "index_library_membership_order",
+            "unique": true,
+            "columnNames": [
+              "title_sort_key",
+              "recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_library_membership_order` ON `${TABLE_NAME}` (`title_sort_key`, `recording_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "playlist",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`playlist_id` TEXT NOT NULL, `name` TEXT NOT NULL, `pinned` INTEGER NOT NULL, `library_order_key` INTEGER NOT NULL, `artwork_override` TEXT, `display_sort_mode` TEXT NOT NULL, `display_sort_direction` TEXT NOT NULL, `origin_kind` TEXT NOT NULL, `origin_key` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`playlist_id`))",
+        "fields": [
+          {
+            "fieldPath": "playlistId",
+            "columnName": "playlist_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pinned",
+            "columnName": "pinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "libraryOrderKey",
+            "columnName": "library_order_key",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artworkOverride",
+            "columnName": "artwork_override",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "displaySortMode",
+            "columnName": "display_sort_mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displaySortDirection",
+            "columnName": "display_sort_direction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originKind",
+            "columnName": "origin_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originKey",
+            "columnName": "origin_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "playlist_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playlist_library_order",
+            "unique": false,
+            "columnNames": [
+              "pinned",
+              "library_order_key"
+            ],
+            "orders": [
+              "DESC",
+              "ASC"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlist_library_order` ON `${TABLE_NAME}` (`pinned` DESC, `library_order_key` ASC)"
+          },
+          {
+            "name": "index_playlist_origin",
+            "unique": true,
+            "columnNames": [
+              "origin_kind",
+              "origin_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_playlist_origin` ON `${TABLE_NAME}` (`origin_kind`, `origin_key`)"
+          }
+        ]
+      },
+      {
+        "tableName": "playlist_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`playlist_entry_id` TEXT NOT NULL, `playlist_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `order_key` INTEGER NOT NULL, `added_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`playlist_entry_id`), FOREIGN KEY(`playlist_id`) REFERENCES `playlist`(`playlist_id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "playlistEntryId",
+            "columnName": "playlist_entry_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playlistId",
+            "columnName": "playlist_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderKey",
+            "columnName": "order_key",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAtEpochMs",
+            "columnName": "added_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "playlist_entry_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playlist_entry_order",
+            "unique": false,
+            "columnNames": [
+              "playlist_id",
+              "order_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlist_entry_order` ON `${TABLE_NAME}` (`playlist_id`, `order_key`)"
+          },
+          {
+            "name": "index_playlist_entry_recording",
+            "unique": false,
+            "columnNames": [
+              "recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playlist_entry_recording` ON `${TABLE_NAME}` (`recording_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "playlist",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "playlist_id"
+            ],
+            "referencedColumns": [
+              "playlist_id"
+            ]
+          },
+          {
+            "table": "recording",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "library_layout_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`target_type` TEXT NOT NULL, `target_id` TEXT NOT NULL, `pinned` INTEGER NOT NULL, `order_key` INTEGER NOT NULL, PRIMARY KEY(`target_type`, `target_id`))",
+        "fields": [
+          {
+            "fieldPath": "targetType",
+            "columnName": "target_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetId",
+            "columnName": "target_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pinned",
+            "columnName": "pinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "orderKey",
+            "columnName": "order_key",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "target_type",
+            "target_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_library_layout_order",
+            "unique": false,
+            "columnNames": [
+              "pinned",
+              "order_key"
+            ],
+            "orders": [
+              "DESC",
+              "ASC"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_library_layout_order` ON `${TABLE_NAME}` (`pinned` DESC, `order_key` ASC)"
+          }
+        ]
+      },
+      {
+        "tableName": "user_metadata_override",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recording_id` TEXT NOT NULL, `field_name` TEXT NOT NULL, `value_json` TEXT NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`recording_id`, `field_name`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fieldName",
+            "columnName": "field_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "valueJson",
+            "columnName": "value_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recording_id",
+            "field_name"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "canonical_field_provenance",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recording_id` TEXT NOT NULL, `field_name` TEXT NOT NULL, `selected_source_type` TEXT NOT NULL, `selected_source_id` TEXT, `confidence` REAL NOT NULL, `selected_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`recording_id`, `field_name`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fieldName",
+            "columnName": "field_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedSourceType",
+            "columnName": "selected_source_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedSourceId",
+            "columnName": "selected_source_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedAtEpochMs",
+            "columnName": "selected_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recording_id",
+            "field_name"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "identity_decision",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`decision_id` TEXT NOT NULL, `subject_type` TEXT NOT NULL, `subject_id` TEXT NOT NULL, `target_recording_id` TEXT, `decision_kind` TEXT NOT NULL, `confidence` REAL, `evidence_json` TEXT NOT NULL, `user_confirmed` INTEGER NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`decision_id`))",
+        "fields": [
+          {
+            "fieldPath": "decisionId",
+            "columnName": "decision_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectType",
+            "columnName": "subject_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectId",
+            "columnName": "subject_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetRecordingId",
+            "columnName": "target_recording_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "decisionKind",
+            "columnName": "decision_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "evidenceJson",
+            "columnName": "evidence_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userConfirmed",
+            "columnName": "user_confirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "decision_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_identity_decision_subject",
+            "unique": false,
+            "columnNames": [
+              "subject_type",
+              "subject_id",
+              "created_at_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_identity_decision_subject` ON `${TABLE_NAME}` (`subject_type`, `subject_id`, `created_at_epoch_ms`)"
+          }
+        ]
+      },
+      {
+        "tableName": "identity_rejection",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`subject_type` TEXT NOT NULL, `subject_id` TEXT NOT NULL, `rejected_recording_id` TEXT NOT NULL, `reason` TEXT, `created_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`subject_type`, `subject_id`, `rejected_recording_id`))",
+        "fields": [
+          {
+            "fieldPath": "subjectType",
+            "columnName": "subject_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subjectId",
+            "columnName": "subject_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rejectedRecordingId",
+            "columnName": "rejected_recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "subject_type",
+            "subject_id",
+            "rejected_recording_id"
+          ]
+        }
+      },
+      {
+        "tableName": "entity_redirect",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`old_recording_id` TEXT NOT NULL, `canonical_recording_id` TEXT NOT NULL, `merge_audit_id` TEXT NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`old_recording_id`))",
+        "fields": [
+          {
+            "fieldPath": "oldRecordingId",
+            "columnName": "old_recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "canonicalRecordingId",
+            "columnName": "canonical_recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mergeAuditId",
+            "columnName": "merge_audit_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "old_recording_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_entity_redirect_target",
+            "unique": false,
+            "columnNames": [
+              "canonical_recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_entity_redirect_target` ON `${TABLE_NAME}` (`canonical_recording_id`)"
+          }
+        ]
+      },
+      {
+        "tableName": "merge_audit",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`merge_audit_id` TEXT NOT NULL, `survivor_recording_id` TEXT NOT NULL, `merged_recording_id` TEXT NOT NULL, `snapshot_json` TEXT NOT NULL, `user_confirmed` INTEGER NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, `reversed_at_epoch_ms` INTEGER, PRIMARY KEY(`merge_audit_id`))",
+        "fields": [
+          {
+            "fieldPath": "mergeAuditId",
+            "columnName": "merge_audit_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "survivorRecordingId",
+            "columnName": "survivor_recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mergedRecordingId",
+            "columnName": "merged_recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapshotJson",
+            "columnName": "snapshot_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userConfirmed",
+            "columnName": "user_confirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reversedAtEpochMs",
+            "columnName": "reversed_at_epoch_ms",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "merge_audit_id"
+          ]
+        }
+      },
+      {
+        "tableName": "play_history",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`listening_session_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `queue_entry_id` TEXT NOT NULL, `source_reference_id` TEXT, `started_at_epoch_ms` INTEGER NOT NULL, `ended_at_epoch_ms` INTEGER, `active_listened_ms` INTEGER NOT NULL, `last_position_ms` INTEGER NOT NULL, `completion_kind` TEXT NOT NULL, `chosen_by_user` INTEGER NOT NULL, PRIMARY KEY(`listening_session_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "listeningSessionId",
+            "columnName": "listening_session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queueEntryId",
+            "columnName": "queue_entry_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceReferenceId",
+            "columnName": "source_reference_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "startedAtEpochMs",
+            "columnName": "started_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAtEpochMs",
+            "columnName": "ended_at_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "activeListenedMs",
+            "columnName": "active_listened_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastPositionMs",
+            "columnName": "last_position_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completionKind",
+            "columnName": "completion_kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chosenByUser",
+            "columnName": "chosen_by_user",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "listening_session_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_play_history_recent",
+            "unique": false,
+            "columnNames": [
+              "started_at_epoch_ms"
+            ],
+            "orders": [
+              "DESC"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_play_history_recent` ON `${TABLE_NAME}` (`started_at_epoch_ms` DESC)"
+          },
+          {
+            "name": "index_play_history_recording",
+            "unique": false,
+            "columnNames": [
+              "recording_id",
+              "started_at_epoch_ms"
+            ],
+            "orders": [
+              "ASC",
+              "DESC"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_play_history_recording` ON `${TABLE_NAME}` (`recording_id` ASC, `started_at_epoch_ms` DESC)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "playback_checkpoint",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`slot` TEXT NOT NULL, `checkpoint_version` INTEGER NOT NULL, `session_id` TEXT NOT NULL, `current_queue_entry_id` TEXT, `position_ms` INTEGER NOT NULL, `playing_intent` INTEGER NOT NULL, `repeat_mode` TEXT NOT NULL, `shuffle_enabled` INTEGER NOT NULL, `shuffle_seed` INTEGER, `base_order_json` TEXT NOT NULL, `traversal_order_json` TEXT NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, `checksum` TEXT NOT NULL, PRIMARY KEY(`slot`))",
+        "fields": [
+          {
+            "fieldPath": "slot",
+            "columnName": "slot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checkpointVersion",
+            "columnName": "checkpoint_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentQueueEntryId",
+            "columnName": "current_queue_entry_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "positionMs",
+            "columnName": "position_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playingIntent",
+            "columnName": "playing_intent",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "repeatMode",
+            "columnName": "repeat_mode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shuffleEnabled",
+            "columnName": "shuffle_enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shuffleSeed",
+            "columnName": "shuffle_seed",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "baseOrderJson",
+            "columnName": "base_order_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "traversalOrderJson",
+            "columnName": "traversal_order_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checksum",
+            "columnName": "checksum",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "slot"
+          ]
+        }
+      },
+      {
+        "tableName": "playback_checkpoint_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`slot` TEXT NOT NULL, `queue_entry_id` TEXT NOT NULL, `position` INTEGER NOT NULL, `recording_id` TEXT NOT NULL, `origin_json` TEXT, `contributor_id` TEXT, `presentation_fallback_json` TEXT NOT NULL, PRIMARY KEY(`slot`, `queue_entry_id`), FOREIGN KEY(`slot`) REFERENCES `playback_checkpoint`(`slot`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "slot",
+            "columnName": "slot",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queueEntryId",
+            "columnName": "queue_entry_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originJson",
+            "columnName": "origin_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contributorId",
+            "columnName": "contributor_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "presentationFallbackJson",
+            "columnName": "presentation_fallback_json",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "slot",
+            "queue_entry_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playback_checkpoint_entry_position",
+            "unique": false,
+            "columnNames": [
+              "slot",
+              "position"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_playback_checkpoint_entry_position` ON `${TABLE_NAME}` (`slot`, `position`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "playback_checkpoint",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "slot"
+            ],
+            "referencedColumns": [
+              "slot"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "download_job",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`job_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `requested_source_reference_id` TEXT, `published_asset_id` TEXT, `state` TEXT NOT NULL, `bytes_transferred` INTEGER NOT NULL, `expected_bytes` INTEGER, `failure_kind` TEXT, `retry_after_epoch_ms` INTEGER, `pending_location` TEXT, `display_fallback_json` TEXT NOT NULL, `created_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`job_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`requested_source_reference_id`) REFERENCES `source_reference`(`source_reference_id`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`published_asset_id`) REFERENCES `media_asset`(`asset_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "jobId",
+            "columnName": "job_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestedSourceReferenceId",
+            "columnName": "requested_source_reference_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "publishedAssetId",
+            "columnName": "published_asset_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bytesTransferred",
+            "columnName": "bytes_transferred",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedBytes",
+            "columnName": "expected_bytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "failureKind",
+            "columnName": "failure_kind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "retryAfterEpochMs",
+            "columnName": "retry_after_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pendingLocation",
+            "columnName": "pending_location",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "displayFallbackJson",
+            "columnName": "display_fallback_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMs",
+            "columnName": "created_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "job_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_download_job_recording",
+            "unique": false,
+            "columnNames": [
+              "recording_id",
+              "created_at_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_download_job_recording` ON `${TABLE_NAME}` (`recording_id`, `created_at_epoch_ms`)"
+          },
+          {
+            "name": "index_download_job_state",
+            "unique": false,
+            "columnNames": [
+              "state",
+              "updated_at_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_download_job_state` ON `${TABLE_NAME}` (`state`, `updated_at_epoch_ms`)"
+          },
+          {
+            "name": "index_download_job_requested_source",
+            "unique": false,
+            "columnNames": [
+              "requested_source_reference_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_download_job_requested_source` ON `${TABLE_NAME}` (`requested_source_reference_id`)"
+          },
+          {
+            "name": "index_download_job_published_asset",
+            "unique": false,
+            "columnNames": [
+              "published_asset_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_download_job_published_asset` ON `${TABLE_NAME}` (`published_asset_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          },
+          {
+            "table": "source_reference",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "requested_source_reference_id"
+            ],
+            "referencedColumns": [
+              "source_reference_id"
+            ]
+          },
+          {
+            "table": "media_asset",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "published_asset_id"
+            ],
+            "referencedColumns": [
+              "asset_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "lastfm_scrobble_outbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`outbox_id` TEXT NOT NULL, `listening_session_id` TEXT NOT NULL, `recording_id` TEXT NOT NULL, `artist` TEXT NOT NULL, `track` TEXT NOT NULL, `album` TEXT, `duration_seconds` INTEGER, `started_at_epoch_seconds` INTEGER NOT NULL, `chosen_by_user` INTEGER NOT NULL, `queued_at_epoch_ms` INTEGER NOT NULL, `attempt_count` INTEGER NOT NULL, `last_attempt_at_epoch_ms` INTEGER, PRIMARY KEY(`outbox_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "fields": [
+          {
+            "fieldPath": "outboxId",
+            "columnName": "outbox_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "listeningSessionId",
+            "columnName": "listening_session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artist",
+            "columnName": "artist",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "track",
+            "columnName": "track",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "album",
+            "columnName": "album",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "durationSeconds",
+            "columnName": "duration_seconds",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "startedAtEpochSeconds",
+            "columnName": "started_at_epoch_seconds",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chosenByUser",
+            "columnName": "chosen_by_user",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "queuedAtEpochMs",
+            "columnName": "queued_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptCount",
+            "columnName": "attempt_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastAttemptAtEpochMs",
+            "columnName": "last_attempt_at_epoch_ms",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "outbox_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_lastfm_outbox_fifo",
+            "unique": false,
+            "columnNames": [
+              "queued_at_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_lastfm_outbox_fifo` ON `${TABLE_NAME}` (`queued_at_epoch_ms`)"
+          },
+          {
+            "name": "index_lastfm_outbox_listening_session",
+            "unique": true,
+            "columnNames": [
+              "listening_session_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_lastfm_outbox_listening_session` ON `${TABLE_NAME}` (`listening_session_id`)"
+          },
+          {
+            "name": "index_lastfm_outbox_recording",
+            "unique": false,
+            "columnNames": [
+              "recording_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_lastfm_outbox_recording` ON `${TABLE_NAME}` (`recording_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "lyrics_cache",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`recording_id` TEXT NOT NULL, `metadata_fingerprint` TEXT NOT NULL, `provider_id` TEXT NOT NULL, `provider_record_id` TEXT, `plain_lyrics` TEXT, `synchronized_lyrics` TEXT, `instrumental` INTEGER NOT NULL, `cached_at_epoch_ms` INTEGER NOT NULL, `expires_at_epoch_ms` INTEGER, PRIMARY KEY(`recording_id`, `metadata_fingerprint`, `provider_id`), FOREIGN KEY(`recording_id`) REFERENCES `recording`(`recording_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadataFingerprint",
+            "columnName": "metadata_fingerprint",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "providerId",
+            "columnName": "provider_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "providerRecordId",
+            "columnName": "provider_record_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "plainLyrics",
+            "columnName": "plain_lyrics",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "synchronizedLyrics",
+            "columnName": "synchronized_lyrics",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "instrumental",
+            "columnName": "instrumental",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cachedAtEpochMs",
+            "columnName": "cached_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expiresAtEpochMs",
+            "columnName": "expires_at_epoch_ms",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "recording_id",
+            "metadata_fingerprint",
+            "provider_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_lyrics_cache_age",
+            "unique": false,
+            "columnNames": [
+              "cached_at_epoch_ms"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_lyrics_cache_age` ON `${TABLE_NAME}` (`cached_at_epoch_ms`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "recording",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "recording_id"
+            ],
+            "referencedColumns": [
+              "recording_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "saved_source_entity",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`provider_id` TEXT NOT NULL, `entity_type` TEXT NOT NULL, `source_item_id` TEXT NOT NULL, `title` TEXT NOT NULL, `subtitle` TEXT, `artwork_url` TEXT, `original_url` TEXT, `pinned` INTEGER NOT NULL, `saved_at_epoch_ms` INTEGER NOT NULL, `updated_at_epoch_ms` INTEGER NOT NULL, PRIMARY KEY(`provider_id`, `entity_type`, `source_item_id`))",
+        "fields": [
+          {
+            "fieldPath": "providerId",
+            "columnName": "provider_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityType",
+            "columnName": "entity_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceItemId",
+            "columnName": "source_item_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "subtitle",
+            "columnName": "subtitle",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "artworkUrl",
+            "columnName": "artwork_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "originalUrl",
+            "columnName": "original_url",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pinned",
+            "columnName": "pinned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "savedAtEpochMs",
+            "columnName": "saved_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMs",
+            "columnName": "updated_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "provider_id",
+            "entity_type",
+            "source_item_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_saved_source_entity_library_order",
+            "unique": false,
+            "columnNames": [
+              "pinned",
+              "saved_at_epoch_ms"
+            ],
+            "orders": [
+              "DESC",
+              "DESC"
+            ],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_saved_source_entity_library_order` ON `${TABLE_NAME}` (`pinned` DESC, `saved_at_epoch_ms` DESC)"
+          }
+        ]
+      },
+      {
+        "tableName": "migration_audit",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`migration_id` TEXT NOT NULL, `source_version` INTEGER NOT NULL, `target_version` INTEGER NOT NULL, `started_at_epoch_ms` INTEGER NOT NULL, `completed_at_epoch_ms` INTEGER, `source_counts_json` TEXT NOT NULL, `target_counts_json` TEXT, `warnings_json` TEXT NOT NULL, `checksum` TEXT, `status` TEXT NOT NULL, PRIMARY KEY(`migration_id`))",
+        "fields": [
+          {
+            "fieldPath": "migrationId",
+            "columnName": "migration_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceVersion",
+            "columnName": "source_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetVersion",
+            "columnName": "target_version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAtEpochMs",
+            "columnName": "started_at_epoch_ms",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAtEpochMs",
+            "columnName": "completed_at_epoch_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sourceCountsJson",
+            "columnName": "source_counts_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "targetCountsJson",
+            "columnName": "target_counts_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "warningsJson",
+            "columnName": "warnings_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "checksum",
+            "columnName": "checksum",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "migration_id"
+          ]
+        }
+      },
+      {
+        "tableName": "recording_fts",
+        "createSql": "CREATE VIRTUAL TABLE IF NOT EXISTS `${TABLE_NAME}` USING FTS4(`recording_id` TEXT NOT NULL, `title` TEXT NOT NULL, `artist_names` TEXT NOT NULL, `release_title` TEXT NOT NULL, `aliases` TEXT NOT NULL, `source_titles` TEXT NOT NULL, `user_override_text` TEXT NOT NULL, tokenize=unicode61, notindexed=`recording_id`)",
+        "fields": [
+          {
+            "fieldPath": "recordingId",
+            "columnName": "recording_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artistNames",
+            "columnName": "artist_names",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "releaseTitle",
+            "columnName": "release_title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "aliases",
+            "columnName": "aliases",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceTitles",
+            "columnName": "source_titles",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userOverrideText",
+            "columnName": "user_override_text",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": []
+        },
+        "ftsVersion": "FTS4",
+        "ftsOptions": {
+          "tokenizer": "unicode61",
+          "tokenizerArgs": [],
+          "contentTable": "",
+          "languageIdColumnName": "",
+          "matchInfo": "FTS4",
+          "notIndexedColumns": [
+            "recording_id"
+          ],
+          "prefixSizes": [],
+          "preferredOrder": "ASC"
+        },
+        "contentSyncTriggers": []
+      }
+    ],
+    "views": [
+      {
+        "viewName": "library_song_view",
+        "createSql": "CREATE VIEW `${VIEW_NAME}` AS SELECT\n            r.recording_id AS recording_id,\n            r.canonical_title AS title,\n            COALESCE((\n                SELECT GROUP_CONCAT(credit_part, '')\n                FROM (\n                    SELECT credited_name || join_phrase AS credit_part\n                    FROM recording_artist_credit\n                    WHERE recording_id = r.recording_id\n                    ORDER BY position\n                )\n            ), '') AS artist_display,\n            rel.canonical_title AS release_title,\n            art.location AS artwork_location,\n            r.duration_ms AS duration_ms,\n            COALESCE(lr.liked, 0) AS liked,\n            EXISTS(\n                SELECT 1 FROM media_asset local_asset\n                WHERE local_asset.recording_id = r.recording_id\n                  AND local_asset.asset_kind = 'LOCAL_FILE'\n                  AND local_asset.asset_state = 'AVAILABLE'\n            ) AS local_asset_exists,\n            EXISTS(\n                SELECT 1 FROM media_asset download_asset\n                WHERE download_asset.recording_id = r.recording_id\n                  AND download_asset.asset_kind = 'SHIPPY_DOWNLOAD'\n                  AND download_asset.asset_state = 'AVAILABLE'\n            ) AS download_asset_exists,\n            (\n                SELECT MAX(history.started_at_epoch_ms)\n                FROM play_history history\n                WHERE history.recording_id = r.recording_id\n            ) AS last_played_at_epoch_ms,\n            lr.first_added_at_epoch_ms AS date_added_epoch_ms,\n            LOWER(r.canonical_title) AS title_sort_key,\n            LOWER(COALESCE((\n                SELECT credited_name\n                FROM recording_artist_credit\n                WHERE recording_id = r.recording_id\n                ORDER BY position\n                LIMIT 1\n            ), '')) AS artist_sort_key\n        FROM recording r\n        LEFT JOIN library_recording lr ON lr.recording_id = r.recording_id\n        LEFT JOIN release rel ON rel.release_id = r.preferred_release_id\n        LEFT JOIN artwork_reference art ON art.artwork_id = r.preferred_artwork_id"
+      },
+      {
+        "viewName": "playlist_entry_view",
+        "createSql": "CREATE VIEW `${VIEW_NAME}` AS SELECT\n            entry.playlist_entry_id AS playlist_entry_id,\n            entry.playlist_id AS playlist_id,\n            entry.order_key AS order_key,\n            entry.recording_id AS recording_id,\n            song.title AS title,\n            song.artist_display AS artist_display,\n            song.release_title AS release_title,\n            song.artwork_location AS artwork_location,\n            song.duration_ms AS duration_ms,\n            song.liked AS liked,\n            (song.local_asset_exists OR song.download_asset_exists) AS offline_available,\n            COALESCE((\n                SELECT job.state\n                FROM download_job job\n                WHERE job.recording_id = entry.recording_id\n                ORDER BY job.created_at_epoch_ms DESC, job.job_id DESC\n                LIMIT 1\n            ), 'NONE') AS download_state,\n            CASE\n                WHEN song.local_asset_exists OR song.download_asset_exists THEN 'AVAILABLE'\n                WHEN EXISTS(\n                    SELECT 1 FROM source_reference source\n                    WHERE source.recording_id = entry.recording_id\n                      AND source.availability_state IN ('AVAILABLE', 'RESOLVABLE')\n                ) THEN 'RESOLVABLE'\n                ELSE 'UNKNOWN'\n            END AS availability_summary\n        FROM playlist_entry entry\n        JOIN library_song_view song ON song.recording_id = entry.recording_id"
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2059fae1a74020a0376f2b18591ada69')"
+    ]
+  }
+}

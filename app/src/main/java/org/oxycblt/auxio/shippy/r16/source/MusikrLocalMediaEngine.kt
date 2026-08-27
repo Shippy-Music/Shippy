@@ -36,6 +36,8 @@ import app.shippy.sources.local.LocalAssetKey
 import app.shippy.sources.local.LocalDeleteResult
 import app.shippy.sources.local.LocalMediaChange
 import app.shippy.sources.local.LocalMediaEngine
+import app.shippy.sources.local.LocalMediaSnapshotDescriptor
+import app.shippy.sources.local.LocalMediaSnapshotPage
 import app.shippy.sources.local.LocalScanRequest
 import app.shippy.sources.local.LocalScanState
 import app.shippy.sources.local.TagPatch
@@ -43,6 +45,9 @@ import app.shippy.sources.local.TagWriteResult
 import app.shippy.sources.observation.ObservedMediaAsset
 import app.shippy.sources.observation.SourceTrackObservation
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -73,12 +78,15 @@ constructor(
 ) : LocalMediaEngine, MusicRepository.IndexingListener {
     private val mutableScanState = MutableStateFlow(musicRepository.indexingState.toR16State())
     override val scanState: StateFlow<LocalScanState> = mutableScanState
+    private val catalogLock = Any()
+    @Volatile private var snapshotCatalog: LocalSnapshotCatalog? = null
 
     init {
         musicRepository.addIndexingListener(this)
     }
 
     override fun onIndexingStateChanged() {
+        snapshotCatalog = null
         mutableScanState.value = musicRepository.indexingState.toR16State()
     }
 
@@ -106,12 +114,69 @@ constructor(
     }
 
     override suspend fun snapshot(): List<SourceTrackObservation> {
+        val catalog = currentSnapshotCatalog()
+        val limit = catalog.songs.size.coerceAtLeast(1)
+        return snapshotPage(0, limit, catalog.descriptor.fingerprint).observations
+    }
+
+    override suspend fun snapshotDescriptor(): LocalMediaSnapshotDescriptor =
+        currentSnapshotCatalog().descriptor
+
+    override suspend fun snapshotPage(
+        offset: Long,
+        limit: Int,
+        expectedFingerprint: String?,
+    ): LocalMediaSnapshotPage {
+        require(offset >= 0) { "Local snapshot page offset cannot be negative" }
+        require(limit > 0) { "Local snapshot page size must be positive" }
+        expectedFingerprint?.let {
+            require(it.isNotBlank()) { "Expected snapshot fingerprint is blank" }
+        }
+        val catalog = currentSnapshotCatalog()
+        require(offset <= catalog.songs.size.toLong()) {
+            "Local snapshot page offset exceeds snapshot"
+        }
+        val start = offset.toInt()
+        val end = minOf(catalog.songs.size, Math.addExact(start, limit))
         val capturedAt = Instant.now()
-        return musicRepository.library
-            ?.songs
-            .orEmpty()
-            .sortedBy { it.uid.toString() }
-            .map { song -> song.toSnapshot(context).toObservation(capturedAt) }
+        val observations =
+            catalog.songs.subList(start, end).map { song ->
+                song.toSnapshot(context).toObservation(capturedAt)
+            }
+        val descriptor =
+            if (musicRepository.library === catalog.libraryIdentity) {
+                catalog.descriptor
+            } else {
+                currentSnapshotCatalog().descriptor
+            }
+        return LocalMediaSnapshotPage(
+            descriptor = descriptor,
+            offset = offset,
+            observations = observations,
+        )
+    }
+
+    private fun currentSnapshotCatalog(): LocalSnapshotCatalog {
+        val library = musicRepository.library
+        snapshotCatalog
+            ?.takeIf { it.libraryIdentity === library }
+            ?.let {
+                return it
+            }
+        return synchronized(catalogLock) {
+            snapshotCatalog
+                ?.takeIf { it.libraryIdentity === library }
+                ?.let {
+                    return@synchronized it
+                }
+            val songs = library?.songs.orEmpty().sortedBy { it.uid.toString() }
+            LocalSnapshotCatalog(
+                    libraryIdentity = library,
+                    songs = songs,
+                    descriptor = songs.snapshotDescriptor(context),
+                )
+                .also { snapshotCatalog = it }
+        }
     }
 
     override suspend fun open(asset: LocalAssetKey): LocalAssetHandle {
@@ -141,6 +206,87 @@ constructor(
             .buffer(Channel.CONFLATED)
 }
 
+private data class LocalSnapshotCatalog(
+    val libraryIdentity: Any?,
+    val songs: List<Song>,
+    val descriptor: LocalMediaSnapshotDescriptor,
+)
+
+private fun List<Song>.snapshotDescriptor(context: Context): LocalMediaSnapshotDescriptor {
+    val digest = MessageDigest.getInstance("SHA-256")
+    forEach { song ->
+        val uid = song.uid.toString()
+        digest.put(
+            listOf("local-file", SourceItemType.LOCAL_FILE.name, uid)
+                .joinToString(LOCAL_SNAPSHOT_UNIT_SEPARATOR)
+        )
+        val title = song.name.raw
+        digest.put(title)
+        song.artists.map { it.name.resolve(context) }.forEach(digest::put)
+        digest.put(song.album.name.resolve(context))
+        digest.put(song.durationMs.toString())
+        val version = extractLocalRecordingVersion(title)
+        digest.put(version.kind.name)
+        digest.put(version.label)
+        digest.put(Explicitness.UNKNOWN.name)
+        version.traits.map(Enum<*>::name).sorted().forEach(digest::put)
+        uid.takeIf { it.startsWith(MUSICBRAINZ_SONG_PREFIX) }
+            ?.let {
+                digest.put("${ExternalIdentifierKind.MUSICBRAINZ_RECORDING.name}:${it.drop(3)}")
+            }
+        digest.put(null)
+        digest.put(MediaAssetKind.LOCAL_FILE.name)
+        digest.put(CONTENT_URI)
+        digest.put(song.uri.toString())
+        digest.put(song.documentId(context))
+        digest.put(song.mediaStoreId()?.toString())
+        digest.put(song.path.stableToken())
+        digest.put(null)
+        digest.put(song.modifiedMs.takeIf { it >= 0 }?.toString())
+        digest.put(song.format.mimeType)
+        digest.put(null)
+        digest.put(song.bitrateBps()?.toString())
+        digest.put(song.sampleRateHz.takeIf { it > 0 }?.toString())
+        digest.put(null)
+        digest.put(song.size.toString())
+        digest.put(null)
+        digest.put(null)
+    }
+    return LocalMediaSnapshotDescriptor(
+        fingerprint =
+            digest.digest().joinToString("") { it.toInt().and(0xff).toString(16).padStart(2, '0') },
+        count = size.toLong(),
+    )
+}
+
+private fun Song.documentId(context: Context): String? =
+    runCatching {
+            if (DocumentsContract.isDocumentUri(context, uri)) {
+                DocumentsContract.getDocumentId(uri)
+            } else {
+                null
+            }
+        }
+        .getOrNull()
+
+private fun Song.mediaStoreId(): Long? =
+    uri.takeIf { it.authority == MediaStore.AUTHORITY }?.lastPathSegment?.toLongOrNull()
+
+private fun Song.bitrateBps(): Int? =
+    bitrateKbps.takeIf { it > 0 }?.toLong()?.times(1_000L)?.takeIf { it <= Int.MAX_VALUE }?.toInt()
+
+private fun MessageDigest.put(value: String?) {
+    if (value == null) {
+        update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(-1).array())
+        return
+    }
+    val bytes = value.toByteArray(StandardCharsets.UTF_8)
+    update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(bytes.size).array())
+    update(bytes)
+}
+
+private const val LOCAL_SNAPSHOT_UNIT_SEPARATOR = "\u001f"
+
 internal data class MusikrSongSnapshot(
     val uid: String,
     val title: String,
@@ -160,13 +306,13 @@ internal data class MusikrSongSnapshot(
 ) {
     fun toObservation(capturedAt: Instant): SourceTrackObservation =
         SourceTrackObservation(
-            sourceKey = SourceKey(LOCAL_FILE_PROVIDER_ID, SourceItemType.LOCAL_FILE, uid),
+            sourceKey = musikrLocalSourceKey(uid),
             sourceKind = SourceKind.LOCAL_FILE,
             title = title,
             artistNames = artistNames,
             releaseTitle = releaseTitle,
             durationMs = durationMs,
-            version = RecordingVersionParser.parse(title),
+            version = extractLocalRecordingVersion(title),
             explicitness = Explicitness.UNKNOWN,
             artwork = emptyList(),
             externalIdentifiers =
@@ -212,28 +358,13 @@ private fun Song.toSnapshot(context: Context): MusikrSongSnapshot {
         artistNames = artists.map { it.name.resolve(context) },
         releaseTitle = album.name.resolve(context),
         uri = uriString,
-        documentId =
-            runCatching {
-                    if (DocumentsContract.isDocumentUri(context, uri)) {
-                        DocumentsContract.getDocumentId(uri)
-                    } else {
-                        null
-                    }
-                }
-                .getOrNull(),
-        mediaStoreId =
-            uri.takeIf { it.authority == MediaStore.AUTHORITY }?.lastPathSegment?.toLongOrNull(),
+        documentId = documentId(context),
+        mediaStoreId = mediaStoreId(),
         pathToken = path.stableToken(),
         mimeType = format.mimeType,
         size = size,
         durationMs = durationMs,
-        bitrateBps =
-            bitrateKbps
-                .takeIf { it > 0 }
-                ?.toLong()
-                ?.times(1_000L)
-                ?.takeIf { it <= Int.MAX_VALUE }
-                ?.toInt(),
+        bitrateBps = bitrateBps(),
         sampleRateHz = sampleRateHz.takeIf { it > 0 },
         modifiedAtEpochMs = modifiedMs.takeIf { it >= 0 },
         musicBrainzRecordingId =
@@ -268,6 +399,38 @@ private fun IndexingState?.toR16State(): LocalScanState =
         null -> LocalScanState.Idle
     }
 
+internal fun musikrLocalSourceKey(uid: String): SourceKey =
+    SourceKey(LOCAL_FILE_PROVIDER_ID, SourceItemType.LOCAL_FILE, uid)
+
 private val LOCAL_FILE_PROVIDER_ID = ProviderId("local-file")
 private const val CONTENT_URI = "CONTENT_URI"
 private const val MUSICBRAINZ_SONG_PREFIX = "ums"
+
+private val LOCAL_VERSION_QUALIFIER = Regex("(?:\\(([^)]+)\\)|\\[([^]]+)]|[-–—]\\s*([^-–—]+))\\s*$")
+private val LOCAL_VERSION_MARKER =
+    Regex(
+        "\\b(live|remix|mix|acoustic|instrumental|radio edit|remaster(?:ed)?|cover|karaoke|sped up|slowed|reverb)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
+internal fun extractLocalRecordingVersion(title: String?): app.shippy.core.music.RecordingVersion {
+    if (title.isNullOrBlank())
+        return app.shippy.core.music.RecordingVersion(app.shippy.core.music.VersionKind.ORIGINAL)
+    val qualifier =
+        LOCAL_VERSION_QUALIFIER.find(title)
+            ?.groupValues
+            ?.drop(1)
+            ?.firstOrNull(String::isNotBlank)
+            ?.trim()
+            ?.takeIf(LOCAL_VERSION_MARKER::containsMatchIn)
+            ?: return app.shippy.core.music.RecordingVersion(
+                app.shippy.core.music.VersionKind.ORIGINAL
+            )
+
+    val parsed = RecordingVersionParser.parse(qualifier)
+    return if (parsed.traits.isEmpty()) {
+        app.shippy.core.music.RecordingVersion(app.shippy.core.music.VersionKind.ORIGINAL)
+    } else {
+        parsed
+    }
+}

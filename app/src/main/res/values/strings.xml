@@ -17,14 +17,26 @@
     <!-- As in to retry loading music -->
     <string name="lbl_retry">Retry</string>
     <string name="lbl_load_more">Load more</string>
+    <string name="r16_migration_title">Migration required</string>
+    <string name="r16_migration_intro">Import your existing library before using the app.</string>
+    <string name="r16_migration_phase_count_initial">0 / 14 phases completed</string>
+    <string name="r16_migration_no_phase">-</string>
+    <string name="r16_migration_start">Start migration</string>
+    <string name="r16_migration_continue">Continue migration</string>
+    <string name="r16_migration_retry">Retry migration</string>
+    <string name="r16_migration_cancel">Cancel after current page</string>
+    <string name="r16_migration_activate">Activate R16</string>
+    <string name="r16_migration_export_failure">Create failure report</string>
+    <string name="r16_migration_export_backup">Export verified normalized backup</string>
+    <string name="r16_unavailable_message">R16 could not start safely. Legacy access remains paused.</string>
     <string name="lbl_loading">Loading…</string>
 
     <string name="lbl_songs">Songs</string>
     <string name="lbl_song">Song</string>
     <string name="lbl_all_songs">All songs</string>
 
-    <string name="lbl_albums">Albums</string>
     <string name="lbl_album">Album</string>
+    <string name="lbl_albums">Albums</string>
     <!-- As in the the music release being played live -->
     <string name="lbl_album_live">Live album</string>
     <!-- As in a remix of the music release -->
@@ -116,10 +128,40 @@
     <string name="msg_delete_local_confirm">Permanently delete “%1$s” from this device? This cannot be undone.</string>
     <string name="msg_delete_local_complete">Deleted from device</string>
     <string name="msg_delete_local_failed">Could not delete this local file</string>
+    <string name="set_key_playback_cache_max_size" translatable="false">playback_cache_max_size</string>
+    <string name="set_playback_cache_max_size">Streaming cache size</string>
+    <string name="set_key_playback_cache_unused_age" translatable="false">playback_cache_unused_age</string>
+    <string name="set_playback_cache_unused_age">Remove unused cached music after</string>
     <string name="set_key_clear_playback_cache" translatable="false">clear_playback_cache</string>
     <string name="set_clear_playback_cache">Clear streaming cache</string>
     <string name="set_clear_playback_cache_desc">Remove reusable streamed copies only. Downloads and local music stay untouched.</string>
     <string name="msg_playback_cache_cleared">Streaming cache cleared</string>
+    <string-array name="set_playback_cache_max_size_entries">
+        <item>256 MB</item>
+        <item>512 MB</item>
+        <item>1 GB</item>
+        <item>2 GB</item>
+        <item>5 GB</item>
+    </string-array>
+    <string-array name="set_playback_cache_max_size_values">
+        <item>268435456</item>
+        <item>536870912</item>
+        <item>1073741824</item>
+        <item>2147483648</item>
+        <item>5368709120</item>
+    </string-array>
+    <string-array name="set_playback_cache_unused_age_entries">
+        <item>7 days</item>
+        <item>30 days</item>
+        <item>90 days</item>
+        <item>Only by size</item>
+    </string-array>
+    <string-array name="set_playback_cache_unused_age_values">
+        <item>604800000</item>
+        <item>2592000000</item>
+        <item>7776000000</item>
+        <item>size_only</item>
+    </string-array>
     <string name="download_channel_name">Downloads</string>
     <string name="download_notification_title">Downloading %1$s</string>
     <string name="lbl_home">Home</string>
@@ -234,7 +276,7 @@
     <string name="lbl_pin">Pin</string>
     <string name="lbl_unpin">Unpin</string>
     <string name="lbl_pinned">Pinned</string>
-    <string name="lbl_edit_order">Edit order</string>
+    <string name="lbl_edit_order">Reorder</string>
     <string name="lbl_system_collection">System collection</string>
     <string name="lbl_batch_actions">Selected tracks</string>
     <string name="lbl_choose_action">Choose an action</string>
@@ -266,6 +308,132 @@
     <string name="lbl_shippy_playlists">Playlists</string>
     <string name="lbl_saved_from_providers">Saved albums, artists, and playlists</string>
     <string name="lbl_on_this_device">On this device</string>
+    <string name="r16_global_search_open">Search</string>
+    <string name="r16_global_search_close">Close search</string>
+    <string name="r16_global_search_hint">Search music</string>
+    <string name="r16_global_search_catalogue">Shippy catalogue</string>
+    <string name="r16_library_search_open">Library Search</string>
+    <string name="r16_library_search_collections">Collections</string>
+    <string name="r16_library_search_prompt">Search Songs, Playlists, and Artists in your Library.</string>
+    <string name="r16_library_search_empty">No matching Library targets.</string>
+    <string name="r16_library_search_error">Couldn\'t refresh all Library results.</string>
+    <string name="r16_library_search_retry">Retry</string>
+    <string name="r16_library_search_releases_deferred">Releases are not available in Library Search yet</string>
+    <string name="r16_global_search_jiosaavn">JioSaavn</string>
+    <string name="r16_global_search_retry">Retry JioSaavn</string>
+    <string name="r16_mini_player_buffering">Buffering</string>
+    <string name="r16_mini_player_paused">Paused</string>
+    <string name="r16_mini_player_playing">Playing</string>
+    <string name="r16_mini_player_play">Play</string>
+    <string name="r16_mini_player_pause">Pause</string>
+    <string name="r16_mini_player_next">Next</string>
+    <string name="r16_now_playing_title">Now playing</string>
+    <string name="r16_now_playing_back">Back</string>
+    <string name="r16_now_playing_empty">Nothing is playing</string>
+    <string name="r16_now_playing_loading">Loading</string>
+    <string name="r16_now_playing_buffering">Buffering</string>
+    <string name="r16_now_playing_paused">Paused</string>
+    <string name="r16_now_playing_playing">Playing</string>
+    <string name="r16_now_playing_failed">Playback failed</string>
+    <string name="r16_now_playing_retry">Retry</string>
+    <string name="r16_now_playing_previous">Previous</string>
+    <string name="r16_now_playing_play">Play</string>
+    <string name="r16_now_playing_pause">Pause</string>
+    <string name="r16_now_playing_next">Next</string>
+    <string name="r16_now_playing_repeat">Repeat</string>
+    <string name="r16_now_playing_shuffle">Shuffle</string>
+    <string name="r16_now_playing_queue">Queue</string>
+    <string name="r16_now_playing_add_to_playlist">Add to playlist</string>
+    <string name="r16_queue_title">Queue</string>
+    <string name="r16_queue_back">Back</string>
+    <string name="r16_queue_loading">Loading queue</string>
+    <string name="r16_queue_empty">Queue is empty</string>
+    <string name="r16_queue_unavailable">Queue unavailable</string>
+    <string name="r16_queue_count">Showing %1$d of %2$d queue items</string>
+    <string name="r16_queue_unknown_track">Unknown track</string>
+    <string name="r16_queue_previous">Previous</string>
+    <string name="r16_queue_next">Next</string>
+    <string name="r16_library_playlists">Playlists</string>
+    <string name="r16_library_artists">Artists</string>
+    <string name="r16_library_back">Back</string>
+    <string name="r16_artist_play">Play</string>
+    <string name="r16_artist_shuffle">Shuffle</string>
+    <string name="r16_artist_recording_count">%1$d recordings</string>
+    <string name="r16_artist_content_description">%1$s, %2$d recordings</string>
+    <string name="r16_empty_artists">No artists in your Library.</string>
+    <string name="r16_empty_artist_recordings">No recordings in this artist.</string>
+    <string name="r16_playlist_default_title">Playlist</string>
+    <string name="r16_playlist_play">Play</string>
+    <string name="r16_playlist_shuffle">Shuffle</string>
+    <string name="r16_playlist_sort">Sort</string>
+    <string name="r16_playlist_sort_next">Direction</string>
+    <string name="r16_playlist_sort_direction">Sort direction</string>
+    <string name="r16_playlist_sort_apply">Apply</string>
+    <string name="r16_playlist_sort_ascending">Ascending</string>
+    <string name="r16_playlist_sort_descending">Descending</string>
+    <string name="r16_playlist_sort_custom">Custom</string>
+    <string name="r16_playlist_sort_recently_added">Recently added</string>
+    <string name="r16_playlist_sort_oldest_added">Oldest added</string>
+    <string name="r16_playlist_sort_title">Title</string>
+    <string name="r16_playlist_sort_artist">Artist</string>
+    <string name="r16_playlist_sort_album">Album</string>
+    <string name="r16_playlist_sort_duration">Duration</string>
+    <string name="r16_playlist_track_count">%1$d tracks</string>
+    <string name="r16_playlist_content_description">%1$s, %2$d tracks</string>
+    <string name="r16_playlist_pinned">Pinned</string>
+    <string name="r16_playlist_pin_content_description">Pin %1$s</string>
+    <string name="r16_playlist_unpin_content_description">Unpin %1$s</string>
+    <string name="r16_playlist_pinned_meta">%1$s • Pinned</string>
+    <string name="r16_playlist_empty">This playlist has no tracks.</string>
+    <string name="r16_playlist_create">Create</string>
+    <string name="r16_playlist_creating">Creating playlist…</string>
+    <string name="r16_playlist_rename">Rename</string>
+    <string name="r16_playlist_delete">Delete</string>
+    <string name="r16_playlist_edit_order">Reorder</string>
+    <string name="r16_playlist_edit_order_done">Done</string>
+    <string name="r16_playlist_move_up">Move up</string>
+    <string name="r16_playlist_move_down">Move down</string>
+    <string name="r16_playlist_move_to_top">Move to top</string>
+    <string name="r16_playlist_move_to_bottom">Move to bottom</string>
+    <string name="r16_playlist_reorder_entry">Reorder %1$s</string>
+    <string name="r16_playlist_reordering">Updating order…</string>
+    <string name="r16_playlist_order_updated">Order updated.</string>
+    <string name="r16_playlist_already_first">This track is already first.</string>
+    <string name="r16_playlist_already_last">This track is already last.</string>
+    <string name="r16_playlist_reorder_entry_missing">This track is no longer in the playlist.</string>
+    <string name="r16_playlist_reorder_custom_only">Switch to Custom order before reordering.</string>
+    <string name="r16_playlist_reorder_failed">Couldn’t update the playlist order. Try again.</string>
+    <string name="r16_playlist_delete_confirmation">Delete %1$s? This cannot be undone.</string>
+    <string name="r16_playlist_name_required">Enter a playlist name.</string>
+    <string name="r16_playlist_name_hint">Playlist name</string>
+    <string name="r16_playlist_saving">Saving playlist…</string>
+    <string name="r16_playlist_saved">Playlist saved.</string>
+    <string name="r16_playlist_not_found">This playlist is no longer available.</string>
+    <string name="r16_playlist_action_failed">Playlist change failed. Try again.</string>
+    <string name="r16_playlist_remove_entry_confirmation">Remove %1$s from this playlist?</string>
+    <string name="r16_playlist_remove_entry_failed">Track could not be removed. It may already be gone.</string>
+    <string name="r16_playlist_destination_title">Add to playlist</string>
+    <string name="r16_playlist_destination_target">Adding: %1$s — %2$s</string>
+    <string name="r16_playlist_destination_empty">No playlists available.</string>
+    <string name="r16_playlist_destination_loading">Loading playlists…</string>
+    <string name="r16_playlist_destination_adding">Adding to playlist…</string>
+    <string name="r16_playlist_destination_added">Added to playlist.</string>
+    <string name="r16_playlist_destination_load_failed">Playlists could not be loaded.</string>
+    <string name="r16_playlist_destination_recording_missing">This track is no longer available.</string>
+    <string name="r16_playlist_destination_liked_title">Liked songs</string>
+    <string name="r16_playlist_destination_liked_saved">Saved to Liked songs</string>
+    <string name="r16_playlist_destination_liked_unsaved">Not in Liked songs</string>
+    <string name="r16_playlist_destination_removed">Removed from playlist.</string>
+    <string name="r16_playlist_selection_count">%1$d selected</string>
+    <string name="r16_playlist_delete_selected_confirm">Remove %1$d selected tracks from playlist?</string>
+    <string name="r16_queue_move_top">Move to top</string>
+    <string name="r16_queue_move_bottom">Move to bottom</string>
+    <string name="r16_queue_selection_count">%1$d selected</string>
+    <string name="r16_queue_delete_selected_confirm">Remove %1$d selected tracks from queue?</string>
+    <string name="lbl_remove">Remove</string>
+    <string name="r16_song_menu_identify">Identify track</string>
+    <string name="r16_song_menu_edit_metadata">Edit metadata</string>
+    <string name="r16_song_menu_unmerge">Unmerge track</string>
 
     <string name="lbl_selection">Selection</string>
 
@@ -300,6 +468,7 @@
     <string name="lng_supporters_promo">Donate to the project to get your name added here!</string>
     <!-- As in music library -->
     <string name="lng_search_library">Search your library…</string>
+    <string name="lng_search_playlist">Search this playlist…</string>
     <string name="lng_no_current_music">Play something and it will stay close at hand.</string>
     <string name="lng_crew_empty">Share one queue and keep playback in sync on a nearby or remote device.</string>
     <string name="lng_crew_active">Crew active</string>
@@ -817,6 +986,48 @@
     <string name="lbl_lastfm_reauth_required">Last.fm needs sign-in</string>
     <string name="lbl_lastfm_disabled">Last.fm is disabled</string>
     <string name="lbl_recently_played">Recently played</string>
+    <string name="r16_home_title">Home</string>
+    <string name="r16_home_continue">Continue listening</string>
+    <string name="r16_home_continue_empty">Nothing is ready to continue</string>
+    <string name="r16_home_recently_played">Recently played</string>
+    <string name="r16_home_recent_empty">No finished listening sessions yet.</string>
+    <string name="r16_home_see_all">See all</string>
+    <string name="r16_home_pinned_shortcuts">Pinned</string>
+    <string name="lbl_title">Title</string>
+    <string name="r16_library_songs">Songs</string>
+    <string name="r16_library_albums">Albums</string>
+    <string name="r16_library_genres">Genres</string>
+    <string name="r16_albums_empty">No albums in your library yet.</string>
+    <string name="r16_genres_empty">No genres found in your library.</string>
+    <string name="r16_library_collections">Collections</string>
+    <string name="r16_system_collection_empty">No tracks in this collection.</string>
+    <string name="r16_history_title">History</string>
+    <string name="r16_history_back">Back</string>
+    <string name="r16_history_empty">No listening history yet.</string>
     <string name="lbl_recent_downloads">Recent downloads</string>
     <string name="err_track_playback">This track could not be played. Trying the next one.</string>
+    <string name="r16_identify_track">Identify track</string>
+    <string name="r16_no_candidates_found">No matching tracks found.</string>
+    <string name="r16_identification_saved">Identification saved</string>
+    <string name="r16_undo">Undo</string>
+    <string name="r16_unlink_identification">Unlink identification</string>
+    <string name="r16_edit_metadata">Edit metadata</string>
+    <string name="r16_edit_metadata_summary">Changes apply locally and preserve underlying source data.</string>
+    <string name="r16_revert_field">Revert to canonical value</string>
+    <string name="lbl_lyrics_tap_to_view">Tap to view lyrics</string>
+    <string name="lbl_lyrics_loading">Loading lyrics…</string>
+    <string name="lbl_lyrics_unavailable">Lyrics unavailable</string>
+    <string name="r16_unmerge">Unmerge recording</string>
+    <string name="r16_unmerge_confirm">Restore previous separate entities for this recording?</string>
+    <string name="r16_lyrics_auto_scroll">Auto-scroll</string>
+    <string name="r16_lyrics_retry">Retry</string>
+    <string name="r16_lyrics_source">Source: %s</string>
+    <string name="r16_lyrics_synced_unavailable">Synchronized lyrics unavailable</string>
+    <string name="r16_home_lastfm_recommendations">Recommended for you</string>
+    <string name="r16_home_lastfm_subtitle">Based on your Last.fm listening</string>
+    <string name="r16_home_lastfm_profile_summary">Personalised from %1$s’s listening history</string>
+    <string name="r16_scrobble_status_sent">Sent</string>
+    <string name="r16_scrobble_status_pending">Pending</string>
+    <string name="r16_scrobble_status_retryable_failure">Retryable Failure</string>
+    <string name="r16_scrobble_status_not_authorized">Not Authorized</string>
 </resources>

@@ -43,6 +43,7 @@ import org.oxycblt.auxio.R
 import org.oxycblt.auxio.image.BitmapProvider
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.playback.service.PlaybackNotification
+import org.oxycblt.auxio.shippy.r16.playback.service.R16QueuePageEndpoint
 
 /**
  * Inactive R16 lifecycle wrapper around the retained MediaSession and notification behavior. It is
@@ -59,6 +60,7 @@ class R16MediaSessionHolder(
     onPlayFromMediaIdRequested: (String?, android.os.Bundle?) -> Unit,
     onPlayFromSearchRequested: (String?, android.os.Bundle?) -> Unit,
     onExitRequested: () -> Unit,
+    queueEndpoint: R16QueuePageEndpoint? = null,
 ) : ImageSettings.Listener {
     private val holderJob = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope =
@@ -72,6 +74,7 @@ class R16MediaSessionHolder(
             onPlayFromMediaIdRequested = onPlayFromMediaIdRequested,
             onPlayFromSearchRequested = onPlayFromSearchRequested,
             onExitRequested = onExitRequested,
+            queueEndpoint = queueEndpoint,
         )
 
     private var attached = false

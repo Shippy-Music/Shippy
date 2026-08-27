@@ -57,6 +57,42 @@ internal abstract class DownloadDao {
     )
     abstract suspend fun pending(states: Set<String>, limit: Int): List<DownloadJobEntity>
 
+    @Query(
+        """
+        SELECT DISTINCT pending_location FROM download_job
+        WHERE pending_location IS NOT NULL
+        ORDER BY pending_location
+        """
+    )
+    abstract suspend fun pendingCleanupLocations(): List<String>
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM download_job
+        WHERE published_asset_id = :assetId
+          AND job_id != :jobId
+        """
+    )
+    abstract suspend fun countOtherPublishedAssetReferences(assetId: String, jobId: String): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM download_job
+        WHERE published_asset_id = :assetId
+          AND (
+              state != :state
+              OR failure_kind IS NOT :failureKind
+              OR retry_after_epoch_ms IS NOT NULL
+              OR pending_location IS NOT NULL
+          )
+        """
+    )
+    abstract suspend fun countPublishedAssetReferencesNeedingState(
+        assetId: String,
+        state: String,
+        failureKind: String?,
+    ): Int
+
     @Upsert protected abstract suspend fun upsertJob(entity: DownloadJobEntity)
 
     @Upsert protected abstract suspend fun upsertPublishedAsset(entity: MediaAssetEntity)
@@ -86,6 +122,104 @@ internal abstract class DownloadDao {
     @Query(
         """
         UPDATE download_job SET
+            state = 'PUBLISHING',
+            failure_kind = NULL,
+            retry_after_epoch_ms = NULL,
+            pending_location = :pendingLocation,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE job_id = :jobId
+          AND recording_id = :recordingId
+          AND requested_source_reference_id IS :requestedSourceReferenceId
+          AND requested_media_variant = :requestedMediaVariant
+          AND destination_identity = :destinationIdentity
+          AND state = 'VERIFYING'
+        """
+    )
+    protected abstract suspend fun beginPublishingInternal(
+        jobId: String,
+        recordingId: String,
+        requestedSourceReferenceId: String?,
+        requestedMediaVariant: String,
+        destinationIdentity: String,
+        pendingLocation: String,
+        updatedAtEpochMs: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE download_job SET
+            state = 'QUEUED',
+            bytes_transferred = 0,
+            failure_kind = NULL,
+            retry_after_epoch_ms = NULL,
+            pending_location = NULL,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE job_id = :jobId
+          AND recording_id = :recordingId
+          AND requested_source_reference_id IS :requestedSourceReferenceId
+          AND requested_media_variant = :requestedMediaVariant
+          AND destination_identity = :destinationIdentity
+          AND state = 'FAILED_RETRYABLE'
+        """
+    )
+    protected abstract suspend fun resetForRetryInternal(
+        jobId: String,
+        recordingId: String,
+        requestedSourceReferenceId: String?,
+        requestedMediaVariant: String,
+        destinationIdentity: String,
+        updatedAtEpochMs: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE download_job SET
+            pending_location = :pendingLocation,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE job_id = :jobId
+          AND recording_id = :recordingId
+          AND requested_source_reference_id = :requestedSourceReferenceId
+          AND requested_media_variant = :requestedMediaVariant
+          AND destination_identity = :destinationIdentity
+          AND pending_location IS NULL
+        """
+    )
+    protected abstract suspend fun retainPendingCleanupEvidenceInternal(
+        jobId: String,
+        recordingId: String,
+        requestedSourceReferenceId: String,
+        requestedMediaVariant: String,
+        destinationIdentity: String,
+        pendingLocation: String,
+        updatedAtEpochMs: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE download_job SET
+            pending_location = NULL,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE job_id = :jobId
+          AND recording_id = :recordingId
+          AND requested_source_reference_id = :requestedSourceReferenceId
+          AND requested_media_variant = :requestedMediaVariant
+          AND destination_identity = :destinationIdentity
+          AND pending_location = :pendingLocation
+        """
+    )
+    protected abstract suspend fun clearPendingCleanupEvidenceInternal(
+        jobId: String,
+        recordingId: String,
+        requestedSourceReferenceId: String,
+        requestedMediaVariant: String,
+        destinationIdentity: String,
+        pendingLocation: String,
+        updatedAtEpochMs: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE download_job SET
             state = 'AVAILABLE',
             published_asset_id = :assetId,
             bytes_transferred = COALESCE(:publishedBytes, expected_bytes, bytes_transferred),
@@ -101,6 +235,51 @@ internal abstract class DownloadDao {
         jobId: String,
         assetId: String,
         publishedBytes: Long?,
+        updatedAtEpochMs: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE download_job SET
+            state = :state,
+            failure_kind = :failureKind,
+            retry_after_epoch_ms = NULL,
+            pending_location = NULL,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE published_asset_id = :assetId
+          AND (
+              state != :state
+              OR failure_kind IS NOT :failureKind
+              OR retry_after_epoch_ms IS NOT NULL
+              OR pending_location IS NOT NULL
+          )
+        """
+    )
+    abstract suspend fun updatePublishedState(
+        assetId: String,
+        state: String,
+        failureKind: String?,
+        updatedAtEpochMs: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE download_job SET
+            state = 'REMOVED',
+            published_asset_id = NULL,
+            failure_kind = NULL,
+            retry_after_epoch_ms = NULL,
+            pending_location = NULL,
+            updated_at_epoch_ms = :updatedAtEpochMs
+        WHERE job_id = :jobId
+          AND recording_id = :recordingId
+          AND published_asset_id = :assetId
+        """
+    )
+    abstract suspend fun markRemoved(
+        jobId: String,
+        recordingId: String,
+        assetId: String,
         updatedAtEpochMs: Long,
     ): Int
 
@@ -121,6 +300,11 @@ internal abstract class DownloadDao {
     ) {
         validateProgress(bytesTransferred, expectedBytes)
         require(state.isNotBlank()) { "Download state must not be blank" }
+        require(state != "PUBLISHING") { "Publishing must use beginPublishing" }
+        val currentState = get(jobId)?.state ?: error("Download job is missing")
+        require(currentState != "FAILED_RETRYABLE" || state == currentState) {
+            "Retryable failures must use resetForRetry"
+        }
         check(
             updateProgressInternal(
                 jobId,
@@ -135,6 +319,80 @@ internal abstract class DownloadDao {
             "Download job is missing"
         }
     }
+
+    open suspend fun beginPublishing(
+        jobId: String,
+        recordingId: String,
+        requestedSourceReferenceId: String?,
+        requestedMediaVariant: String,
+        destinationIdentity: String,
+        pendingLocation: String,
+        updatedAtEpochMs: Long,
+    ): Boolean =
+        beginPublishingInternal(
+            jobId = jobId,
+            recordingId = recordingId,
+            requestedSourceReferenceId = requestedSourceReferenceId,
+            requestedMediaVariant = requestedMediaVariant,
+            destinationIdentity = destinationIdentity,
+            pendingLocation = pendingLocation,
+            updatedAtEpochMs = updatedAtEpochMs,
+        ) == 1
+
+    open suspend fun resetForRetry(
+        jobId: String,
+        recordingId: String,
+        requestedSourceReferenceId: String?,
+        requestedMediaVariant: String,
+        destinationIdentity: String,
+        updatedAtEpochMs: Long,
+    ): Boolean =
+        resetForRetryInternal(
+            jobId = jobId,
+            recordingId = recordingId,
+            requestedSourceReferenceId = requestedSourceReferenceId,
+            requestedMediaVariant = requestedMediaVariant,
+            destinationIdentity = destinationIdentity,
+            updatedAtEpochMs = updatedAtEpochMs,
+        ) == 1
+
+    open suspend fun retainPendingCleanupEvidence(
+        jobId: String,
+        recordingId: String,
+        requestedSourceReferenceId: String,
+        requestedMediaVariant: String,
+        destinationIdentity: String,
+        pendingLocation: String,
+        updatedAtEpochMs: Long,
+    ): Boolean =
+        retainPendingCleanupEvidenceInternal(
+            jobId = jobId,
+            recordingId = recordingId,
+            requestedSourceReferenceId = requestedSourceReferenceId,
+            requestedMediaVariant = requestedMediaVariant,
+            destinationIdentity = destinationIdentity,
+            pendingLocation = pendingLocation,
+            updatedAtEpochMs = updatedAtEpochMs,
+        ) == 1
+
+    open suspend fun clearPendingCleanupEvidence(
+        jobId: String,
+        recordingId: String,
+        requestedSourceReferenceId: String,
+        requestedMediaVariant: String,
+        destinationIdentity: String,
+        pendingLocation: String,
+        updatedAtEpochMs: Long,
+    ): Boolean =
+        clearPendingCleanupEvidenceInternal(
+            jobId = jobId,
+            recordingId = recordingId,
+            requestedSourceReferenceId = requestedSourceReferenceId,
+            requestedMediaVariant = requestedMediaVariant,
+            destinationIdentity = destinationIdentity,
+            pendingLocation = pendingLocation,
+            updatedAtEpochMs = updatedAtEpochMs,
+        ) == 1
 
     @Transaction
     open suspend fun publishVerified(

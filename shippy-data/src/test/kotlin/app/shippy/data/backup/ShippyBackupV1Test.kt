@@ -22,6 +22,7 @@ import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -60,6 +61,73 @@ class ShippyBackupV1Test {
             rewriteSection(output.toByteArray(), ShippyBackupSection.RECORDINGS.entryName)
         assertThrows(IllegalArgumentException::class.java) {
             ShippyBackupV1.read(ByteArrayInputStream(tampered))
+        }
+    }
+
+    @Test
+    fun `coverage payloads use JSON content type and require matching flags`() {
+        val sections =
+            completeSections(includeHistory = false) +
+                mapOf(
+                    ShippyBackupSection.PORTABLE_SETTINGS to
+                        R16BackupCoverageCodec.encodePortableSettings(
+                            R16PortableSettingsSnapshot(emptyMap())
+                        ),
+                    ShippyBackupSection.SANITIZED_LASTFM_CONFIG to
+                        R16BackupCoverageCodec.encodeLastFmConfig(
+                            R16SanitizedLastFmConfig(username = null)
+                        ),
+                )
+        val output = ByteArrayOutputStream()
+        ShippyBackupV1.write(
+            output = output,
+            databaseSchemaVersion = 1,
+            createdAtEpochMs = 123,
+            includesHistory = false,
+            sections = sections,
+            portableAppSettingsIncluded = true,
+            sanitizedLastFmConfigIncluded = true,
+        )
+
+        val manifest =
+            ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { input ->
+                var found: String? = null
+                while (true) {
+                    val entry = input.nextEntry ?: break
+                    val bytes = input.readBytes()
+                    if (entry.name == "manifest.json") found = bytes.decodeToString()
+                }
+                checkNotNull(found)
+            }
+        val entries = JSONObject(manifest).getJSONArray("entries")
+        val contentTypes =
+            (0 until entries.length()).associate {
+                val entry = entries.getJSONObject(it)
+                entry.getString("name") to entry.getString("contentType")
+            }
+        assertEquals(
+            "application/json; charset=utf-8",
+            contentTypes.getValue(ShippyBackupSection.PORTABLE_SETTINGS.entryName),
+        )
+        assertEquals(
+            "application/x-ndjson; charset=utf-8",
+            contentTypes.getValue(ShippyBackupSection.RECORDINGS.entryName),
+        )
+        assertTrue(
+            ShippyBackupV1.read(ByteArrayInputStream(output.toByteArray()))
+                .manifest
+                .portableAppSettingsIncluded
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            ShippyBackupV1.write(
+                output = ByteArrayOutputStream(),
+                databaseSchemaVersion = 1,
+                createdAtEpochMs = 123,
+                includesHistory = false,
+                sections = completeSections(includeHistory = false),
+                portableAppSettingsIncluded = true,
+                sanitizedLastFmConfigIncluded = true,
+            )
         }
     }
 
