@@ -57,7 +57,8 @@ enum class LastFmScrobbleStatusKind {
 data class LastFmScrobbleStatus(
     val queueItemId: QueueItemId?,
     val kind: LastFmScrobbleStatusKind,
-    val message: String? = null,
+    /** Internal delivery detail for diagnostics. Never render this raw in listener-facing UI. */
+    val diagnosticMessage: String? = null,
 )
 
 @Singleton
@@ -313,16 +314,20 @@ constructor(
     private fun publish(
         queueItemId: QueueItemId,
         kind: LastFmScrobbleStatusKind,
-        message: String? = null,
+        diagnosticMessage: String? = null,
     ) {
         if (item?.id == queueItemId) {
-            mutableStatus.value = LastFmScrobbleStatus(queueItemId, kind, message)
+            mutableStatus.value = LastFmScrobbleStatus(queueItemId, kind, diagnosticMessage)
         }
     }
 
-    private fun publishOutbox(id: String, kind: LastFmScrobbleStatusKind, message: String? = null) {
+    private fun publishOutbox(
+        id: String,
+        kind: LastFmScrobbleStatusKind,
+        diagnosticMessage: String? = null,
+    ) {
         val queueItemId = id.removePrefix(QUEUE_ITEM_PREFIX).takeIf { it != id } ?: return
-        publish(QueueItemId(queueItemId), kind, message)
+        publish(QueueItemId(queueItemId), kind, diagnosticMessage)
     }
 
     private companion object {

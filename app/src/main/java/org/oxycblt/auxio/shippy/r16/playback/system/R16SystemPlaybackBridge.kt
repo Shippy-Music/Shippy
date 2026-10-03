@@ -67,7 +67,7 @@ data class R16SystemPlaybackState(
         get() = playback.committedQueueEntryId
 
     val displayQueueEntryId: QueueEntryId?
-        get() = committedQueueEntryId ?: selectedQueueEntryId
+        get() = selectedQueueEntryId ?: committedQueueEntryId
 
     val displayItem: R16SystemQueueItem?
         get() = traversal.firstOrNull { it.queueEntryId == displayQueueEntryId }

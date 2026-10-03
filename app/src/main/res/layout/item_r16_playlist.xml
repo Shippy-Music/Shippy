@@ -14,9 +14,18 @@
     android:paddingEnd="@dimen/spacing_mid_medium"
     android:paddingBottom="@dimen/spacing_mid_medium">
 
+    <org.oxycblt.auxio.image.CoverView
+        android:id="@+id/r16_playlist_artwork"
+        style="@style/Widget.Auxio.Image.MidFull"
+        android:layout_width="@dimen/size_touchable_medium"
+        android:layout_height="@dimen/size_touchable_medium"
+        android:contentDescription="@null"
+        tools:ignore="ContentDescription" />
+
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/spacing_medium"
         android:layout_weight="1"
         android:orientation="vertical">
 

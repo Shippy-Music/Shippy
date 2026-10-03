@@ -374,6 +374,8 @@
     <string name="r16_playlist_sort_custom">Custom</string>
     <string name="r16_playlist_sort_recently_added">Recently added</string>
     <string name="r16_playlist_sort_oldest_added">Oldest added</string>
+    <string name="r16_playlist_sort_newest_first">Newest first</string>
+    <string name="r16_playlist_sort_oldest_first">Oldest first</string>
     <string name="r16_playlist_sort_title">Title</string>
     <string name="r16_playlist_sort_artist">Artist</string>
     <string name="r16_playlist_sort_album">Album</string>

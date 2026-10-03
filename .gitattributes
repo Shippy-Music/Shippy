@@ -1,0 +1,2 @@
+# Preserve historical dossier bytes so its original SHA256SUMS remains meaningful.
+/docs/archive/workspace_20260821/** -text

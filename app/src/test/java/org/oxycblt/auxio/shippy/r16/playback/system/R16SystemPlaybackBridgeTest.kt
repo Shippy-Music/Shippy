@@ -47,6 +47,24 @@ import org.junit.Test
 
 class R16SystemPlaybackBridgeTest {
     @Test
+    fun `system display follows newly selected occurrence before the prior commit clears`() {
+        val first = entry(QUEUE_ONE)
+        val second = entry(QUEUE_TWO)
+        val base = snapshot(first, second)
+        val transitioning =
+            base.copy(
+                queue = base.queue.copy(currentQueueEntryId = second.id),
+                committedQueueEntryId = first.id,
+                phase = PlaybackPhase.Preparing(second.id),
+            )
+
+        val state = R16SystemPlaybackProjector.project(transitioning, emptyMap())
+
+        assertEquals(second.id, state.displayQueueEntryId)
+        assertEquals(second.id, state.displayItem?.queueEntryId)
+    }
+
+    @Test
     fun `every surface projects the exact selected duplicate occurrence`() {
         val first = entry(QUEUE_ONE)
         val second = entry(QUEUE_TWO)

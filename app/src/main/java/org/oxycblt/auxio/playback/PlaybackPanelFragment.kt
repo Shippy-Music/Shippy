@@ -575,15 +575,13 @@ class PlaybackPanelFragment :
         binding.playbackScrobbleStatus.isVisible = visible
         if (!visible) return
         binding.playbackScrobbleStatus.text =
-            status.message
-                ?: getString(
-                    when (status.kind) {
-                        LastFmScrobbleStatusKind.Retrying -> R.string.lbl_lastfm_retrying
-                        LastFmScrobbleStatusKind.ReauthRequired ->
-                            R.string.lbl_lastfm_reauth_required
-                        else -> return
-                    }
-                )
+            getString(
+                when (status.kind) {
+                    LastFmScrobbleStatusKind.Retrying -> R.string.lbl_lastfm_retrying
+                    LastFmScrobbleStatusKind.ReauthRequired -> R.string.lbl_lastfm_reauth_required
+                    else -> return
+                }
+            )
         val colorAttr =
             when (status.kind) {
                 LastFmScrobbleStatusKind.Scrobbled -> androidx.appcompat.R.attr.colorPrimary

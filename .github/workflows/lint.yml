@@ -28,6 +28,6 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     - name: Check formatting with spotless
-      run: ./gradlew spotlessCheck
+      run: ./gradlew -Pkotlin.daemon.jvmargs=-Xmx3072m spotlessCheck
     - name: Run JVM tests
-      run: ./gradlew app:testDebugUnitTest musikr:testDebugUnitTest
+      run: ./gradlew -Pkotlin.daemon.jvmargs=-Xmx3072m shippy-core:test shippy-sources:test shippy-data:testDebugUnitTest app:testDebugUnitTest musikr:testDebugUnitTest

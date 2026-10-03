@@ -285,46 +285,59 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/playback_utility_actions">
 
-        <LinearLayout
+        <androidx.constraintlayout.widget.ConstraintLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:layout_height="match_parent"
             android:padding="@dimen/spacing_mid_large">
 
             <TextView
                 android:id="@+id/playback_lyrics_title"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:text="@string/lbl_lyrics"
                 android:textAppearance="?attr/textAppearanceTitleMediumEmphasized"
-                android:textColor="?attr/colorOnSurface" />
+                android:textColor="?attr/colorOnSurface"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
 
             <TextView
                 android:id="@+id/playback_lyrics_current"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/spacing_medium"
                 android:lineSpacingExtra="@dimen/spacing_small"
                 android:textAppearance="?attr/textAppearanceHeadlineMediumEmphasized"
-                android:textColor="?attr/colorOnSurface" />
+                android:textColor="?attr/colorOnSurface"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/playback_lyrics_title" />
 
             <TextView
                 android:id="@+id/playback_lyrics_body"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
                 android:layout_marginTop="@dimen/spacing_small"
+                android:layout_marginBottom="@dimen/spacing_medium"
                 android:alpha="0.52"
                 android:ellipsize="end"
+                android:gravity="top"
                 android:lineSpacingExtra="@dimen/spacing_small"
                 android:maxLines="4"
                 android:textAppearance="?attr/textAppearanceTitleMedium"
-                android:textColor="?attr/colorOnSurface" />
+                android:textColor="?attr/colorOnSurface"
+                app:layout_constraintBottom_toTopOf="@id/playback_lyrics_actions"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/playback_lyrics_current" />
 
             <LinearLayout
+                android:id="@+id/playback_lyrics_actions"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/spacing_medium"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent">
 
                 <org.oxycblt.auxio.ui.RippleFixMaterialButton
                     android:id="@+id/playback_lyrics_open"
@@ -344,7 +357,7 @@
 
             </LinearLayout>
 
-        </LinearLayout>
+        </androidx.constraintlayout.widget.ConstraintLayout>
 
     </com.google.android.material.card.MaterialCardView>
 

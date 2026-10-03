@@ -24,6 +24,7 @@ import android.support.v4.media.session.MediaControllerCompat
 import android.view.View
 import androidx.core.os.bundleOf
 import androidx.core.view.isGone
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -71,6 +72,7 @@ internal class R16SystemCollectionDetailFragment :
                 bound.r16SystemCollectionPlay.setOnClickListener { playCollection() }
                 bound.r16SystemCollectionShuffle.setOnClickListener { shuffleCollection() }
                 bound.r16SystemCollectionTitle.setText(collection.titleRes)
+                bound.r16SystemCollectionInput.doAfterTextChanged(model::updateSearchQuery)
             }
         setActionsEnabled(false)
         adapter.addLoadStateListener(loadStateListener)

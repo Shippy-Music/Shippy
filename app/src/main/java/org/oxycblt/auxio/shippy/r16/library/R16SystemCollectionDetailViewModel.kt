@@ -24,22 +24,36 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import app.shippy.core.library.R16SystemCollection
 import app.shippy.data.db.view.LibrarySongRowView
+import app.shippy.data.library.R16LibrarySongQuery
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 
 /** Paging-only display state for a rule-derived Library collection. */
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 internal class R16SystemCollectionDetailViewModel
 @Inject
 constructor(activation: R16LibraryReadModelsActivation) : ViewModel() {
     private val readModels = activation.readModelsOrNull()
+    private val search = MutableStateFlow<String?>(null)
 
     internal fun songs(collection: R16SystemCollection): Flow<PagingData<LibrarySongRowView>> =
         readModels?.let { repository ->
-            Pager(R16_LIBRARY_SONGS_PAGING_CONFIG) { repository.systemCollection(collection) }
-                .flow
+            search
+                .flatMapLatest { query ->
+                    Pager(R16_LIBRARY_SONGS_PAGING_CONFIG) {
+                            repository.systemCollection(collection, R16LibrarySongQuery(query))
+                        }
+                        .flow
+                }
                 .cachedIn(viewModelScope)
         } ?: flowOf(PagingData.empty())
+
+    internal fun updateSearchQuery(rawQuery: CharSequence?) {
+        search.value = rawQuery?.toString()?.trim()?.takeIf(String::isNotEmpty)
+    }
 }

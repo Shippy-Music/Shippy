@@ -26,6 +26,7 @@ import app.shippy.core.playback.PlaybackCommand
 import app.shippy.core.queue.PlaybackOrigin
 import app.shippy.core.queue.PlaybackOriginKind
 import app.shippy.core.queue.QueueEntry
+import app.shippy.core.queue.QueueReducer
 import app.shippy.data.browser.R16MediaBrowserId
 import app.shippy.data.browser.R16MediaBrowserIdCodec
 import app.shippy.data.browser.R16MediaBrowserItem
@@ -623,8 +624,13 @@ sealed interface R16BrowserQueueResolution {
             }
         }
 
-        fun playCommand(shuffleSeed: Long? = null): PlaybackCommand.PlayContext =
-            PlaybackCommand.PlayContext(entries, selectedEntryId, shuffleSeed)
+        fun playCommand(shuffleSeed: Long? = null): PlaybackCommand.PlayContext {
+            val startEntryId =
+                shuffleSeed?.let { seed ->
+                    QueueReducer().replace(entries, selectedEntryId, seed).traversalOrder.first()
+                } ?: selectedEntryId
+            return PlaybackCommand.PlayContext(entries, startEntryId, shuffleSeed)
+        }
 
         val selectedIndex: Int
             get() = entries.indexOfFirst { it.id == selectedEntryId }

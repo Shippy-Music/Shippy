@@ -66,7 +66,9 @@ class R16PlaylistSortSheet : ViewBindingBottomSheetDialogFragment<DialogSortBind
         selectedDirection = initialSort.direction
         binding.sortModeRecycler.adapter = modeAdapter
         modeAdapter.selectedMode = selectedMode
-        modeAdapter.submitList(PlaylistSortMode.entries.toList())
+        modeAdapter.submitList(
+            PlaylistSortMode.entries.filterNot { it == PlaylistSortMode.OLDEST_ADDED }
+        )
 
         binding.sortDirectionAsc.setOnClickListener {
             selectedDirection = PlaylistSortDirection.ASCENDING
@@ -107,6 +109,13 @@ class R16PlaylistSortSheet : ViewBindingBottomSheetDialogFragment<DialogSortBind
 
     private fun updateDirectionButtons() {
         val binding = requireBinding()
+        val dateAdded = selectedMode == PlaylistSortMode.RECENTLY_ADDED
+        binding.sortDirectionAsc.setText(
+            if (dateAdded) R.string.r16_playlist_sort_newest_first else R.string.lbl_sort_asc
+        )
+        binding.sortDirectionDsc.setText(
+            if (dateAdded) R.string.r16_playlist_sort_oldest_first else R.string.lbl_sort_dsc
+        )
         binding.sortDirectionAsc.isChecked = selectedDirection == PlaylistSortDirection.ASCENDING
         binding.sortDirectionDsc.isChecked = selectedDirection == PlaylistSortDirection.DESCENDING
     }
@@ -176,7 +185,7 @@ private val PlaylistSortMode.labelRes: Int
     get() =
         when (this) {
             PlaylistSortMode.CUSTOM -> R.string.r16_playlist_sort_custom
-            PlaylistSortMode.RECENTLY_ADDED -> R.string.r16_playlist_sort_recently_added
+            PlaylistSortMode.RECENTLY_ADDED -> R.string.lbl_date_added
             PlaylistSortMode.OLDEST_ADDED -> R.string.r16_playlist_sort_oldest_added
             PlaylistSortMode.TITLE -> R.string.r16_playlist_sort_title
             PlaylistSortMode.ARTIST -> R.string.r16_playlist_sort_artist

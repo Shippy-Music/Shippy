@@ -84,10 +84,20 @@ public data class PlaylistSort(
 
     /** Custom always means the canonical sparse order; its direction has no independent meaning. */
     public fun normalized(): PlaylistSort =
-        if (isCustom && direction != PlaylistSortDirection.ASCENDING) {
-            copy(direction = PlaylistSortDirection.ASCENDING)
-        } else {
-            this
+        when {
+            isCustom && direction != PlaylistSortDirection.ASCENDING ->
+                copy(direction = PlaylistSortDirection.ASCENDING)
+            mode == PlaylistSortMode.OLDEST_ADDED ->
+                PlaylistSort(
+                    mode = PlaylistSortMode.RECENTLY_ADDED,
+                    direction =
+                        if (direction == PlaylistSortDirection.ASCENDING) {
+                            PlaylistSortDirection.DESCENDING
+                        } else {
+                            PlaylistSortDirection.ASCENDING
+                        },
+                )
+            else -> this
         }
 
     public companion object {

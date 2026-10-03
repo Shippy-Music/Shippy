@@ -36,5 +36,9 @@ class PlaylistSortTest {
         assertNotEquals(PlaylistSortMode.RECENTLY_ADDED, PlaylistSortMode.OLDEST_ADDED)
         assertEquals(PlaylistSortMode.RECENTLY_ADDED, PlaylistSortMode.fromWire("RECENTLY_ADDED"))
         assertEquals(PlaylistSortMode.OLDEST_ADDED, PlaylistSortMode.fromWire("OLDEST_ADDED"))
+        assertEquals(
+            PlaylistSort(PlaylistSortMode.RECENTLY_ADDED, PlaylistSortDirection.DESCENDING),
+            PlaylistSort(PlaylistSortMode.OLDEST_ADDED).normalized(),
+        )
     }
 }

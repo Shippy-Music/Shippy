@@ -5,7 +5,8 @@
 On every fresh turn, automatic goal continuation, or context compaction:
 
 1. Read `docs/PRODUCT_SPEC.md` completely.
-2. Read `docs/STATUS.md` completely.
+2. Read `docs/CLOUD_HANDOFF.md`, then `docs/STATUS.md` completely. The handoff
+   records the current GitHub baseline and identifies historical status text.
 3. Read the specific companion contract for the current task:
    - UI/product work: `docs/UX.md`
    - Crew/network work: `docs/CREW.md`
@@ -40,7 +41,7 @@ document and relevant companion/status files in the same change.
 - Do not represent placeholders, mocks, or unverified flows as complete.
 - Preserve unrelated upstream/user changes.
 - Use `apply_patch` for source/document edits.
-- Prefix shell commands with `rtk` per the machine instructions.
+- Use `rtk` when installed; plain commands are supported in fresh cloud environments.
 
 ## Machine Constraint
 
@@ -48,6 +49,11 @@ Do not run repeated or resource-intensive Gradle/Android builds on this PC.
 Prefer source inspection, formatting, narrow static checks, and focused JVM
 tests when inexpensive. Final APK build, installation, and physical-phone
 acceptance belong to the owner handoff unless the owner explicitly changes this.
+
+This constraint applies to the owner's Windows PC. In Codex Cloud/Linux CI,
+follow `docs/CLOUD_SETUP.md` and run checks appropriate to the change. Do not
+depend on Windows drive paths, local Gradle caches, generated native libraries,
+or ignored graph outputs. GitHub and its pinned submodules are the source baseline.
 
 ## Parallel Work
 

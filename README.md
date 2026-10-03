@@ -87,6 +87,9 @@ unredacted file paths.
 
 ## Build from source
 
+For Codex Cloud or a fresh Linux checkout, start with
+[cloud setup](docs/CLOUD_SETUP.md) and [the current handoff](docs/CLOUD_HANDOFF.md).
+
 ```bash
 git clone --recurse-submodules https://github.com/Shippy-Music/Shippy.git
 cd Shippy

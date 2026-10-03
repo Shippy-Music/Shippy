@@ -64,6 +64,10 @@ internal class R16LibraryPlaylistPagingAdapter(
         private val onTogglePinned: (R16MediaBrowserPlaylistSummary) -> Unit,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(summary: R16MediaBrowserPlaylistSummary, pinToggleInFlight: Boolean) {
+            binding.r16PlaylistArtwork.bindArtwork(
+                summary.artworkOverride ?: R.drawable.ic_playlist_48,
+                summary.name,
+            )
             binding.r16PlaylistName.text = summary.name
             binding.r16PlaylistMeta.text =
                 binding.root.context.getString(

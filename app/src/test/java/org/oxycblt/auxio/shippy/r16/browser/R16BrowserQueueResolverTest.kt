@@ -26,6 +26,7 @@ import app.shippy.core.library.PlaylistSortDirection
 import app.shippy.core.library.PlaylistSortMode
 import app.shippy.core.library.R16SystemCollection
 import app.shippy.core.queue.PlaybackOriginKind
+import app.shippy.core.queue.QueueReducer
 import app.shippy.data.browser.R16MediaBrowserArtistSummary
 import app.shippy.data.browser.R16MediaBrowserId
 import app.shippy.data.browser.R16MediaBrowserIdCodec
@@ -115,14 +116,16 @@ class R16BrowserQueueResolverTest {
 
             val shuffle = exactResult.playCommand(shuffleSeed = 42L)
             assertEquals(rows.size, shuffle.entries.size)
-            assertEquals(exactResult.selectedEntryId, shuffle.selectedEntryId)
+            assertEquals(
+                QueueReducer()
+                    .replace(shuffle.entries, exactResult.selectedEntryId, 42L)
+                    .traversalOrder
+                    .first(),
+                shuffle.selectedEntryId,
+            )
             assertEquals(
                 rows.map(R16MediaBrowserPlaylistEntry::playlistEntryId).toSet(),
                 shuffle.entries.mapNotNull { it.playlistEntryId }.toSet(),
-            )
-            assertEquals(
-                rows[selectedIndex].playlistEntryId,
-                shuffle.entries.first { it.id == shuffle.selectedEntryId }.playlistEntryId,
             )
             assertEquals(
                 rows.map(R16MediaBrowserPlaylistEntry::recordingId),

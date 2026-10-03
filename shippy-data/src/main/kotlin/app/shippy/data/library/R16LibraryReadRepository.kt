@@ -65,6 +65,11 @@ interface R16LibraryReadRepository {
     /** Paged display read for an asset/relationship-derived built-in collection. */
     fun systemCollection(collection: R16SystemCollection): PagingSource<Int, LibrarySongRowView>
 
+    fun systemCollection(
+        collection: R16SystemCollection,
+        query: R16LibrarySongQuery,
+    ): PagingSource<Int, LibrarySongRowView>
+
     /** Paged display read for one playlist, preserving canonical occurrence order. */
     fun playlistEntries(
         playlistId: String,
@@ -146,6 +151,14 @@ internal class RoomR16LibraryReadRepository(private val database: ShippyR16Datab
             R16SystemCollection.LOCAL -> database.readModelDao().localSongsPage()
         }
 
+    override fun systemCollection(
+        collection: R16SystemCollection,
+        query: R16LibrarySongQuery,
+    ): PagingSource<Int, LibrarySongRowView> =
+        query.search?.trim()?.takeIf(String::isNotEmpty)?.let { search ->
+            database.readModelDao().filterSystemCollection(collection.id, search)
+        } ?: systemCollection(collection)
+
     override fun playlistEntries(
         playlistId: String,
         query: R16LibraryPlaylistQuery,
@@ -163,13 +176,13 @@ internal class RoomR16LibraryReadRepository(private val database: ShippyR16Datab
                         sortDirection = sort.direction.wireValue,
                     )
             else ->
-                query.ftsMatchOrNull()?.let {
+                query.search.trim().takeIf(String::isNotEmpty)?.let {
                     if (sort.isCustom) {
-                        database.readModelDao().searchPlaylist(playlistId, it)
+                        database.readModelDao().filterPlaylist(playlistId, it)
                     } else {
                         database
                             .readModelDao()
-                            .searchSortedPlaylist(
+                            .filterSortedPlaylist(
                                 playlistId = playlistId,
                                 query = it,
                                 sortMode = sort.mode.wireValue,

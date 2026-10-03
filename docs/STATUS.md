@@ -1,6 +1,13 @@
 # Shippy Live Status
 
-**Updated:** 2026-08-19
+> **2026-10-03 cloud handoff:** The sections below preserve the older R15/R16
+> implementation ledger and August patch evidence. Statements that R16 is only
+> inactive or unreleased are historical. Start with `CLOUD_HANDOFF.md`, the
+> current README, `r16/KNOWN_ISSUES.md`, and the actual authority selector before
+> continuing. The August patch changes are now being synchronized to GitHub;
+> no new Android build or device acceptance was performed for this handoff.
+
+**Updated:** 2026-08-30
 **Stage:** R16 architecture overhaul in progress; R15.3 remains the active runtime
 **Canonical audit:** `Shippy_Beta_Readiness_Audit_2026-08-02.md`  
 **Traceability:** `BETA_READINESS_IMPLEMENTATION.md`
@@ -114,6 +121,10 @@ acceptance remains open. The acceptance plan is in
 - Save destinations use a guarded bottom sheet keyed by `QueueItemId`. Lyrics
   preview height is fixed at 304dp in the tall layout, and artwork tone styling
   uses a bounded LRU cache with a contrast fallback.
+- The fixed-height lyrics preview now pins its action row and gives secondary
+  lines only the remaining space, so a wrapped active lyric no longer pushes
+  preview content unpredictably out of the card. Last.fm retry diagnostics stay
+  internal; Now Playing renders only the localized retry/sign-in status.
 - Home/library strings, light-theme icon tint, and the new playback/library
   surfaces are formatter-checked and lint-clean for errors.
 - Final review made bulk local deletion iterative and performs one rescan after
@@ -123,6 +134,21 @@ acceptance remains open. The acceptance plan is in
 
 ## Verification state
 
+- 2026-08-30 Patch 2 gate: fixed LIFE-61 through LIFE-65 (shuffle start,
+  notification transition metadata, persisted Date Added direction, scoped
+  playlist/system-collection search, and playlist-row alignment). Focused core,
+  app playback/browser, and Room paging tests passed with `spotlessCheck` and
+  `:app:processDebugResources`.
+- `:app:assembleDebug` passed for Patch 2. Artifact:
+  `artifacts/r16_patch2.apk` (70,122,622 bytes; SHA-256
+  `E502BD8DAACAE77914D20CD195D839DEDEDAFB210D6FA6F741F10B2F18183F86`).
+  Physical-device acceptance for these five fixes remains pending.
+- 2026-08-30 focused gate: `spotlessCheck`, `:app:processDebugResources`, and
+  `LastFmScrobbleResultTest` (5 tests, 0 failures) passed for the LIFE-59/LIFE-60
+  fixes. The Now Playing text/layout behavior remains device-not-verified.
+- `:app:assembleDebug` passed for the patch build. Artifact:
+  `artifacts/r16_patch1.apk` (70,121,602 bytes; SHA-256
+  `9FC721BAA6EA992A15FB20247CB9F21A3C5FAEB6C57397449A643C0B5656521D`).
 - Kotlin source and Android/JVM test-source compilation: passed.
 - Focused playback, library, and Last.fm tests: passed.
 - Final non-device gate passed: `spotlessCheck`, `:app:testDebugUnitTest`

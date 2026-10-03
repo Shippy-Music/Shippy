@@ -29,7 +29,6 @@ import app.shippy.data.db.view.ArtistLibrarySummaryRow
 import app.shippy.data.db.view.LibrarySongRowView
 import app.shippy.data.db.view.PlaylistEntryRowView
 import app.shippy.data.db.view.PlaylistSummaryRowView
-import app.shippy.data.library.R16LibraryPlaylistQuery
 import app.shippy.data.library.R16LibrarySongQuery
 
 /**
@@ -464,12 +463,10 @@ internal class RoomR16MediaBrowserRepository(private val database: ShippyR16Data
         context: R16MediaBrowserPlaylistPlaybackContext,
     ): List<R16MediaBrowserPlaylistPlaybackSeed> {
         val normalizedSort = context.sort.normalized()
-        val query = R16LibraryPlaylistQuery(context.search, normalizedSort)
-        val match = query.ftsMatchOrNull()
-        if (!context.search.isNullOrBlank() && match == null) return emptyList()
+        val query = context.search?.trim()?.takeIf(String::isNotEmpty)
         return dao.playlistEntriesForPlaybackSorted(
                 playlistId = playlistId.value,
-                query = match,
+                query = query,
                 sortMode = normalizedSort.mode.wireValue,
                 sortDirection = normalizedSort.direction.wireValue,
             )

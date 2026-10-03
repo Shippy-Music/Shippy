@@ -34,6 +34,23 @@
             tools:text="Liked" />
     </LinearLayout>
 
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/lng_search_playlist"
+        android:paddingStart="@dimen/spacing_medium"
+        android:paddingEnd="@dimen/spacing_medium"
+        app:endIconContentDescription="@string/desc_clear_search"
+        app:endIconMode="clear_text">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/r16_system_collection_input"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:imeOptions="actionSearch|flagNoExtractUi"
+            android:inputType="textFilter" />
+    </com.google.android.material.textfield.TextInputLayout>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

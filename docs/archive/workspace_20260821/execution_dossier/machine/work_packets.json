@@ -1,0 +1,199 @@
+[
+  {
+    "id": "WP00",
+    "title": "Foundation Corrections",
+    "file": "packets/WP00_FOUNDATION_CORRECTIONS.md",
+    "priority": "P0",
+    "owner": "Terra: identity/playback-data integration",
+    "dependencies": [],
+    "parallel": "May split into three Luna tasks only after Terra reserves shared DB/browser seams.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C02_IDENTITY_AND_METADATA.md",
+      "contracts/C03_PLAYBACK.md",
+      "contracts/C06_INTEGRATIONS.md"
+    ]
+  },
+  {
+    "id": "WP01",
+    "title": "Authority and Migration Recovery",
+    "file": "packets/WP01_AUTHORITY_AND_MIGRATION_RECOVERY.md",
+    "priority": "P0 before activation",
+    "owner": "Terra: migration/authority owner",
+    "dependencies": [
+      "WP00"
+    ],
+    "parallel": "Do not parallelize central startup/cutover edits. Luna may own isolated recovery UI/tests or fixture tooling.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C04_DATA_MIGRATION.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP02",
+    "title": "Offline and Streaming Cache",
+    "file": "packets/WP02_OFFLINE_AND_STREAMING_CACHE.md",
+    "priority": "P1",
+    "owner": "Terra: offline owner",
+    "dependencies": [
+      "WP00"
+    ],
+    "parallel": "Parallel-safe with Last.fm/Lyrics if shared runtime/schema edits are serialized.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C03_PLAYBACK.md",
+      "contracts/C05_OFFLINE_CACHE.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP03",
+    "title": "Identify, Edit, and Deduplicate",
+    "file": "packets/WP03_IDENTIFY_EDIT_AND_DEDUPLICATE.md",
+    "priority": "P1",
+    "owner": "Terra: identity product owner",
+    "dependencies": [
+      "WP00"
+    ],
+    "parallel": "Split repository/use-case, UI, and background cleanup only after shared contracts/schema are fixed.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C02_IDENTITY_AND_METADATA.md",
+      "contracts/C04_DATA_MIGRATION.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP04",
+    "title": "Library, Playlist, and Queue Completion",
+    "file": "packets/WP04_LIBRARY_PLAYLIST_AND_QUEUE_COMPLETION.md",
+    "priority": "P1",
+    "owner": "Terra: Library product owner",
+    "dependencies": [
+      "WP00"
+    ],
+    "parallel": "May split Release/Genre reads, save/actions, and queue interactions after DB/browser contracts are fixed.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C03_PLAYBACK.md",
+      "contracts/C04_DATA_MIGRATION.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP05",
+    "title": "Last.fm and History",
+    "file": "packets/WP05_LAST_FM_AND_HISTORY.md",
+    "priority": "P1",
+    "owner": "Terra: Last.fm/history owner",
+    "dependencies": [
+      "WP00"
+    ],
+    "parallel": "Parallel-safe with offline/lyrics; serialize Home/settings/listening-session shared edits.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C02_IDENTITY_AND_METADATA.md",
+      "contracts/C06_INTEGRATIONS.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP06",
+    "title": "Lyrics",
+    "file": "packets/WP06_LYRICS.md",
+    "priority": "P1",
+    "owner": "Terra: lyrics owner",
+    "dependencies": [
+      "WP00"
+    ],
+    "parallel": "Strongly parallel-safe until final Now Playing/shared resource integration.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C03_PLAYBACK.md",
+      "contracts/C06_INTEGRATIONS.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP07",
+    "title": "Crew R16 Integration",
+    "file": "packets/WP07_CREW_R16_INTEGRATION.md",
+    "priority": "P1/P2 depending beta exposure",
+    "owner": "Terra: dedicated Crew owner",
+    "dependencies": [
+      "WP00"
+    ],
+    "parallel": "One Terra owns this packet. Luna tasks may split protocol identity, local bridge, and tests only after interfaces are frozen.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C03_PLAYBACK.md",
+      "contracts/C06_INTEGRATIONS.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP08",
+    "title": "Shell, M3 Expressive, QoL, and Accessibility",
+    "file": "packets/WP08_SHELL_M3_EXPRESSIVE_QOL_AND_ACCESSIBILITY.md",
+    "priority": "P1 before beta",
+    "owner": "Terra: UI integration owner",
+    "dependencies": [
+      "WP02",
+      "WP03",
+      "WP04",
+      "WP05",
+      "WP06"
+    ],
+    "parallel": "Parallel UI workers only on independent screens/resources; shell/navigation/common styles remain Terra-owned.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C03_PLAYBACK.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP09",
+    "title": "Performance, Diagnostics, and Complexity Cleanup",
+    "file": "packets/WP09_PERFORMANCE_DIAGNOSTICS_AND_COMPLEXITY_CLEANUP.md",
+    "priority": "P1 before beta",
+    "owner": "Terra: performance/reliability owner",
+    "dependencies": [
+      "WP00"
+    ],
+    "parallel": "Benchmark work can run in parallel; production fixes return to the packet that owns the code.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C03_PLAYBACK.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  },
+  {
+    "id": "WP10",
+    "title": "Final Cutover and Beta Release",
+    "file": "packets/WP10_FINAL_CUTOVER_AND_BETA_RELEASE.md",
+    "priority": "Release gate",
+    "owner": "Terra + Sol final integration",
+    "dependencies": [
+      "WP01",
+      "WP02",
+      "WP03",
+      "WP04",
+      "WP05",
+      "WP06",
+      "WP07",
+      "WP08",
+      "WP09"
+    ],
+    "parallel": "No broad parallel editing. Parallelize only independent evidence collection after the code is frozen.",
+    "contracts": [
+      "contracts/C01_LOCKED_INVARIANTS.md",
+      "contracts/C02_IDENTITY_AND_METADATA.md",
+      "contracts/C03_PLAYBACK.md",
+      "contracts/C04_DATA_MIGRATION.md",
+      "contracts/C05_OFFLINE_CACHE.md",
+      "contracts/C06_INTEGRATIONS.md",
+      "contracts/C07_PERFORMANCE_UX_RELEASE.md"
+    ]
+  }
+]

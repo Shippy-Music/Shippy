@@ -457,9 +457,10 @@ internal interface ReadModelDao {
         JOIN library_song_view song ON song.recording_id = entry.recording_id
         WHERE entry.playlist_id = :playlistId
           AND (
-              :query IS NULL OR entry.recording_id IN (
-                  SELECT recording_id FROM recording_fts WHERE recording_fts MATCH :query
-              )
+              :query IS NULL
+              OR LOWER(song.title) LIKE '%' || LOWER(:query) || '%'
+              OR LOWER(song.artist_display) LIKE '%' || LOWER(:query) || '%'
+              OR LOWER(COALESCE(song.release_title, '')) LIKE '%' || LOWER(:query) || '%'
           )
         ORDER BY
             CASE WHEN :sortMode = 'CUSTOM' THEN entry.order_key END ASC,
@@ -756,6 +757,27 @@ internal interface ReadModelDao {
     @Query(
         """
         SELECT * FROM library_song_view
+        WHERE (
+            (UPPER(:collectionId) = 'LIKED' AND liked)
+            OR (UPPER(:collectionId) = 'DOWNLOADS' AND download_asset_exists)
+            OR (UPPER(:collectionId) = 'LOCAL' AND local_asset_exists)
+        )
+        AND (
+            LOWER(title) LIKE '%' || LOWER(:query) || '%'
+            OR LOWER(artist_display) LIKE '%' || LOWER(:query) || '%'
+            OR LOWER(COALESCE(release_title, '')) LIKE '%' || LOWER(:query) || '%'
+        )
+        ORDER BY title_sort_key, recording_id
+        """
+    )
+    fun filterSystemCollection(
+        collectionId: String,
+        query: String,
+    ): PagingSource<Int, LibrarySongRowView>
+
+    @Query(
+        """
+        SELECT * FROM library_song_view
         WHERE download_asset_exists
         ORDER BY title_sort_key, recording_id
         """
@@ -1035,6 +1057,20 @@ internal interface ReadModelDao {
     @Query(
         """
         SELECT entry.* FROM playlist_entry_view entry
+        WHERE entry.playlist_id = :playlistId
+          AND (
+              LOWER(entry.title) LIKE '%' || LOWER(:query) || '%'
+              OR LOWER(entry.artist_display) LIKE '%' || LOWER(:query) || '%'
+              OR LOWER(COALESCE(entry.release_title, '')) LIKE '%' || LOWER(:query) || '%'
+          )
+        ORDER BY entry.order_key, entry.playlist_entry_id
+        """
+    )
+    fun filterPlaylist(playlistId: String, query: String): PagingSource<Int, PlaylistEntryRowView>
+
+    @Query(
+        """
+        SELECT entry.* FROM playlist_entry_view entry
         JOIN playlist_entry raw ON raw.playlist_entry_id = entry.playlist_entry_id
         JOIN library_song_view song ON song.recording_id = entry.recording_id
         JOIN recording_fts search ON search.recording_id = entry.recording_id
@@ -1068,6 +1104,48 @@ internal interface ReadModelDao {
         """
     )
     fun searchSortedPlaylist(
+        playlistId: String,
+        query: String,
+        sortMode: String,
+        sortDirection: String,
+    ): PagingSource<Int, PlaylistEntryRowView>
+
+    @Query(
+        """
+        SELECT entry.* FROM playlist_entry_view entry
+        JOIN playlist_entry raw ON raw.playlist_entry_id = entry.playlist_entry_id
+        JOIN library_song_view song ON song.recording_id = entry.recording_id
+        WHERE entry.playlist_id = :playlistId
+          AND (
+              LOWER(entry.title) LIKE '%' || LOWER(:query) || '%'
+              OR LOWER(entry.artist_display) LIKE '%' || LOWER(:query) || '%'
+              OR LOWER(COALESCE(entry.release_title, '')) LIKE '%' || LOWER(:query) || '%'
+          )
+        ORDER BY
+            CASE WHEN :sortMode = 'RECENTLY_ADDED' AND :sortDirection = 'ASC'
+                      THEN raw.added_at_epoch_ms END DESC,
+            CASE WHEN :sortMode = 'RECENTLY_ADDED' AND :sortDirection = 'DESC'
+                      THEN raw.added_at_epoch_ms END ASC,
+            CASE WHEN :sortMode = 'TITLE' AND :sortDirection = 'ASC'
+                      THEN song.title_sort_key END ASC,
+            CASE WHEN :sortMode = 'TITLE' AND :sortDirection = 'DESC'
+                      THEN song.title_sort_key END DESC,
+            CASE WHEN :sortMode = 'ARTIST' AND :sortDirection = 'ASC'
+                      THEN song.artist_sort_key END ASC,
+            CASE WHEN :sortMode = 'ARTIST' AND :sortDirection = 'DESC'
+                      THEN song.artist_sort_key END DESC,
+            CASE WHEN :sortMode = 'ALBUM' AND :sortDirection = 'ASC'
+                      THEN LOWER(COALESCE(song.release_title, '')) END ASC,
+            CASE WHEN :sortMode = 'ALBUM' AND :sortDirection = 'DESC'
+                      THEN LOWER(COALESCE(song.release_title, '')) END DESC,
+            CASE WHEN :sortMode = 'DURATION' AND :sortDirection = 'ASC'
+                      THEN COALESCE(song.duration_ms, -1) END ASC,
+            CASE WHEN :sortMode = 'DURATION' AND :sortDirection = 'DESC'
+                      THEN COALESCE(song.duration_ms, -1) END DESC,
+            entry.playlist_entry_id ASC
+        """
+    )
+    fun filterSortedPlaylist(
         playlistId: String,
         query: String,
         sortMode: String,

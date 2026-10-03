@@ -1,5 +1,9 @@
 # Shippy R16 Status
 
+> **Historical ledger:** This document's authority/cutover snapshot predates
+> R16 Beta 1. Read `../CLOUD_HANDOFF.md`, the current README, and
+> `KNOWN_ISSUES.md` before continuing; verify startup behavior in the real code.
+
 **Updated:** 2026-08-21
 **Active phase:** Isolated ACTIVE composition (durable selector still fail-closed)
 **Authority:** `../Shippy_R16_Master_Architecture_and_Implementation_Spec.md`

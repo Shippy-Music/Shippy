@@ -1,0 +1,368 @@
+{
+  "package": "Shippy R16 Implementation Execution Dossier",
+  "generated_for_snapshot": "Shippy-R16-Working-Snapshot-20260821-162642.zip",
+  "snapshot_sha256": "3b00ffcfb89ac19a6fe7bde42e606a57a64f11175f26747a1301b853ad4f9216",
+  "master_spec_sha256": "8aa90071411e6253bd97761ce4073f728c0e62663acb0946c57fa1590ca6545b",
+  "operating_model_sha256": "404ad82414c05c1ea41a63cf3f020d7a64bf9d286b8379cef20111dd545318aa",
+  "root_file_count": 1586,
+  "module_stats": {
+    "app": {
+      "production_lines": 104840,
+      "production_files": 513,
+      "test_lines": 25827,
+      "test_files": 150
+    },
+    "shippy-core": {
+      "production_lines": 3126,
+      "production_files": 22,
+      "test_lines": 959,
+      "test_files": 9
+    },
+    "shippy-data": {
+      "production_lines": 19632,
+      "production_files": 83,
+      "test_lines": 12113,
+      "test_files": 34
+    },
+    "shippy-sources": {
+      "production_lines": 1140,
+      "production_files": 7,
+      "test_lines": 479,
+      "test_files": 3
+    },
+    "musikr": {
+      "production_lines": 8942,
+      "production_files": 72,
+      "test_lines": 1764,
+      "test_files": 10
+    },
+    "relay": {
+      "production_lines": 0,
+      "production_files": 0,
+      "test_lines": 0,
+      "test_files": 0
+    },
+    "macrobenchmark": {
+      "production_lines": 273,
+      "production_files": 1,
+      "test_lines": 0,
+      "test_files": 0
+    },
+    "baselineprofile": {
+      "production_lines": 203,
+      "production_files": 1,
+      "test_lines": 0,
+      "test_files": 0
+    }
+  },
+  "authority_state": "R15.3 durable; R16 isolated ACTIVE composition; durable activation fail-closed",
+  "database_schema_version": 4,
+  "work_packets": [
+    "WP00",
+    "WP01",
+    "WP02",
+    "WP03",
+    "WP04",
+    "WP05",
+    "WP06",
+    "WP07",
+    "WP08",
+    "WP09",
+    "WP10"
+  ],
+  "luna_tasks": [
+    {
+      "id": "LT00A",
+      "title": "Correct local recording-version evidence",
+      "parent": "WP00",
+      "deps": [],
+      "wave": 0,
+      "file": "luna_tasks/LT00A_CORRECT_LOCAL_RECORDING_VERSION_EVIDENCE.md"
+    },
+    {
+      "id": "LT00B",
+      "title": "Broaden identity candidate retrieval and model identifier trust",
+      "parent": "WP00",
+      "deps": [],
+      "wave": 0,
+      "file": "luna_tasks/LT00B_BROADEN_IDENTITY_CANDIDATE_RETRIEVAL_AND_MODEL_IDENTIFIER_TRUST.md"
+    },
+    {
+      "id": "LT00C",
+      "title": "Separate local history, Last.fm intent, and transient retention",
+      "parent": "WP00",
+      "deps": [],
+      "wave": 0,
+      "file": "luna_tasks/LT00C_SEPARATE_LOCAL_HISTORY_LAST_FM_INTENT_AND_TRANSIENT_RETENTION.md"
+    },
+    {
+      "id": "LT00D",
+      "title": "Preserve full Songs playback context",
+      "parent": "WP00",
+      "deps": [],
+      "wave": 0,
+      "file": "luna_tasks/LT00D_PRESERVE_FULL_SONGS_PLAYBACK_CONTEXT.md"
+    },
+    {
+      "id": "LT01A",
+      "title": "Implement recoverable migration/bootstrap state",
+      "parent": "WP01",
+      "deps": [
+        "LT00C"
+      ],
+      "wave": 1,
+      "file": "luna_tasks/LT01A_IMPLEMENT_RECOVERABLE_MIGRATION_BOOTSTRAP_STATE.md"
+    },
+    {
+      "id": "LT01B",
+      "title": "Prove importer and prepare controlled M14 cutover",
+      "parent": "WP01",
+      "deps": [
+        "LT01A"
+      ],
+      "wave": 2,
+      "file": "luna_tasks/LT01B_PROVE_IMPORTER_AND_PREPARE_CONTROLLED_M14_CUTOVER.md"
+    },
+    {
+      "id": "LT02A",
+      "title": "Complete download actions and durable user-facing state",
+      "parent": "WP02",
+      "deps": [
+        "LT00B"
+      ],
+      "wave": 1,
+      "file": "luna_tasks/LT02A_COMPLETE_DOWNLOAD_ACTIONS_AND_DURABLE_USER_FACING_STATE.md"
+    },
+    {
+      "id": "LT02B",
+      "title": "Add bounded R16 streaming cache and promotion",
+      "parent": "WP02",
+      "deps": [
+        "LT02A"
+      ],
+      "wave": 2,
+      "file": "luna_tasks/LT02B_ADD_BOUNDED_R16_STREAMING_CACHE_AND_PROMOTION.md"
+    },
+    {
+      "id": "LT03A",
+      "title": "Implement Identify Track candidate search and confirmation use case",
+      "parent": "WP03",
+      "deps": [
+        "LT00A",
+        "LT00B"
+      ],
+      "wave": 2,
+      "file": "luna_tasks/LT03A_IMPLEMENT_IDENTIFY_TRACK_CANDIDATE_SEARCH_AND_CONFIRMATION_USE_CASE.md"
+    },
+    {
+      "id": "LT03B",
+      "title": "Implement metadata editor, merge/unmerge, and bulk cleanup",
+      "parent": "WP03",
+      "deps": [
+        "LT03A"
+      ],
+      "wave": 3,
+      "file": "luna_tasks/LT03B_IMPLEMENT_METADATA_EDITOR_MERGE_UNMERGE_AND_BULK_CLEANUP.md"
+    },
+    {
+      "id": "LT04A",
+      "title": "Complete Releases/Albums and Genres read models",
+      "parent": "WP04",
+      "deps": [
+        "LT00B"
+      ],
+      "wave": 2,
+      "file": "luna_tasks/LT04A_COMPLETE_RELEASES_ALBUMS_AND_GENRES_READ_MODELS.md"
+    },
+    {
+      "id": "LT04B",
+      "title": "Implement complete Save Destinations and Like/Unlike",
+      "parent": "WP04",
+      "deps": [
+        "LT00C"
+      ],
+      "wave": 2,
+      "file": "luna_tasks/LT04B_IMPLEMENT_COMPLETE_SAVE_DESTINATIONS_AND_LIKE_UNLIKE.md"
+    },
+    {
+      "id": "LT04C",
+      "title": "Complete playlist management and batch operations",
+      "parent": "WP04",
+      "deps": [
+        "LT04B"
+      ],
+      "wave": 3,
+      "file": "luna_tasks/LT04C_COMPLETE_PLAYLIST_MANAGEMENT_AND_BATCH_OPERATIONS.md"
+    },
+    {
+      "id": "LT04D",
+      "title": "Complete QueueEntryId-based queue manipulation",
+      "parent": "WP04",
+      "deps": [
+        "LT00D"
+      ],
+      "wave": 3,
+      "file": "luna_tasks/LT04D_COMPLETE_QUEUEENTRYID_BASED_QUEUE_MANIPULATION.md"
+    },
+    {
+      "id": "LT05A",
+      "title": "Finish connection-scoped Last.fm delivery and status",
+      "parent": "WP05",
+      "deps": [
+        "LT00C"
+      ],
+      "wave": 2,
+      "file": "luna_tasks/LT05A_FINISH_CONNECTION_SCOPED_LAST_FM_DELIVERY_AND_STATUS.md"
+    },
+    {
+      "id": "LT05B",
+      "title": "Add restrained Last.fm discovery and complete local history",
+      "parent": "WP05",
+      "deps": [
+        "LT05A",
+        "LT03A"
+      ],
+      "wave": 3,
+      "file": "luna_tasks/LT05B_ADD_RESTRAINED_LAST_FM_DISCOVERY_AND_COMPLETE_LOCAL_HISTORY.md"
+    },
+    {
+      "id": "LT06A",
+      "title": "Build canonical R16 lyrics repository and coordinator",
+      "parent": "WP06",
+      "deps": [
+        "LT00C"
+      ],
+      "wave": 2,
+      "file": "luna_tasks/LT06A_BUILD_CANONICAL_R16_LYRICS_REPOSITORY_AND_COORDINATOR.md"
+    },
+    {
+      "id": "LT06B",
+      "title": "Integrate stable lyrics preview and full lyrics UI",
+      "parent": "WP06",
+      "deps": [
+        "LT06A"
+      ],
+      "wave": 3,
+      "file": "luna_tasks/LT06B_INTEGRATE_STABLE_LYRICS_PREVIEW_AND_FULL_LYRICS_UI.md"
+    },
+    {
+      "id": "LT07A",
+      "title": "Migrate Crew protocol identity to portable R16 descriptors",
+      "parent": "WP07",
+      "deps": [
+        "LT00B",
+        "LT03A"
+      ],
+      "wave": 3,
+      "file": "luna_tasks/LT07A_MIGRATE_CREW_PROTOCOL_IDENTITY_TO_PORTABLE_R16_DESCRIPTORS.md"
+    },
+    {
+      "id": "LT07B",
+      "title": "Route Crew through the single R16 playback authority",
+      "parent": "WP07",
+      "deps": [
+        "LT07A",
+        "LT04D"
+      ],
+      "wave": 4,
+      "file": "luna_tasks/LT07B_ROUTE_CREW_THROUGH_THE_SINGLE_R16_PLAYBACK_AUTHORITY.md"
+    },
+    {
+      "id": "LT08A",
+      "title": "Replace the isolated ACTIVE scaffold with the real R16 shell",
+      "parent": "WP08",
+      "deps": [
+        "LT04A",
+        "LT04B",
+        "LT04C",
+        "LT05B",
+        "LT06B"
+      ],
+      "wave": 4,
+      "file": "luna_tasks/LT08A_REPLACE_THE_ISOLATED_ACTIVE_SCAFFOLD_WITH_THE_REAL_R16_SHELL.md"
+    },
+    {
+      "id": "LT08B",
+      "title": "Apply restrained M3 Expressive player, sheets, and QoL polish",
+      "parent": "WP08",
+      "deps": [
+        "LT08A",
+        "LT06B"
+      ],
+      "wave": 5,
+      "file": "luna_tasks/LT08B_APPLY_RESTRAINED_M3_EXPRESSIVE_PLAYER_SHEETS_AND_QOL_POLISH.md"
+    },
+    {
+      "id": "LT08C",
+      "title": "Complete accessibility and adaptive layout beta gates",
+      "parent": "WP08",
+      "deps": [
+        "LT08A"
+      ],
+      "wave": 5,
+      "file": "luna_tasks/LT08C_COMPLETE_ACCESSIBILITY_AND_ADAPTIVE_LAYOUT_BETA_GATES.md"
+    },
+    {
+      "id": "LT09A",
+      "title": "Measure and fix R16 performance/backpressure hotspots",
+      "parent": "WP09",
+      "deps": [
+        "LT02B",
+        "LT04D",
+        "LT08A"
+      ],
+      "wave": 5,
+      "file": "luna_tasks/LT09A_MEASURE_AND_FIX_R16_PERFORMANCE_BACKPRESSURE_HOTSPOTS.md"
+    },
+    {
+      "id": "LT09B",
+      "title": "Consolidate diagnostics and remove unjustified complexity after integration",
+      "parent": "WP09",
+      "deps": [
+        "LT09A"
+      ],
+      "wave": 6,
+      "file": "luna_tasks/LT09B_CONSOLIDATE_DIAGNOSTICS_AND_REMOVE_UNJUSTIFIED_COMPLEXITY_AFTER_INTEGRATION.md"
+    },
+    {
+      "id": "LT10A",
+      "title": "Activate R16 safely and retire legacy authority",
+      "parent": "WP10",
+      "deps": [
+        "LT01B",
+        "LT02B",
+        "LT03B",
+        "LT04D",
+        "LT05B",
+        "LT06B",
+        "LT07B",
+        "LT08C",
+        "LT09B"
+      ],
+      "wave": 7,
+      "file": "luna_tasks/LT10A_ACTIVATE_R16_SAFELY_AND_RETIRE_LEGACY_AUTHORITY.md"
+    },
+    {
+      "id": "LT10B",
+      "title": "Complete Shippy naming, legal attribution, and release engineering",
+      "parent": "WP10",
+      "deps": [
+        "LT10A"
+      ],
+      "wave": 7,
+      "file": "luna_tasks/LT10B_COMPLETE_SHIPPY_NAMING_LEGAL_ATTRIBUTION_AND_RELEASE_ENGINEERING.md"
+    },
+    {
+      "id": "LT10C",
+      "title": "Run final Appendix V evidence and independent audit loop",
+      "parent": "WP10",
+      "deps": [
+        "LT10A",
+        "LT10B"
+      ],
+      "wave": 8,
+      "file": "luna_tasks/LT10C_RUN_FINAL_APPENDIX_V_EVIDENCE_AND_INDEPENDENT_AUDIT_LOOP.md"
+    }
+  ],
+  "luna_task_count": 28
+}
