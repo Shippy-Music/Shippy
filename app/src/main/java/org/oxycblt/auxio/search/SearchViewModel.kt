@@ -23,8 +23,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -143,45 +143,38 @@ constructor(
             viewModelScope.launch {
                 // Coalesce keyboard bursts before scanning large device libraries.
                 delay(90)
-                val providerSearch =
-                    if (localOnly) {
-                        null
-                    } else {
-                        async {
-                            unifiedSearchRepository.search(
-                                normalizedQuery,
-                                _selectedProvider.value?.id,
-                            )
-                        }
-                    }
-                val localItems =
-                    withContext(Dispatchers.Default) {
-                        musicRepository.library?.let { searchImpl(it, normalizedQuery) }.orEmpty()
-                    }
-                if (localOnly) {
+                val searchProviders = !localOnly
+                val providerId = _selectedProvider.value?.id
+                var localItems = emptyList<Item>()
+                var providers: ProviderSearchSnapshot? = null
+                var providersLoading = searchProviders
+                fun publish() {
                     _searchResults.value =
                         combineSearchResults(
-                            providers = null,
+                            providers = providers,
                             localItems = localItems,
-                            providersLoading = false,
+                            providersLoading = providersLoading,
                             filters = searchSettings.filters,
                         )
-                    return@launch
                 }
-                _searchResults.value =
-                    combineSearchResults(
-                        providers = null,
-                        localItems = localItems,
-                        providersLoading = true,
-                        filters = searchSettings.filters,
-                    )
-                _searchResults.value =
-                    combineSearchResults(
-                        providers = requireNotNull(providerSearch).await(),
-                        localItems = localItems,
-                        providersLoading = false,
-                        filters = searchSettings.filters,
-                    )
+                publish()
+                launch {
+                    localItems =
+                        withContext(Dispatchers.Default) {
+                            musicRepository.library
+                                ?.let { searchImpl(it, normalizedQuery) }
+                                .orEmpty()
+                        }
+                    ensureActive()
+                    publish()
+                }
+                if (searchProviders)
+                    launch {
+                        providers = unifiedSearchRepository.search(normalizedQuery, providerId)
+                        ensureActive()
+                        providersLoading = false
+                        publish()
+                    }
             }
     }
 

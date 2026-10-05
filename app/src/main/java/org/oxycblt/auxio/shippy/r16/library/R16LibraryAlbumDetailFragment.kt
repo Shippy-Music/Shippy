@@ -76,14 +76,14 @@ internal class R16LibraryAlbumDetailFragment :
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, backCallback)
         adapter.addLoadStateListener(loadStateListener)
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.songs(releaseId).collectLatest(adapter::submitData)
             }
         }
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
         if (mediaBrowser != null) return
         mediaBrowser =
             MediaBrowserCompat(
@@ -95,12 +95,12 @@ internal class R16LibraryAlbumDetailFragment :
                 .also(MediaBrowserCompat::connect)
     }
 
-    override fun onStop() {
+    override fun onPause() {
         adapter.playbackAvailable = false
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
-        super.onStop()
+        super.onPause()
     }
 
     override fun onDestroyView() {

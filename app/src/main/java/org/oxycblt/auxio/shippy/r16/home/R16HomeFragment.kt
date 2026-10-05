@@ -87,25 +87,24 @@ internal class R16HomeFragment : Fragment(R.layout.fragment_r16_home) {
             }
         renderContinue(null)
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.recentlyPlayed.collect(::renderRecentlyPlayed)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.pinnedPlaylistShortcuts.collect(::renderPinnedPlaylistShortcuts)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 lastFmModel.state.collect(::renderLastFm)
             }
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        model.refreshRecentlyPlayed()
+    override fun onResume() {
+        super.onResume()
         lastFmModel.refresh()
         if (mediaBrowser != null) return
         mediaBrowser =
@@ -118,14 +117,14 @@ internal class R16HomeFragment : Fragment(R.layout.fragment_r16_home) {
                 .also(MediaBrowserCompat::connect)
     }
 
-    override fun onStop() {
+    override fun onPause() {
         resumeInFlight = false
         mediaController?.unregisterCallback(controllerCallback)
         mediaController = null
         recentAdapter.playbackAvailable = false
         mediaBrowser?.disconnect()
         mediaBrowser = null
-        super.onStop()
+        super.onPause()
     }
 
     override fun onDestroyView() {

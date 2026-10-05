@@ -18,8 +18,8 @@ android {
     defaultConfig {
         // Shippy's independent application identity. Source namespaces stay stable to avoid churn.
         applicationId "com.rtx09x.shippy"
-        versionName "0.1.0-beta.1-r16"
-        versionCode 87
+        versionName "0.1.0-beta.2-r17"
+        versionCode 88
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in
@@ -80,6 +80,10 @@ android {
     buildFeatures {
         viewBinding true
         buildConfig true
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
     }
 
     sourceSets {

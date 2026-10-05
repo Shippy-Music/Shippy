@@ -22,6 +22,8 @@ import androidx.room.ColumnInfo
 import app.shippy.data.db.ShippyR16Database
 import app.shippy.data.db.dao.HomePinnedPlaylistRow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /** Canonical metadata plus the durable listening-session identity needed by Home and History. */
@@ -46,6 +48,9 @@ interface R16HomeReadRepository {
     /** Returns at most eight distinct recordings from the newest 64 finished sessions. */
     suspend fun recentlyPlayed(): List<R16HomeHistoryItem>
 
+    /** Observes the same bounded summary while Home is visible, including metadata changes. */
+    fun observeRecentlyPlayed(): Flow<List<R16HomeHistoryItem>>
+
     /**
      * At most eight valid user-playlist shortcuts; system collections are deliberately excluded.
      */
@@ -58,11 +63,18 @@ interface R16HomeReadRepository {
 internal class RoomR16HomeReadRepository(private val database: ShippyR16Database) :
     R16HomeReadRepository {
     override suspend fun recentlyPlayed(): List<R16HomeHistoryItem> =
+        observeRecentlyPlayed().first()
+
+    override fun observeRecentlyPlayed(): Flow<List<R16HomeHistoryItem>> =
         database
             .historyDao()
-            .recentFinishedWithPresentation(RECENT_HISTORY_SCAN_LIMIT)
-            .distinctBy { it.recordingId ?: "session:${it.listeningSessionId}" }
-            .take(RECENTLY_PLAYED_LIMIT)
+            .observeRecentFinishedWithPresentation(RECENT_HISTORY_SCAN_LIMIT)
+            .map { sessions ->
+                sessions
+                    .distinctBy { it.recordingId ?: "session:${it.listeningSessionId}" }
+                    .take(RECENTLY_PLAYED_LIMIT)
+            }
+            .distinctUntilChanged()
 
     override fun pinnedPlaylistShortcuts(): Flow<List<R16HomePinnedPlaylistShortcut>> =
         database

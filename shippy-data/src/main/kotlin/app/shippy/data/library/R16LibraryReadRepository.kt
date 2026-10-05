@@ -145,11 +145,7 @@ internal class RoomR16LibraryReadRepository(private val database: ShippyR16Datab
     override fun systemCollection(
         collection: R16SystemCollection
     ): PagingSource<Int, LibrarySongRowView> =
-        when (collection) {
-            R16SystemCollection.LIKED -> database.readModelDao().likedSongsPage()
-            R16SystemCollection.DOWNLOADS -> database.readModelDao().downloadedSongsPage()
-            R16SystemCollection.LOCAL -> database.readModelDao().localSongsPage()
-        }
+        database.readModelDao().filterSystemCollection(collection.id, null)
 
     override fun systemCollection(
         collection: R16SystemCollection,

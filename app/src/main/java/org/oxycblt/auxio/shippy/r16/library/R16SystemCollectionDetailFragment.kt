@@ -22,6 +22,7 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.view.View
+import androidx.activity.OnBackPressedCallback
 import androidx.core.os.bundleOf
 import androidx.core.view.isGone
 import androidx.core.widget.doAfterTextChanged
@@ -60,6 +61,13 @@ internal class R16SystemCollectionDetailFragment :
     private val loadStateListener: (CombinedLoadStates) -> Unit = ::renderLoadState
     private var mediaBrowser: MediaBrowserCompat? = null
     private var mediaController: MediaControllerCompat? = null
+    private var rowsReady = false
+    private val backCallback =
+        object : OnBackPressedCallback(false) {
+            override fun handleOnBackPressed() {
+                binding?.r16SystemCollectionInput?.text?.clear()
+            }
+        }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -72,19 +80,24 @@ internal class R16SystemCollectionDetailFragment :
                 bound.r16SystemCollectionPlay.setOnClickListener { playCollection() }
                 bound.r16SystemCollectionShuffle.setOnClickListener { shuffleCollection() }
                 bound.r16SystemCollectionTitle.setText(collection.titleRes)
-                bound.r16SystemCollectionInput.doAfterTextChanged(model::updateSearchQuery)
+                bound.r16SystemCollectionInput.doAfterTextChanged {
+                    model.updateSearchQuery(it)
+                    updateBackCallback()
+                }
             }
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, backCallback)
         setActionsEnabled(false)
         adapter.addLoadStateListener(loadStateListener)
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.songs(collection).collectLatest(adapter::submitData)
             }
         }
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
+        updateBackCallback()
         if (mediaBrowser != null) return
         mediaBrowser =
             MediaBrowserCompat(
@@ -96,13 +109,14 @@ internal class R16SystemCollectionDetailFragment :
                 .also(MediaBrowserCompat::connect)
     }
 
-    override fun onStop() {
+    override fun onPause() {
+        backCallback.isEnabled = false
         adapter.playbackAvailable = false
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
         setActionsEnabled(false)
-        super.onStop()
+        super.onPause()
     }
 
     override fun onDestroyView() {
@@ -113,20 +127,25 @@ internal class R16SystemCollectionDetailFragment :
     }
 
     private fun playCollection() {
-        mediaController?.transportControls?.playFromMediaId(collectionMediaId(), null)
+        if (!rowsReady) return
+        mediaController?.transportControls?.playFromMediaId(collectionMediaId(), playbackExtras())
     }
 
     private fun shuffleCollection() {
+        if (!rowsReady) return
         mediaController
             ?.transportControls
             ?.playFromMediaId(
                 collectionMediaId(),
-                bundleOf(R16MediaBrowserContract.EXTRA_SHUFFLE_SEED to System.nanoTime()),
+                playbackExtras().apply {
+                    putLong(R16MediaBrowserContract.EXTRA_SHUFFLE_SEED, System.nanoTime())
+                },
             )
     }
 
     /** Row IDs retain both exact RecordingId and the derived collection context. */
     private fun playRecording(row: LibrarySongRowView) {
+        if (!rowsReady) return
         val mediaId =
             R16MediaBrowserIdCodec.encode(
                 R16MediaBrowserId.SystemCollectionRecording(
@@ -134,18 +153,30 @@ internal class R16SystemCollectionDetailFragment :
                     RecordingId(row.recordingId),
                 )
             )
-        mediaController?.transportControls?.playFromMediaId(mediaId, null)
+        mediaController?.transportControls?.playFromMediaId(mediaId, playbackExtras())
     }
+
+    private fun playbackExtras(): Bundle =
+        bundleOf(R16MediaBrowserContract.EXTRA_SONGS_QUERY to model.playbackQuery())
 
     private fun collectionMediaId(): String =
         R16MediaBrowserIdCodec.encode(R16MediaBrowserId.SystemCollection(collection))
 
     private fun renderLoadState(states: CombinedLoadStates) {
+        rowsReady = states.refresh is LoadState.NotLoading
+        adapter.playbackAvailable = mediaController != null && rowsReady
+        setActionsEnabled(mediaController != null && rowsReady)
         val empty = states.refresh is LoadState.NotLoading && adapter.itemCount == 0
         binding?.apply {
             r16SystemCollectionEntries.isGone = empty
             r16SystemCollectionEmpty.isGone = !empty
         }
+    }
+
+    private fun updateBackCallback() {
+        backCallback.isEnabled =
+            lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) &&
+                !binding?.r16SystemCollectionInput?.text.isNullOrEmpty()
     }
 
     private fun setActionsEnabled(enabled: Boolean) {
@@ -160,8 +191,8 @@ internal class R16SystemCollectionDetailFragment :
             override fun onConnected() {
                 val browser = mediaBrowser ?: return
                 mediaController = MediaControllerCompat(requireContext(), browser.sessionToken)
-                adapter.playbackAvailable = true
-                setActionsEnabled(true)
+                adapter.playbackAvailable = rowsReady
+                setActionsEnabled(rowsReady)
             }
 
             override fun onConnectionSuspended() = onConnectionFailed()

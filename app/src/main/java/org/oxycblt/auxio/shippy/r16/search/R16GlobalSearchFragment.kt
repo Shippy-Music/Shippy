@@ -66,19 +66,19 @@ class R16GlobalSearchFragment : Fragment(R.layout.fragment_r16_global_search) {
                 bound.r16SearchClose.setOnClickListener { parentFragmentManager.popBackStack() }
             }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.state.collect(::render)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.playRequests.collect(::playMediaId)
             }
         }
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
         if (mediaBrowser == null) {
             mediaBrowser =
                 MediaBrowserCompat(
@@ -91,13 +91,13 @@ class R16GlobalSearchFragment : Fragment(R.layout.fragment_r16_global_search) {
         }
     }
 
-    override fun onStop() {
+    override fun onPause() {
         localAdapter.playbackAvailable = false
         providerAdapter.playbackAvailable = false
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
-        super.onStop()
+        super.onPause()
     }
 
     override fun onDestroyView() {

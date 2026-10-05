@@ -56,8 +56,9 @@ class R16NowPlayingFragment : Fragment(R.layout.fragment_r16_now_playing) {
     private var mediaBrowser: MediaBrowserCompat? = null
     private var mediaController: MediaControllerCompat? = null
     private var state = R16NowPlayingUiState.Hidden
+    private var artworkIdentity: Pair<String?, String?>? = null
     private val progressTicker = Runnable {
-        renderCurrentState()
+        renderProgress()
         scheduleProgressTick()
     }
 
@@ -73,7 +74,7 @@ class R16NowPlayingFragment : Fragment(R.layout.fragment_r16_now_playing) {
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 launch { likeModel.uiState.collect(::renderLike) }
                 launch {
                     lyricsModel.lyricsState.collect { lyricsState ->
@@ -90,8 +91,8 @@ class R16NowPlayingFragment : Fragment(R.layout.fragment_r16_now_playing) {
         render(R16NowPlayingUiState.Hidden)
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
         if (mediaBrowser == null) {
             mediaBrowser =
                 MediaBrowserCompat(
@@ -104,17 +105,18 @@ class R16NowPlayingFragment : Fragment(R.layout.fragment_r16_now_playing) {
         }
     }
 
-    override fun onStop() {
+    override fun onPause() {
         clearProgressTick()
         mediaController?.unregisterCallback(controllerCallback)
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
-        super.onStop()
+        super.onPause()
     }
 
     override fun onDestroyView() {
         clearProgressTick()
+        artworkIdentity = null
         binding = null
         super.onDestroyView()
     }
@@ -218,7 +220,13 @@ class R16NowPlayingFragment : Fragment(R.layout.fragment_r16_now_playing) {
                 r16NowPlayingState.setText(R.string.r16_now_playing_empty)
                 return
             }
-            r16NowPlayingCover.bindArtwork(state.artworkLocation, state.title.toString())
+            val nextArtwork = state.queueEntryId to state.artworkLocation
+            if (artworkIdentity != nextArtwork) {
+                artworkIdentity = nextArtwork
+                r16NowPlayingCover.bindArtwork(state.artworkLocation, state.title.toString())
+            } else {
+                r16NowPlayingCover.contentDescription = state.title
+            }
             r16NowPlayingTitle.text = state.title
             r16NowPlayingArtist.text = state.artist
             r16NowPlayingRelease.text = state.release
@@ -325,9 +333,33 @@ class R16NowPlayingFragment : Fragment(R.layout.fragment_r16_now_playing) {
     }
 
     private fun scheduleProgressTick() {
-        if (state.phase == R16NowPlayingPhase.Playing && binding != null) {
+        clearProgressTick()
+        if (state.phase == R16NowPlayingPhase.Playing && binding != null && isResumed) {
             binding?.r16NowPlaying?.postDelayed(progressTicker, PROGRESS_TICK_MS)
         }
+    }
+
+    /** Position ticks must not rebind metadata, restart artwork, or reload lyrics. */
+    private fun renderProgress() {
+        val controller = mediaController ?: return
+        val next =
+            R16NowPlayingUiStateMapper.map(
+                controller.metadata,
+                controller.playbackState,
+                SystemClock.elapsedRealtime(),
+            )
+        if (next.queueEntryId != state.queueEntryId || next.phase != state.phase) {
+            render(next)
+            return
+        }
+        state = next
+        binding?.apply {
+            r16NowPlayingProgress.progress =
+                next.progressMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+            r16NowPlayingTime.text =
+                "${formatDuration(next.progressMs)} / ${formatDuration(next.durationMs)}"
+        }
+        lyricsModel.updateProgress(next.progressMs)
     }
 
     private fun clearProgressTick() {

@@ -256,6 +256,11 @@ interface R16MediaBrowserRepository {
         collection: R16SystemCollection
     ): List<RecordingId> = emptyList()
 
+    suspend fun systemCollectionRecordingIdsForPlayback(
+        collection: R16SystemCollection,
+        query: String?,
+    ): List<RecordingId> = systemCollectionRecordingIdsForPlayback(collection)
+
     suspend fun playlistEntries(
         playlistId: PlaylistId,
         page: R16MediaBrowserPageRequest = R16MediaBrowserPageRequest(),
@@ -405,12 +410,17 @@ internal class RoomR16MediaBrowserRepository(private val database: ShippyR16Data
 
     override suspend fun systemCollectionRecordingIdsForPlayback(
         collection: R16SystemCollection
+    ): List<RecordingId> = systemCollectionRecordingIdsForPlayback(collection, null)
+
+    override suspend fun systemCollectionRecordingIdsForPlayback(
+        collection: R16SystemCollection,
+        query: String?,
     ): List<RecordingId> =
-        when (collection) {
-            R16SystemCollection.LIKED -> dao.likedRecordingIdsForPlayback()
-            R16SystemCollection.DOWNLOADS -> dao.downloadedRecordingIdsForPlayback()
-            R16SystemCollection.LOCAL -> dao.localRecordingIdsForPlayback()
-        }.map(::RecordingId)
+        dao.filteredSystemCollectionRecordingIdsForPlayback(
+                collection.id,
+                query?.trim()?.takeIf(String::isNotEmpty),
+            )
+            .map(::RecordingId)
 
     override suspend fun playlistEntries(
         playlistId: PlaylistId,

@@ -136,23 +136,39 @@ class MainActivity : AppCompatActivity() {
 
                 fun selectTab(tabId: Int, popBackStack: Boolean = true) {
                     if (popBackStack) {
-                        supportFragmentManager.popBackStack(
+                        supportFragmentManager.popBackStackImmediate(
                             null,
                             FragmentManager.POP_BACK_STACK_INCLUSIVE,
                         )
                     }
                     val targetTag = tabs.firstOrNull { it.first == tabId }?.second ?: tabHomeTag
-                    val transaction = supportFragmentManager.beginTransaction()
+                    val restoredDetail =
+                        if (!popBackStack && supportFragmentManager.backStackEntryCount > 0) {
+                            supportFragmentManager.fragments.lastOrNull {
+                                it.id == R.id.r16_active_content && !it.isHidden
+                            }
+                        } else null
+                    val transaction =
+                        supportFragmentManager.beginTransaction().setReorderingAllowed(true)
 
                     var targetFrag = supportFragmentManager.findFragmentByTag(targetTag)
                     if (targetFrag == null) {
                         targetFrag = instantiateTab(tabId)
                         transaction.add(R.id.r16_active_content, targetFrag, targetTag)
                     }
+                    if (restoredDetail == null) {
+                        transaction.show(targetFrag)
+                        transaction.setMaxLifecycle(targetFrag, Lifecycle.State.RESUMED)
+                        transaction.setPrimaryNavigationFragment(targetFrag)
+                    } else {
+                        transaction.hide(targetFrag)
+                        transaction.setMaxLifecycle(targetFrag, Lifecycle.State.STARTED)
+                        transaction.setPrimaryNavigationFragment(restoredDetail)
+                    }
 
                     for ((_, tag) in tabs) {
                         val frag = supportFragmentManager.findFragmentByTag(tag) ?: continue
-                        if (tag == targetTag) {
+                        if (tag == targetTag && restoredDetail == null) {
                             transaction.show(frag)
                             transaction.setMaxLifecycle(frag, Lifecycle.State.RESUMED)
                         } else {
@@ -162,9 +178,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     transaction.commit()
                     activeTabId = tabId
-                    if (bottomNav.selectedItemId != tabId) {
-                        bottomNav.selectedItemId = tabId
-                    }
+                    bottomNav.menu.findItem(tabId)?.isChecked = true
                 }
 
                 bottomNav.setOnItemSelectedListener { item ->
@@ -374,13 +388,16 @@ class MainActivity : AppCompatActivity() {
  */
 fun Fragment.pushR16Destination(destination: Fragment, backStackName: String) {
     val manager = requireActivity().supportFragmentManager
-    val origin = manager.findFragmentById(R.id.r16_active_content) ?: return
+    val origin =
+        manager.fragments.lastOrNull { it.id == R.id.r16_active_content && !it.isHidden } ?: return
     manager
         .beginTransaction()
+        .setReorderingAllowed(true)
         .hide(origin)
         .setMaxLifecycle(origin, Lifecycle.State.STARTED)
         .add(R.id.r16_active_content, destination)
         .setMaxLifecycle(destination, Lifecycle.State.RESUMED)
+        .setPrimaryNavigationFragment(destination)
         .addToBackStack(backStackName)
         .commit()
 }

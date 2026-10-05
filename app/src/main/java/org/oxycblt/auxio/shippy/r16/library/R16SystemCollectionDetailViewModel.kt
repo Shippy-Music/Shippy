@@ -27,10 +27,13 @@ import app.shippy.data.db.view.LibrarySongRowView
 import app.shippy.data.library.R16LibrarySongQuery
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 /** Paging-only display state for a rule-derived Library collection. */
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -40,20 +43,32 @@ internal class R16SystemCollectionDetailViewModel
 constructor(activation: R16LibraryReadModelsActivation) : ViewModel() {
     private val readModels = activation.readModelsOrNull()
     private val search = MutableStateFlow<String?>(null)
+    private var searchJob: Job? = null
+    private val pages = mutableMapOf<R16SystemCollection, Flow<PagingData<LibrarySongRowView>>>()
+
+    internal fun playbackQuery(): String? = search.value
 
     internal fun songs(collection: R16SystemCollection): Flow<PagingData<LibrarySongRowView>> =
-        readModels?.let { repository ->
-            search
-                .flatMapLatest { query ->
-                    Pager(R16_LIBRARY_SONGS_PAGING_CONFIG) {
-                            repository.systemCollection(collection, R16LibrarySongQuery(query))
-                        }
-                        .flow
-                }
-                .cachedIn(viewModelScope)
-        } ?: flowOf(PagingData.empty())
+        pages.getOrPut(collection) {
+            readModels?.let { repository ->
+                search
+                    .flatMapLatest { query ->
+                        Pager(R16_LIBRARY_SONGS_PAGING_CONFIG) {
+                                repository.systemCollection(collection, R16LibrarySongQuery(query))
+                            }
+                            .flow
+                    }
+                    .cachedIn(viewModelScope)
+            } ?: flowOf(PagingData.empty())
+        }
 
     internal fun updateSearchQuery(rawQuery: CharSequence?) {
-        search.value = rawQuery?.toString()?.trim()?.takeIf(String::isNotEmpty)
+        val next = rawQuery?.toString()?.trim()?.takeIf(String::isNotEmpty)
+        searchJob?.cancel()
+        searchJob =
+            viewModelScope.launch {
+                if (next != null) delay(200)
+                search.value = next
+            }
     }
 }

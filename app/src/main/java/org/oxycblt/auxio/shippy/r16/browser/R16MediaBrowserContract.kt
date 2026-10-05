@@ -25,5 +25,6 @@ object R16MediaBrowserContract {
         "org.oxycblt.auxio.shippy.r16.browser.extra.PLAYLIST_SORT_MODE"
     const val EXTRA_PLAYLIST_SORT_DIRECTION =
         "org.oxycblt.auxio.shippy.r16.browser.extra.PLAYLIST_SORT_DIRECTION"
+    /** Applied visible query, scoped by the Library Songs or system-collection media ID. */
     const val EXTRA_SONGS_QUERY = "org.oxycblt.auxio.shippy.r16.browser.extra.SONGS_QUERY"
 }

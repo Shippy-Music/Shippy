@@ -72,12 +72,6 @@
             android:text="@string/lbl_downloads" />
     </LinearLayout>
 
-    <com.google.android.material.button.MaterialButton
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:enabled="false"
-        android:text="@string/r16_library_search_releases_deferred" />
-
     <TextView
         android:id="@+id/r16_library_search_prompt"
         android:layout_width="match_parent"

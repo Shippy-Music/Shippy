@@ -21,6 +21,7 @@ import android.content.Context
 import androidx.paging.PagingSource
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import app.shippy.core.library.R16SystemCollection
 import app.shippy.data.db.entity.ArtistEntity
 import app.shippy.data.db.entity.LibraryRecordingEntity
 import app.shippy.data.db.entity.MediaAssetEntity
@@ -98,6 +99,52 @@ class PagingDaoTest {
     }
 
     @Test
+    fun `system collection substring pages and playback share literal scoped membership`() =
+        runBlocking {
+            insertRecording("liked", "Underwater 100%_Mix")
+            insertRecording("local", "UNDERWATER 100%_Mix")
+            insertRecording("download", "Underwater 100%_Mix")
+            insertRecording("outside", "Underwater 100%_Mix")
+            insertRecording("unavailable", "Underwater 100%_Mix")
+            insertRecording("wildcard", "Underwater 100XXMix")
+            database.libraryDao().upsertRelationship(libraryRelationship("liked"))
+            database.libraryDao().upsertRelationship(libraryRelationship("wildcard"))
+            database.assetDao().upsert(asset("local-a", "local", "LOCAL_FILE"))
+            database.assetDao().upsert(asset("local-b", "local", "LOCAL_FILE"))
+            database.assetDao().upsert(asset("download-a", "download", "SHIPPY_DOWNLOAD"))
+            database
+                .assetDao()
+                .upsert(asset("missing", "unavailable", "LOCAL_FILE").copy(assetState = "MISSING"))
+            val repository = RoomR16LibraryReadRepository(database)
+            val expected =
+                mapOf(
+                    R16SystemCollection.LIKED to "liked",
+                    R16SystemCollection.LOCAL to "local",
+                    R16SystemCollection.DOWNLOADS to "download",
+                )
+            for ((collection, recordingId) in expected) {
+                for (query in listOf("rWaTeR 100%_", "%_", "tIsT")) {
+                    val ids =
+                        repository
+                            .systemCollection(collection, R16LibrarySongQuery(query))
+                            .loadPage()
+                            .map { it.recordingId }
+                    val expectedIds =
+                        if (collection == R16SystemCollection.LIKED && query == "tIsT")
+                            listOf("liked", "wildcard")
+                        else listOf(recordingId)
+                    assertEquals(expectedIds, ids)
+                    assertEquals(
+                        ids,
+                        database
+                            .readModelDao()
+                            .filteredSystemCollectionRecordingIdsForPlayback(collection.id, query),
+                    )
+                }
+            }
+        }
+
+    @Test
     fun `playlist paging and search preserve duplicate occurrences`() = runBlocking {
         insertRecording("recording-1", "Target Track")
         insertRecording("recording-2", "Other")
@@ -151,6 +198,25 @@ class PagingDaoTest {
             repository
                 .playlistEntries("playlist-1", R16LibraryPlaylistQuery("---"))
                 .loadPage()
+                .isEmpty()
+        )
+        assertEquals(
+            listOf("entry-1", "entry-3"),
+            repository
+                .playlistEntries("playlist-1", R16LibraryPlaylistQuery("aRgEt"))
+                .loadPage()
+                .map { it.playlistEntryId },
+        )
+        assertTrue(
+            repository
+                .playlistEntries("playlist-1", R16LibraryPlaylistQuery("%"))
+                .loadPage()
+                .isEmpty()
+        )
+        assertTrue(
+            database
+                .readModelDao()
+                .playlistEntriesForPlaybackSorted("playlist-1", "%", "CUSTOM", "ASC")
                 .isEmpty()
         )
         assertEquals(

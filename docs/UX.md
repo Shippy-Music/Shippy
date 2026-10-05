@@ -158,6 +158,11 @@ their original albums and playlists.
 
 ## 6. Collection Detail
 
+Playlist and permanent-collection search expands in place and matches only that
+collection. It never switches to the global Search tab. Clearing or closing the
+field restores the collection; playback uses the applied filtered list. Typing
+is debounced, and filtering must not block gestures or scrolling.
+
 Album and playlist detail surfaces contain:
 
 - Artwork and identity

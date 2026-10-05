@@ -38,6 +38,8 @@ import app.shippy.data.library.R16PlaylistEntryMoveResult
 import app.shippy.data.library.R16PlaylistLifecycleResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +64,8 @@ constructor(activeRuntimeOwner: R16ActiveDataRuntimeOwner) : ViewModel() {
     private val readModels = runtime?.libraryReadModels
     private val mutations = runtime?.libraryMutations
     private val query = MutableStateFlow(R16LibraryPlaylistQuery())
+    private var searchJob: Job? = null
+    private val pages = mutableMapOf<PlaylistId, Flow<PagingData<PlaylistEntryRowView>>>()
     private val summaryRefresh = MutableStateFlow(0)
     private val pagingConfig = PagingConfig(pageSize = 50, enablePlaceholders = false)
     private val _lifecycleInFlight = MutableStateFlow(false)
@@ -117,19 +121,26 @@ constructor(activeRuntimeOwner: R16ActiveDataRuntimeOwner) : ViewModel() {
         }
 
     internal fun entries(playlistId: PlaylistId): Flow<PagingData<PlaylistEntryRowView>> =
-        readModels?.let { repository ->
-            query
-                .flatMapLatest { search ->
-                    Pager(pagingConfig) { repository.playlistEntries(playlistId.value, search) }
-                        .flow
-                }
-                .cachedIn(viewModelScope)
-        } ?: flowOf(PagingData.empty())
+        pages.getOrPut(playlistId) {
+            readModels?.let { repository ->
+                query
+                    .flatMapLatest { search ->
+                        Pager(pagingConfig) { repository.playlistEntries(playlistId.value, search) }
+                            .flow
+                    }
+                    .cachedIn(viewModelScope)
+            } ?: flowOf(PagingData.empty())
+        }
 
     internal fun updateSearchQuery(rawQuery: CharSequence?) {
-        query.value =
-            query.value.copy(search = rawQuery?.toString()?.trim()?.takeIf(String::isNotEmpty))
-        if (query.value.search != null) _editOrderMode.value = false
+        val next = rawQuery?.toString()?.trim()?.takeIf(String::isNotEmpty)
+        if (next != null) _editOrderMode.value = false
+        searchJob?.cancel()
+        searchJob =
+            viewModelScope.launch {
+                if (next != null) delay(200)
+                query.value = query.value.copy(search = next)
+            }
     }
 
     internal fun playbackContext(): R16MediaBrowserPlaylistPlaybackContext =

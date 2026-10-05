@@ -29,8 +29,13 @@ import app.shippy.data.db.entity.PlaylistEntity
 import app.shippy.data.db.entity.RecordingArtistCreditEntity
 import app.shippy.data.db.entity.RecordingEntity
 import app.shippy.data.db.transaction.CanonicalWriteTransactions
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -82,6 +87,56 @@ class R16HomeReadRepositoryTest {
             )
             assertEquals((1..8).map { "Track $it" }, recent.map(R16HomeHistoryItem::title))
             assertTrue(recent.all { it.endedAtEpochMs != null })
+            assertEquals(
+                recent,
+                RoomR16HomeReadRepository(database).observeRecentlyPlayed().first(),
+            )
+        }
+
+    @Test
+    fun `recently played emits finished sessions and metadata changes without restarting collection`() =
+        runBlocking {
+            insertRecording("recording-1", "First")
+            insertRecording("recording-2", "Second")
+            database.historyDao().save(history("session-first", "recording-1", 10))
+            val updates = Channel<List<R16HomeHistoryItem>>(Channel.UNLIMITED)
+            val collector =
+                launch(Dispatchers.Default) {
+                    RoomR16HomeReadRepository(database).observeRecentlyPlayed().collect {
+                        updates.send(it)
+                    }
+                }
+            suspend fun awaitSessions(vararg ids: String): List<R16HomeHistoryItem> =
+                withTimeout(5_000) {
+                    var rows = updates.receive()
+                    while (rows.map { it.listeningSessionId } != ids.toList()) {
+                        rows = updates.receive()
+                    }
+                    rows
+                }
+            try {
+                awaitSessions("session-first")
+                val active =
+                    history("session-second", "recording-2", 20).copy(endedAtEpochMs = null)
+                database.historyDao().save(active)
+                database.historyDao().save(active.copy(endedAtEpochMs = 21))
+                awaitSessions("session-second", "session-first")
+
+                // A repeat replaces the older occurrence rather than adding a duplicate card.
+                database.historyDao().save(history("session-repeat", "recording-1", 30))
+                awaitSessions("session-repeat", "session-second")
+                insertRecording("recording-1", "Renamed")
+                val renamed =
+                    withTimeout(5_000) {
+                        var rows = updates.receive()
+                        while (rows.first().title != "Renamed") rows = updates.receive()
+                        rows
+                    }
+                assertEquals(listOf("recording-1", "recording-2"), renamed.map { it.recordingId })
+            } finally {
+                collector.cancelAndJoin()
+                updates.close()
+            }
         }
 
     @Test

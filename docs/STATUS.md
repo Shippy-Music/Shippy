@@ -1,5 +1,40 @@
 # Shippy Live Status
 
+> **2026-10-05 R17 GitHub publication:** Owner authorized pushing the pending
+> R17 source changes and publishing `Shippy-R17.apk` as the R17 Beta 2
+> prerelease (`v0.1.0-beta.2-r17`). Origin/main was fetched and matched the
+> local baseline before publication; no incoming main-branch changes required
+> integration. APK hash matches the 2026-10-04 build ledger below, and build
+> metadata confirms version code 88 and package `com.rtx09x.shippy`.
+> This supersedes the earlier no-push instruction. Physical acceptance remains
+> pending; use `R17_DEVICE_CHECK.md`. GitHub CI runs separately on the push.
+
+> **2026-10-04 R17 implementation:** Owner authorized a local APK build and
+> upload to Drive/Shippy Builds, with no GitHub push. Implemented legacy toolbar
+> expansion/live menu updates, scoped background collection filtering, R16
+> debounced candidate-scoped queries and filtered playback, independent provider
+> results, reactive Home history, visibility-bound screen work, navigation origin
+> correction, and progress-only player ticks/artwork reuse. Version code 88,
+> `0.1.0-beta.2-r17`. `spotlessCheck` and 46 focused JVM/Robolectric tests
+> passed (28 app, 18 data, zero failures). `:app:assembleDebug` passed. APK
+> signature verification passed and the certificate matches `r16_patch2.apk`.
+> `artifacts/Shippy-R17.apk`: 67,243,102 bytes; SHA-256
+> `7B6353227FBA7B1B8BC6EF3480BEDE0DE1095B0048F5E4F878EEC16B5D9CDE16`.
+> Uploaded to Shippy Builds as Drive file `1INbujmlibm9h-P9-pfguT1v33cZ5VmEh`;
+> metadata readback confirms name, parent folder, and byte length. No GitHub
+> commit or push. Physical acceptance remains with the owner; next action is
+> `R17_DEVICE_CHECK.md`. No database migration is introduced.
+
+> **2026-10-04 search/responsiveness review:** See
+> `SEARCH_PERFORMANCE_REVIEW_2026-10-04.md` for source-confirmed defects in
+> legacy toolbar search/menu updates and R16 artwork refresh, lifecycle,
+> history refresh, and filtered playback context, plus shared provider-result
+> latency coupling. Active collection-filter SQL plans were checked on host
+> SQLite. This was the pre-fix review; the R17 ledger above supersedes its
+> no-fixes/builds status. The owner's
+> installed runtime is not yet identified; do not assume every finding affects
+> the same screen implementation.
+
 > **2026-10-03 cloud handoff:** The sections below preserve the older R15/R16
 > implementation ledger and August patch evidence. Statements that R16 is only
 > inactive or unreleased are historical. Start with `CLOUD_HANDOFF.md`, the

@@ -24,6 +24,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -84,6 +85,33 @@ class R16ShellNavigationTest {
         assertFalse(root.isHidden)
         assertSame(root, activity.supportFragmentManager.findFragmentById(R.id.r16_active_content))
         assertSame(rootView, root.view)
+    }
+
+    @Test
+    fun detailUsesVisibleOriginWhenAnotherTabWasAddedMoreRecently() {
+        val otherTab = RootFragment()
+        activity.supportFragmentManager
+            .beginTransaction()
+            .add(R.id.r16_active_content, otherTab, "other-tab")
+            .hide(otherTab)
+            .setMaxLifecycle(otherTab, Lifecycle.State.STARTED)
+            .commit()
+        activity.supportFragmentManager.executePendingTransactions()
+        val rootView = root.view
+        val detail = DetailFragment()
+
+        root.pushR16Destination(detail, "detail")
+        activity.supportFragmentManager.executePendingTransactions()
+
+        assertTrue(root.isHidden)
+        assertTrue(otherTab.isHidden)
+        assertEquals(Lifecycle.State.STARTED, root.lifecycle.currentState)
+        assertSame(detail, activity.supportFragmentManager.primaryNavigationFragment)
+        activity.supportFragmentManager.popBackStackImmediate()
+        assertFalse(root.isHidden)
+        assertTrue(otherTab.isHidden)
+        assertSame(rootView, root.view)
+        assertEquals(Lifecycle.State.RESUMED, root.lifecycle.currentState)
     }
 
     @Test

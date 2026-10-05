@@ -23,6 +23,8 @@ import androidx.room.Query
 import androidx.room.Upsert
 import app.shippy.data.db.entity.PlayHistoryEntity
 import app.shippy.data.home.R16HomeHistoryItem
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 @Dao
 internal abstract class HistoryDao {
@@ -67,7 +69,10 @@ internal abstract class HistoryDao {
         LIMIT :limit
         """
     )
-    abstract suspend fun recentFinishedWithPresentation(limit: Int): List<R16HomeHistoryItem>
+    abstract fun observeRecentFinishedWithPresentation(limit: Int): Flow<List<R16HomeHistoryItem>>
+
+    open suspend fun recentFinishedWithPresentation(limit: Int): List<R16HomeHistoryItem> =
+        observeRecentFinishedWithPresentation(limit).first()
 
     @Query(
         """

@@ -7,14 +7,14 @@
 <p align="center">Local files, downloads, online sources, lyrics, Last.fm, and shared listening in one native Android app.</p>
 
 <p align="center">
-  <a href="https://github.com/Shippy-Music/Shippy/releases/tag/v0.1.0-beta.1-r16"><img alt="R16 Beta 1" src="https://img.shields.io/badge/release-R16%20Beta%201-39d3ea"></a>
+  <a href="https://github.com/Shippy-Music/Shippy/releases/tag/v0.1.0-beta.2-r17"><img alt="R17 Beta 2" src="https://img.shields.io/badge/release-R17%20Beta%202-39d3ea"></a>
   <a href="LICENSE"><img alt="GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-39d3ea"></a>
   <img alt="Android 7.0+" src="https://img.shields.io/badge/Android-7.0%2B-39d3ea">
   <img alt="Kotlin" src="https://img.shields.io/badge/Kotlin-native-39d3ea">
 </p>
 
 > [!IMPORTANT]
-> **Shippy R16 is beta software.** Back up important playlists before testing.
+> **Shippy R17 is beta software.** Back up important playlists before testing.
 > Provider APIs, device-specific media behavior, migration edge cases, and Crew
 > still need feedback across more phones and networks.
 
@@ -59,10 +59,20 @@ The engineering boundary is tracked in [R16 status](docs/r16/STATUS.md),
 [known issues](docs/r16/KNOWN_ISSUES.md), and the
 [R16 architecture specification](docs/Shippy_R16_Master_Architecture_and_Implementation_Spec.md).
 
-## Install R16 Beta 1
+## What R17 changes
 
-Download `Shippy-R16-Beta-1.apk` from the
-[R16 Beta 1 release](https://github.com/Shippy-Music/Shippy/releases/tag/v0.1.0-beta.1-r16).
+R17 improves collection search and filtered playback, lets provider search
+sections arrive independently, adds Library search, refreshes Home history,
+and reduces work on hidden screens and during player progress updates.
+Formatting checks, 46 focused tests, and APK assembly passed. Physical
+installation, live-provider behavior, and performance acceptance remain pending;
+see the [R17 device check](docs/R17_DEVICE_CHECK.md).
+
+## Install R17 Beta 2
+
+Download `Shippy-R17.apk` from the
+[R17 Beta 2 release](https://github.com/Shippy-Music/Shippy/releases/tag/v0.1.0-beta.2-r17).
+Install over your existing R16 build to retain data; do not uninstall first.
 
 Requirements:
 

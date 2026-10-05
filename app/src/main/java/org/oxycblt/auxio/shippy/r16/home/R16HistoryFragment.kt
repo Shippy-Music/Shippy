@@ -63,7 +63,7 @@ internal class R16HistoryFragment : Fragment(R.layout.fragment_r16_history) {
             binding?.r16HistoryEntries?.isVisible = !empty
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.history.collectLatest(adapter::submitData)
             }
         }
@@ -75,8 +75,8 @@ internal class R16HistoryFragment : Fragment(R.layout.fragment_r16_history) {
         super.onDestroyView()
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
         if (mediaBrowser != null) return
         mediaBrowser =
             MediaBrowserCompat(
@@ -88,12 +88,12 @@ internal class R16HistoryFragment : Fragment(R.layout.fragment_r16_history) {
                 .also(MediaBrowserCompat::connect)
     }
 
-    override fun onStop() {
+    override fun onPause() {
         adapter.playbackAvailable = false
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
-        super.onStop()
+        super.onPause()
     }
 
     private val browserConnection =

@@ -141,6 +141,8 @@ records. The empty global-search state shows bounded recent searches with their
 last selected result metadata; clearing the query is a one-tap field action.
 Search launched from Library is explicitly local-only and does not contact
 providers.
+Search inside a playlist, Liked, Downloads, or Local filters that collection in
+place. Play, Shuffle, and song selection retain the filtered collection context.
 
 ### Library
 

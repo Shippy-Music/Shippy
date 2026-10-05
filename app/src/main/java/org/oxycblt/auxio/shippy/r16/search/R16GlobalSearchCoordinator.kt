@@ -29,6 +29,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class R16CanonicalSearchResult(
@@ -95,6 +96,7 @@ class R16GlobalSearchCoordinator(
     private var generation = 0L
     private var queryJob: Job? = null
     private val providerAttempts = mutableMapOf<String, Long>()
+    private val retryJobs = mutableMapOf<ProviderId, Job>()
 
     val state: StateFlow<R16GlobalSearchState> = mutableState.asStateFlow()
 
@@ -102,6 +104,8 @@ class R16GlobalSearchCoordinator(
         val query = rawQuery?.toString()?.trim().orEmpty()
         val requestGeneration = ++generation
         queryJob?.cancel()
+        retryJobs.values.forEach { it.cancel() }
+        retryJobs.clear()
         providerAttempts.clear()
         if (query.isEmpty()) {
             mutableState.value = R16GlobalSearchState()
@@ -120,34 +124,25 @@ class R16GlobalSearchCoordinator(
                 launch {
                     val local = localSearch(query)
                     if (requestGeneration == generation) {
-                        mutableState.value = mutableState.value.copy(localResults = local)
+                        mutableState.update { it.copy(localResults = local) }
                     }
                 }
-                launch {
-                    delay(remoteDebounceMs)
-                    val results =
-                        providerSearchOrFailures(
-                            query,
-                            null,
-                            mutableState.value.providers.map { it.provider },
-                        )
-                    if (requestGeneration != generation) return@launch
-                    results.forEach { result ->
-                        if (providerAttempts[result.provider.id.value] == null) setProvider(result)
-                    }
-                    // A mapped provider that returned no section is an empty result, never a
-                    // permanently-loading card. The repository normally returns every configured
-                    // provider; this also keeps the UI fail-closed if an edge violates that rule.
-                    mutableState.value.providers.forEach { section ->
+                providers.forEach { provider ->
+                    launch {
+                        delay(remoteDebounceMs)
+                        val result =
+                            providerSearchOrFailures(query, provider.id, listOf(provider))
+                                .singleOrNull { it.provider.id == provider.id }
                         if (
-                            providerAttempts[section.provider.id.value] == null &&
-                                results.none { it.provider.id == section.provider.id }
-                        ) {
-                            setProviderContent(
-                                section.provider.id,
+                            requestGeneration != generation ||
+                                providerAttempts[provider.id.value] != null
+                        )
+                            return@launch
+                        result?.let(::setProvider)
+                            ?: setProviderContent(
+                                provider.id,
                                 R16ProviderSearchContent.Results(emptyList()),
                             )
-                        }
                     }
                 }
             }
@@ -157,24 +152,31 @@ class R16GlobalSearchCoordinator(
     fun retryProvider(providerId: ProviderId) {
         val query = mutableState.value.query
         if (query.isEmpty()) return
+        val provider =
+            mutableState.value.providers.singleOrNull { it.provider.id == providerId }?.provider
+                ?: return
         val requestGeneration = generation
         val attempt = (providerAttempts[providerId.value] ?: 0L) + 1L
         providerAttempts[providerId.value] = attempt
         setProviderContent(providerId, R16ProviderSearchContent.Loading)
-        scope.launch {
-            delay(remoteDebounceMs)
-            val provider =
-                mutableState.value.providers.singleOrNull { it.provider.id == providerId }?.provider
-                    ?: return@launch
-            val result =
-                providerSearchOrFailures(query, providerId, listOf(provider)).singleOrNull {
-                    it.provider.id == providerId
+        retryJobs.remove(providerId)?.cancel()
+        retryJobs[providerId] =
+            scope.launch {
+                delay(remoteDebounceMs)
+                val result =
+                    providerSearchOrFailures(query, providerId, listOf(provider)).singleOrNull {
+                        it.provider.id == providerId
+                    }
+                if (
+                    requestGeneration == generation && providerAttempts[providerId.value] == attempt
+                ) {
+                    result?.let(::setProvider)
+                        ?: setProviderContent(
+                            providerId,
+                            R16ProviderSearchContent.Results(emptyList()),
+                        )
                 }
-            if (requestGeneration == generation && providerAttempts[providerId.value] == attempt) {
-                result?.let(::setProvider)
-                    ?: setProviderContent(providerId, R16ProviderSearchContent.Results(emptyList()))
             }
-        }
     }
 
     fun selectProvider(
@@ -235,13 +237,14 @@ class R16GlobalSearchCoordinator(
         }
 
     private fun setProviderContent(providerId: ProviderId, content: R16ProviderSearchContent) {
-        mutableState.value =
-            mutableState.value.copy(
+        mutableState.update { state ->
+            state.copy(
                 providers =
-                    mutableState.value.providers.map {
+                    state.providers.map {
                         if (it.provider.id == providerId) it.copy(content = content) else it
                     }
             )
+        }
     }
 
     companion object {

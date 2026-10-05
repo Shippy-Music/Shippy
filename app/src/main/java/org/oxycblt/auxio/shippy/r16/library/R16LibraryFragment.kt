@@ -25,6 +25,7 @@ import com.google.android.material.tabs.TabLayoutMediator
 import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.FragmentR16LibraryBinding
+import org.oxycblt.auxio.pushR16Destination
 
 /** Primary Library host fragment embedding tabs for Songs, Playlists, Artists, and Collections. */
 @AndroidEntryPoint
@@ -36,6 +37,14 @@ class R16LibraryFragment : Fragment(R.layout.fragment_r16_library) {
         super.onViewCreated(view, savedInstanceState)
         val bound = FragmentR16LibraryBinding.bind(view)
         binding = bound
+        bound.r16LibraryToolbar.setOnMenuItemClickListener { item ->
+            if (item.itemId == R.id.action_search) {
+                pushR16Destination(R16LibrarySearchFragment(), "r16-library-search")
+                true
+            } else {
+                false
+            }
+        }
 
         val adapter = LibraryPagerAdapter(this)
         bound.r16LibraryPager.adapter = adapter

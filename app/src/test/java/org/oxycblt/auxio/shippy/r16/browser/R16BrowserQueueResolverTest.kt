@@ -175,6 +175,48 @@ class R16BrowserQueueResolverTest {
     }
 
     @Test
+    fun `system filtered play shuffle and row selection retain only matching context`() =
+        runBlocking {
+            for (collection in R16SystemCollection.entries) {
+                val matching = recording("match", "Underwater")
+                val other = recording("other", "Other")
+                val repository =
+                    FakeBrowser(collectionRows = mapOf(collection to listOf(matching, other)))
+                val resolver = R16BrowserQueueResolver(repository)
+                for (mediaId in
+                    listOf(
+                        id(R16MediaBrowserId.SystemCollection(collection)),
+                        id(
+                            R16MediaBrowserId.SystemCollectionRecording(
+                                collection,
+                                matching.recordingId,
+                            )
+                        ),
+                    )) {
+                    val ready =
+                        resolver.resolvePlay(mediaId, songsQuery = "rWaTeR")
+                            as R16BrowserQueueResolution.Ready
+                    assertEquals(listOf(matching.recordingId), ready.entries.map { it.recordingId })
+                    assertEquals(
+                        listOf(matching.recordingId),
+                        ready.playCommand(shuffleSeed = 42L).entries.map { it.recordingId },
+                    )
+                }
+                assertTrue(
+                    resolver.resolvePlay(
+                        id(
+                            R16MediaBrowserId.SystemCollectionRecording(
+                                collection,
+                                other.recordingId,
+                            )
+                        ),
+                        songsQuery = "rWaTeR",
+                    ) is R16BrowserQueueResolution.Rejected
+                )
+            }
+        }
+
+    @Test
     fun `system collection keeps full ID-only context while its display stays paged`() =
         runBlocking {
             val collection = R16SystemCollection.DOWNLOADS
@@ -460,6 +502,16 @@ class R16BrowserQueueResolverTest {
         ) =
             collectionRows[collection]
                 .orEmpty()
+                .map { it.recordingId }
+                .also { systemPlaybackQueries++ }
+
+        override suspend fun systemCollectionRecordingIdsForPlayback(
+            collection: R16SystemCollection,
+            query: String?,
+        ) =
+            collectionRows[collection]
+                .orEmpty()
+                .filter { query == null || it.title.contains(query, ignoreCase = true) }
                 .map { it.recordingId }
                 .also { systemPlaybackQueries++ }
 

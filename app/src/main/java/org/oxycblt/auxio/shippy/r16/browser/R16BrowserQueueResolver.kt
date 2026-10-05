@@ -80,12 +80,13 @@ class R16BrowserQueueResolver(
             R16MediaBrowserItem.LibraryArtists ->
                 rejected(mediaId, R16BrowserQueueRejection.UNSUPPORTED_MEDIA_ID)
             is R16MediaBrowserItem.SystemCollection ->
-                resolveSystemCollectionContext(mediaId, item.collection)
+                resolveSystemCollectionContext(mediaId, item.collection, query = songsQuery)
             is R16MediaBrowserItem.SystemCollectionRecording ->
                 resolveSystemCollectionContext(
                     sourceMediaId = mediaId,
                     collection = item.collection,
                     selectedMediaId = mediaId,
+                    query = songsQuery,
                 )
             is R16MediaBrowserItem.Playlist ->
                 resolvePlaylistContext(
@@ -356,9 +357,10 @@ class R16BrowserQueueResolver(
         sourceMediaId: String,
         collection: R16SystemCollection,
         selectedMediaId: String? = null,
+        query: String? = null,
     ): R16BrowserQueueResolution =
         withContext(Dispatchers.Default) {
-            val recordingIds = browser.systemCollectionRecordingIdsForPlayback(collection)
+            val recordingIds = browser.systemCollectionRecordingIdsForPlayback(collection, query)
             if (recordingIds.isEmpty()) {
                 return@withContext rejected(sourceMediaId, R16BrowserQueueRejection.EMPTY_PAGE)
             }

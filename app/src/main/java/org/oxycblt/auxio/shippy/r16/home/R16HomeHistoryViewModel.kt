@@ -28,10 +28,7 @@ import app.shippy.data.home.R16HomePinnedPlaylistShortcut
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import org.oxycblt.auxio.shippy.r16.authority.R16ActiveDataRuntimeOwner
 
 /** Small ACTIVE-only read model: bounded Home summaries plus raw paged sessions. */
@@ -40,8 +37,8 @@ internal class R16HomeHistoryViewModel
 @Inject
 constructor(activeRuntimeOwner: R16ActiveDataRuntimeOwner) : ViewModel() {
     private val repository = activeRuntimeOwner.activeRuntimeOrNull()?.home
-    private val _recentlyPlayed = MutableStateFlow<List<R16HomeHistoryItem>>(emptyList())
-    val recentlyPlayed = _recentlyPlayed.asStateFlow()
+    val recentlyPlayed: Flow<List<R16HomeHistoryItem>> =
+        repository?.observeRecentlyPlayed() ?: flowOf(emptyList())
 
     val pinnedPlaylistShortcuts: Flow<List<R16HomePinnedPlaylistShortcut>> =
         repository?.pinnedPlaylistShortcuts() ?: flowOf(emptyList())
@@ -52,9 +49,4 @@ constructor(activeRuntimeOwner: R16ActiveDataRuntimeOwner) : ViewModel() {
                 .flow
                 .cachedIn(viewModelScope)
         } ?: flowOf(PagingData.empty())
-
-    fun refreshRecentlyPlayed() {
-        val source = repository ?: return
-        viewModelScope.launch { _recentlyPlayed.value = source.recentlyPlayed() }
-    }
 }

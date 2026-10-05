@@ -81,6 +81,7 @@ internal class R16LibraryPlaylistDetailFragment :
     private var mediaBrowser: MediaBrowserCompat? = null
     private var mediaController: MediaControllerCompat? = null
     private var playbackAvailable = false
+    private var rowsReady = false
     private var filtering = false
     private var customOrder = false
     private var currentSort = PlaylistSort()
@@ -142,17 +143,17 @@ internal class R16LibraryPlaylistDetailFragment :
         setAllActionsEnabled()
         adapter.addLoadStateListener(loadStateListener)
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.entries(playlistId).collectLatest(adapter::submitData)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.summary(playlistId).collectLatest(::renderSummary)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.isFiltering.collectLatest {
                     filtering = it
                     setAllActionsEnabled()
@@ -160,7 +161,7 @@ internal class R16LibraryPlaylistDetailFragment :
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.selectedEntryIds.collectLatest { selected ->
                     adapter.selectedEntryIds = selected.map(PlaylistEntryId::value).toSet()
                     binding?.apply {
@@ -177,12 +178,12 @@ internal class R16LibraryPlaylistDetailFragment :
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.lifecycleInFlight.collect(::renderLifecycleInFlight)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.lifecycleCompletion.collect { completion ->
                     completion ?: return@collect
                     renderLifecycleEffect(completion.effect)
@@ -191,7 +192,7 @@ internal class R16LibraryPlaylistDetailFragment :
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.entryRemovalsInFlight.collect { removing ->
                     adapter.entryRemovalsInFlight = removing.map(PlaylistEntryId::value).toSet()
                     setEditOrderActionEnabled()
@@ -199,24 +200,24 @@ internal class R16LibraryPlaylistDetailFragment :
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.entryRemovalCompletions.collect { completions ->
                     completions.values.forEach(::renderEntryRemovalCompletion)
                 }
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.editOrderMode.collect(::renderEditOrderMode)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.entryMoveInFlight.collect(::renderEntryMoveInFlight)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.entryMoveCompletions.collect { completions ->
                     completions.values.forEach(::renderEntryMoveCompletion)
                 }
@@ -224,8 +225,9 @@ internal class R16LibraryPlaylistDetailFragment :
         }
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
+        backCallback.isEnabled = true
         if (mediaBrowser != null) return
         mediaBrowser =
             MediaBrowserCompat(
@@ -237,14 +239,15 @@ internal class R16LibraryPlaylistDetailFragment :
                 .also(MediaBrowserCompat::connect)
     }
 
-    override fun onStop() {
+    override fun onPause() {
+        backCallback.isEnabled = false
         adapter.playbackAvailable = false
         playbackAvailable = false
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
         setAllActionsEnabled()
-        super.onStop()
+        super.onPause()
     }
 
     override fun onDestroyView() {
@@ -276,13 +279,13 @@ internal class R16LibraryPlaylistDetailFragment :
     }
 
     private fun playPlaylist() {
-        if (editOrderMode) return
+        if (editOrderMode || !rowsReady) return
         val mediaId = R16MediaBrowserIdCodec.encode(R16MediaBrowserId.Playlist(playlistId))
         mediaController?.transportControls?.playFromMediaId(mediaId, playlistPlaybackExtras())
     }
 
     private fun shufflePlaylist() {
-        if (editOrderMode) return
+        if (editOrderMode || !rowsReady) return
         val controls = mediaController?.transportControls ?: return
         controls.playFromMediaId(
             R16MediaBrowserIdCodec.encode(R16MediaBrowserId.Playlist(playlistId)),
@@ -292,6 +295,7 @@ internal class R16LibraryPlaylistDetailFragment :
 
     /** Entry taps retain the exact canonical occurrence, never a provider/source URL. */
     private fun playRecording(entry: PlaylistEntryRowView) {
+        if (!rowsReady) return
         val mediaId =
             R16MediaBrowserIdCodec.encode(
                 R16MediaBrowserId.PlaylistEntry(PlaylistEntryId(entry.playlistEntryId))
@@ -428,6 +432,8 @@ internal class R16LibraryPlaylistDetailFragment :
 
     private fun renderLoadState(states: CombinedLoadStates) {
         val refresh = states.refresh
+        rowsReady = refresh is LoadState.NotLoading
+        setActionsEnabled()
         val empty = refresh is LoadState.NotLoading && adapter.itemCount == 0
         binding?.apply {
             r16PlaylistDetailEntries.isGone = empty
@@ -437,7 +443,7 @@ internal class R16LibraryPlaylistDetailFragment :
 
     private fun setActionsEnabled() {
         binding?.apply {
-            val enabled = playbackAvailable && !editOrderMode
+            val enabled = playbackAvailable && rowsReady && adapter.itemCount > 0 && !editOrderMode
             r16PlaylistDetailPlay.isEnabled = enabled
             r16PlaylistDetailShuffle.isEnabled = enabled
         }

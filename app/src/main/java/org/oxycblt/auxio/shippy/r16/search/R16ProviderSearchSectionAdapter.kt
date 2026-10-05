@@ -21,6 +21,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import app.shippy.sources.observation.SourceTrackObservation
 import app.shippy.sources.provider.SourceDiscoveryFailure
@@ -37,13 +38,15 @@ internal class R16ProviderSearchSectionAdapter(
         set(value) {
             if (field == value) return
             field = value
-            notifyDataSetChanged()
+            rows.forEachIndexed { index, row ->
+                if (row is Row.Track) notifyItemChanged(index, PLAYBACK_AVAILABILITY)
+            }
         }
 
     private var rows: List<Row> = emptyList()
 
     fun submitSections(sections: List<R16ProviderSearchSection>) {
-        rows = buildList {
+        val updated = buildList {
             sections.forEach { section ->
                 add(
                     Row.Header(
@@ -61,7 +64,23 @@ internal class R16ProviderSearchSectionAdapter(
                 }
             }
         }
-        notifyDataSetChanged()
+        val previous = rows
+        val diff =
+            DiffUtil.calculateDiff(
+                object : DiffUtil.Callback() {
+                    override fun getOldListSize() = previous.size
+
+                    override fun getNewListSize() = updated.size
+
+                    override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int) =
+                        previous[oldItemPosition].identity == updated[newItemPosition].identity
+
+                    override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int) =
+                        previous[oldItemPosition] == updated[newItemPosition]
+                }
+            )
+        rows = updated
+        diff.dispatchUpdatesTo(this)
     }
 
     override fun getItemCount() = rows.size
@@ -90,6 +109,23 @@ internal class R16ProviderSearchSectionAdapter(
             is Row.Header -> (holder as HeaderHolder).bind(row)
             is Row.Track -> (holder as TrackHolder).bind(row, playbackAvailable, onPlay)
             is Row.Failure -> (holder as FailureHolder).bind(row, onRetry)
+        }
+    }
+
+    override fun onBindViewHolder(
+        holder: RecyclerView.ViewHolder,
+        position: Int,
+        payloads: MutableList<Any>,
+    ) {
+        val row = rows[position]
+        if (
+            row is Row.Track &&
+                payloads.isNotEmpty() &&
+                payloads.all { it == PLAYBACK_AVAILABILITY }
+        ) {
+            (holder as TrackHolder).bindPlayback(row, playbackAvailable, onPlay)
+        } else {
+            onBindViewHolder(holder, position)
         }
     }
 
@@ -136,17 +172,26 @@ internal class R16ProviderSearchSectionAdapter(
             binding.songInfo.text =
                 observation.artistNames.joinToString().ifBlank { row.provider.displayName }
             binding.songMenu.visibility = View.GONE
+            bindPlayback(row, playbackAvailable, onPlay)
+            binding.root.contentDescription =
+                listOf(title, observation.artistNames.joinToString(), row.provider.displayName)
+                    .filterNotNull()
+                    .filter(String::isNotBlank)
+                    .joinToString(", ")
+        }
+
+        fun bindPlayback(
+            row: Row.Track,
+            playbackAvailable: Boolean,
+            onPlay: (SourceTrackObservation) -> Unit,
+        ) {
             binding.root.apply {
                 isEnabled = playbackAvailable
                 isClickable = playbackAvailable
                 setOnClickListener(
-                    if (playbackAvailable) View.OnClickListener { onPlay(observation) } else null
+                    if (playbackAvailable) View.OnClickListener { onPlay(row.observation) }
+                    else null
                 )
-                contentDescription =
-                    listOf(title, observation.artistNames.joinToString(), row.provider.displayName)
-                        .filterNotNull()
-                        .filter(String::isNotBlank)
-                        .joinToString(", ")
             }
         }
     }
@@ -174,5 +219,6 @@ internal class R16ProviderSearchSectionAdapter(
         const val HEADER = 0
         const val TRACK = 1
         const val FAILURE = 2
+        const val PLAYBACK_AVAILABILITY = "playbackAvailability"
     }
 }

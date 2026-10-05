@@ -117,8 +117,9 @@ class R16LibrarySongsFragment : Fragment(R.layout.fragment_r16_library_songs) {
         super.onDestroyView()
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
+        backCallback.isEnabled = true
         if (mediaBrowser != null) return
         mediaBrowser =
             MediaBrowserCompat(
@@ -130,12 +131,13 @@ class R16LibrarySongsFragment : Fragment(R.layout.fragment_r16_library_songs) {
                 .also(MediaBrowserCompat::connect)
     }
 
-    override fun onStop() {
+    override fun onPause() {
+        backCallback.isEnabled = false
         adapter.playbackAvailable = false
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
-        super.onStop()
+        super.onPause()
     }
 
     /** Host-facing update path; only the canonical Library query is changed. */

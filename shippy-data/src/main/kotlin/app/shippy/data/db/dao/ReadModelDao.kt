@@ -458,9 +458,9 @@ internal interface ReadModelDao {
         WHERE entry.playlist_id = :playlistId
           AND (
               :query IS NULL
-              OR LOWER(song.title) LIKE '%' || LOWER(:query) || '%'
-              OR LOWER(song.artist_display) LIKE '%' || LOWER(:query) || '%'
-              OR LOWER(COALESCE(song.release_title, '')) LIKE '%' || LOWER(:query) || '%'
+              OR INSTR(LOWER(song.title), LOWER(:query)) > 0
+              OR INSTR(LOWER(song.artist_display), LOWER(:query)) > 0
+              OR INSTR(LOWER(COALESCE(song.release_title, '')), LOWER(:query)) > 0
           )
         ORDER BY
             CASE WHEN :sortMode = 'CUSTOM' THEN entry.order_key END ASC,
@@ -754,26 +754,17 @@ internal interface ReadModelDao {
     )
     fun localSongsPage(): PagingSource<Int, LibrarySongRowView>
 
-    @Query(
-        """
-        SELECT * FROM library_song_view
-        WHERE (
-            (UPPER(:collectionId) = 'LIKED' AND liked)
-            OR (UPPER(:collectionId) = 'DOWNLOADS' AND download_asset_exists)
-            OR (UPPER(:collectionId) = 'LOCAL' AND local_asset_exists)
-        )
-        AND (
-            LOWER(title) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(artist_display) LIKE '%' || LOWER(:query) || '%'
-            OR LOWER(COALESCE(release_title, '')) LIKE '%' || LOWER(:query) || '%'
-        )
-        ORDER BY title_sort_key, recording_id
-        """
-    )
+    @Query(SYSTEM_COLLECTION_FILTER_PAGE)
     fun filterSystemCollection(
         collectionId: String,
-        query: String,
+        query: String?,
     ): PagingSource<Int, LibrarySongRowView>
+
+    @Query(SYSTEM_COLLECTION_FILTER_PLAYBACK)
+    suspend fun filteredSystemCollectionRecordingIdsForPlayback(
+        collectionId: String,
+        query: String?,
+    ): List<String>
 
     @Query(
         """
@@ -1059,9 +1050,9 @@ internal interface ReadModelDao {
         SELECT entry.* FROM playlist_entry_view entry
         WHERE entry.playlist_id = :playlistId
           AND (
-              LOWER(entry.title) LIKE '%' || LOWER(:query) || '%'
-              OR LOWER(entry.artist_display) LIKE '%' || LOWER(:query) || '%'
-              OR LOWER(COALESCE(entry.release_title, '')) LIKE '%' || LOWER(:query) || '%'
+              INSTR(LOWER(entry.title), LOWER(:query)) > 0
+              OR INSTR(LOWER(entry.artist_display), LOWER(:query)) > 0
+              OR INSTR(LOWER(COALESCE(entry.release_title, '')), LOWER(:query)) > 0
           )
         ORDER BY entry.order_key, entry.playlist_entry_id
         """
@@ -1117,9 +1108,9 @@ internal interface ReadModelDao {
         JOIN library_song_view song ON song.recording_id = entry.recording_id
         WHERE entry.playlist_id = :playlistId
           AND (
-              LOWER(entry.title) LIKE '%' || LOWER(:query) || '%'
-              OR LOWER(entry.artist_display) LIKE '%' || LOWER(:query) || '%'
-              OR LOWER(COALESCE(entry.release_title, '')) LIKE '%' || LOWER(:query) || '%'
+              INSTR(LOWER(entry.title), LOWER(:query)) > 0
+              OR INSTR(LOWER(entry.artist_display), LOWER(:query)) > 0
+              OR INSTR(LOWER(COALESCE(entry.release_title, '')), LOWER(:query)) > 0
           )
         ORDER BY
             CASE WHEN :sortMode = 'RECENTLY_ADDED' AND :sortDirection = 'ASC'

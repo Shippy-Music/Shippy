@@ -98,18 +98,8 @@ class R16GlobalSearchCoordinatorTest {
                     localSearch = { listOf(localResult("fixture")) },
                     providerSearch = { _, requested ->
                         when (requested) {
-                            null ->
-                                listOf(
-                                    R16ProviderSearchResult(jio, listOf(observation("song"))),
-                                    R16ProviderSearchResult(
-                                        youtube,
-                                        emptyList(),
-                                        SourceDiscoveryFailure(
-                                            SourceDiscoveryFailureKind.NETWORK,
-                                            retryable = true,
-                                        ),
-                                    ),
-                                )
+                            jio.id ->
+                                listOf(R16ProviderSearchResult(jio, listOf(observation("song"))))
                             youtube.id ->
                                 listOf(
                                     R16ProviderSearchResult(
@@ -117,6 +107,12 @@ class R16GlobalSearchCoordinatorTest {
                                         if (retry)
                                             listOf(observation("video", provider = "youtube"))
                                         else emptyList(),
+                                        if (retry) null
+                                        else
+                                            SourceDiscoveryFailure(
+                                                SourceDiscoveryFailureKind.NETWORK,
+                                                retryable = true,
+                                            ),
                                     )
                                 )
                             else -> emptyList()
@@ -154,6 +150,124 @@ class R16GlobalSearchCoordinatorTest {
                 coordinator.state.value.providers[1].content,
             )
             job.cancel()
+        }
+
+    @Test
+    fun `fast provider publishes while earlier provider remains loading in configured order`() =
+        runBlocking {
+            val slowStarted = CompletableDeferred<Unit>()
+            val releaseSlow = CompletableDeferred<Unit>()
+            val job = SupervisorJob()
+            val slow = provider("youtube")
+            val fast = provider("jiosaavn")
+            val coordinator =
+                R16GlobalSearchCoordinator(
+                    scope = CoroutineScope(coroutineContext + job),
+                    configuredProviders = { listOf(slow, fast) },
+                    localSearch = { listOf(localResult("fixture")) },
+                    providerSearch = { _, id ->
+                        val selected = if (id == slow.id) slow else fast
+                        if (id == slow.id) {
+                            slowStarted.complete(Unit)
+                            releaseSlow.await()
+                        }
+                        listOf(
+                            R16ProviderSearchResult(
+                                selected,
+                                listOf(observation(selected.id.value)),
+                            )
+                        )
+                    },
+                    persistAndPlay = { error("Not used") },
+                    remoteDebounceMs = 0,
+                )
+            try {
+                coordinator.submitQuery("fixture")
+                withTimeout(2_000) {
+                    slowStarted.await()
+                    while (
+                        coordinator.state.value.providers[1].content
+                            !is R16ProviderSearchContent.Results
+                    ) delay(1)
+                }
+                assertEquals(
+                    listOf(slow, fast),
+                    coordinator.state.value.providers.map { it.provider },
+                )
+                assertEquals(
+                    R16ProviderSearchContent.Loading,
+                    coordinator.state.value.providers[0].content,
+                )
+                assertEquals(listOf(localResult("fixture")), coordinator.state.value.localResults)
+                releaseSlow.complete(Unit)
+                withTimeout(2_000) {
+                    while (
+                        coordinator.state.value.providers[0].content
+                            !is R16ProviderSearchContent.Results
+                    ) delay(1)
+                }
+                assertEquals(
+                    listOf(slow, fast),
+                    coordinator.state.value.providers.map { it.provider },
+                )
+            } finally {
+                job.cancel()
+            }
+        }
+
+    @Test
+    fun `replaced query cancels pending provider retry without changing new sections`() =
+        runBlocking {
+            val retryStarted = CompletableDeferred<Unit>()
+            val retryCancelled = CompletableDeferred<Unit>()
+            val job = SupervisorJob()
+            val provider = provider("jiosaavn")
+            var calls = 0
+            val coordinator =
+                R16GlobalSearchCoordinator(
+                    scope = CoroutineScope(coroutineContext + job),
+                    configuredProviders = { listOf(provider) },
+                    localSearch = { emptyList() },
+                    providerSearch = { query, _ ->
+                        calls++
+                        if (calls == 2) {
+                            retryStarted.complete(Unit)
+                            try {
+                                CompletableDeferred<Unit>().await()
+                            } finally {
+                                retryCancelled.complete(Unit)
+                            }
+                        }
+                        listOf(R16ProviderSearchResult(provider, listOf(observation(query))))
+                    },
+                    persistAndPlay = { error("Not used") },
+                    remoteDebounceMs = 0,
+                )
+            try {
+                coordinator.submitQuery("old")
+                withTimeout(2_000) {
+                    while (
+                        coordinator.state.value.providers.single().content
+                            !is R16ProviderSearchContent.Results
+                    ) delay(1)
+                }
+                coordinator.retryProvider(provider.id)
+                withTimeout(2_000) { retryStarted.await() }
+                coordinator.submitQuery("new")
+                withTimeout(2_000) {
+                    retryCancelled.await()
+                    while (
+                        coordinator.state.value.providers.single().content
+                            !is R16ProviderSearchContent.Results
+                    ) delay(1)
+                }
+                assertEquals(
+                    R16ProviderSearchContent.Results(listOf(observation("new"))),
+                    coordinator.state.value.providers.single().content,
+                )
+            } finally {
+                job.cancel()
+            }
         }
 
     @Test

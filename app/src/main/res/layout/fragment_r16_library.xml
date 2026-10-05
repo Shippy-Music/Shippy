@@ -14,7 +14,8 @@
             android:id="@+id/r16_library_toolbar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:title="@string/lbl_library" />
+            app:title="@string/lbl_library"
+            app:menu="@menu/r16_library" />
 
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/r16_library_tabs"

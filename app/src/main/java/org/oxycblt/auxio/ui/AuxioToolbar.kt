@@ -19,6 +19,7 @@ package org.oxycblt.auxio.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Parcelable
 import android.util.AttributeSet
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
@@ -31,9 +32,13 @@ import android.widget.LinearLayout
 import androidx.annotation.AttrRes
 import androidx.annotation.MenuRes
 import androidx.appcompat.R as AR
+import androidx.appcompat.view.CollapsibleActionView
 import androidx.appcompat.view.SupportMenuInflater
 import androidx.appcompat.view.menu.MenuBuilder
 import androidx.appcompat.view.menu.MenuItemImpl
+import androidx.appcompat.view.menu.MenuPresenter
+import androidx.appcompat.view.menu.MenuView
+import androidx.appcompat.view.menu.SubMenuBuilder
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.Toolbar
 import androidx.appcompat.widget.TooltipCompat
@@ -65,6 +70,67 @@ constructor(
     private var menuItemClickListener: Toolbar.OnMenuItemClickListener? = null
     private var overflowClickListener: OnClickListener? = null
     private val actionButtons = mutableMapOf<Int, RippleFixMaterialButton>()
+    private var overflowButton: RippleFixMaterialButton? = null
+    private var expandedItem: MenuItemImpl? = null
+    private var navigationClickListener: OnClickListener? = null
+    @SuppressLint("RestrictedApi")
+    private val menuPresenter =
+        object : MenuPresenter {
+            override fun initForMenu(context: Context?, menu: MenuBuilder?) = Unit
+
+            override fun getMenuView(root: ViewGroup?): MenuView? = null
+
+            override fun updateMenuView(cleared: Boolean) {
+                expandedItem?.let { if (!it.isVisible) it.collapseActionView() }
+                rebuildActionButtons()
+            }
+
+            override fun setCallback(callback: MenuPresenter.Callback?) = Unit
+
+            override fun onSubMenuSelected(subMenu: SubMenuBuilder?) = false
+
+            override fun onCloseMenu(menu: MenuBuilder?, allMenusAreClosing: Boolean) = Unit
+
+            override fun flagActionItems() = false
+
+            override fun expandItemActionView(menu: MenuBuilder?, item: MenuItemImpl): Boolean {
+                val actionView = item.actionView ?: return false
+                expandedItem?.collapseActionView()
+                (actionView.parent as? ViewGroup)?.removeView(actionView)
+                expandedItem = item
+                binding.toolbarTitleContainer.isVisible = false
+                binding.toolbarContentFrame.addView(
+                    actionView,
+                    LayoutParams(
+                        LayoutParams.MATCH_PARENT,
+                        LayoutParams.WRAP_CONTENT,
+                        android.view.Gravity.CENTER_VERTICAL,
+                    ),
+                )
+                item.setActionViewExpanded(true)
+                (actionView as? CollapsibleActionView)?.onActionViewExpanded()
+                actionView.requestFocus()
+                rebuildActionButtons()
+                return true
+            }
+
+            override fun collapseItemActionView(menu: MenuBuilder?, item: MenuItemImpl): Boolean {
+                if (expandedItem !== item) return false
+                (item.actionView as? CollapsibleActionView)?.onActionViewCollapsed()
+                binding.toolbarContentFrame.removeView(item.actionView)
+                expandedItem = null
+                binding.toolbarTitleContainer.isVisible = true
+                item.setActionViewExpanded(false)
+                rebuildActionButtons()
+                return true
+            }
+
+            override fun getId() = 0
+
+            override fun onSaveInstanceState(): Parcelable? = null
+
+            override fun onRestoreInstanceState(state: Parcelable?) = Unit
+        }
     @SuppressLint("RestrictedApi") private var menuBuilder = MenuBuilder(context)
 
     init {
@@ -90,6 +156,9 @@ constructor(
         }
 
         configureIconButton(binding.toolbarNavigationButton)
+        binding.toolbarNavigationButton.setOnClickListener {
+            if (!collapseActionView()) navigationClickListener?.onClick(it)
+        }
 
         val toolbarAttrs =
             context.obtainStyledAttributes(attrs, AR.styleable.Toolbar, defStyleAttr, 0)
@@ -196,9 +265,13 @@ constructor(
 
     @SuppressLint("RestrictedApi")
     fun inflateMenu(@MenuRes resId: Int) {
+        collapseActionView()
+        menuBuilder.removeMenuPresenter(menuPresenter)
         val builder = MenuBuilder(context)
         SupportMenuInflater(context).inflate(resId, builder)
         menuBuilder = builder
+        actionButtons.clear()
+        builder.addMenuPresenter(menuPresenter)
         rebuildActionButtons()
     }
 
@@ -218,8 +291,14 @@ constructor(
         get() = binding.toolbarTitleContainer
 
     fun setNavigationOnClickListener(listener: OnClickListener) {
-        binding.toolbarNavigationButton.setOnClickListener(listener)
+        navigationClickListener = listener
     }
+
+    val hasExpandedActionView: Boolean
+        get() = expandedItem != null
+
+    @SuppressLint("RestrictedApi")
+    fun collapseActionView(): Boolean = expandedItem?.collapseActionView() ?: false
 
     /**
      * Override the overflow button's click behavior. When set, the overflow button will call
@@ -237,14 +316,11 @@ constructor(
 
     @SuppressLint("RestrictedApi")
     private fun rebuildActionButtons() {
-        actionButtons.clear()
-        binding.toolbarActionGroup.removeAllViews()
-
         val actionItems = mutableListOf<MenuItemImpl>()
         val overflowItems = mutableListOf<MenuItemImpl>()
         for (i in 0 until menuBuilder.size()) {
             val item = menuBuilder.getItem(i) as MenuItemImpl
-            if (!item.isVisible) continue
+            if (!item.isVisible || item === expandedItem) continue
             if (item.requiresActionButton() || item.requestsActionButton()) {
                 actionItems.add(item)
             } else {
@@ -252,17 +328,30 @@ constructor(
             }
         }
 
+        actionButtons.keys.retainAll(actionItems.map { it.itemId }.toSet())
+        val desiredButtons = mutableListOf<View>()
         for (item in actionItems) {
-            val btn = createActionButton(item)
-            binding.toolbarActionGroup.addView(btn)
+            val btn = actionButtons[item.itemId] ?: createActionButton(item)
+            btn.icon = item.icon
+            btn.contentDescription = item.title
+            btn.isEnabled = item.isEnabled
+            TooltipCompat.setTooltipText(btn, item.title)
+            desiredButtons.add(btn)
             actionButtons[item.itemId] = btn
         }
 
         if (overflowItems.isNotEmpty()) {
-            binding.toolbarActionGroup.addView(createOverflowButton(overflowItems))
+            val button = overflowButton ?: createOverflowButton().also { overflowButton = it }
+            desiredButtons.add(button)
         }
 
-        binding.toolbarActionGroup.isVisible = binding.toolbarActionGroup.isNotEmpty()
+        if (binding.toolbarActionGroup.children.toList() != desiredButtons) {
+            binding.toolbarActionGroup.removeAllViews()
+            desiredButtons.forEach(binding.toolbarActionGroup::addView)
+        }
+
+        binding.toolbarActionGroup.isVisible =
+            expandedItem == null && binding.toolbarActionGroup.isNotEmpty()
     }
 
     @SuppressLint("RestrictedApi")
@@ -290,7 +379,7 @@ constructor(
             }
 
     @SuppressLint("RestrictedApi")
-    private fun createOverflowButton(overflowItems: List<MenuItemImpl>) =
+    private fun createOverflowButton() =
         RippleFixMaterialButton(context, null, MR.attr.materialIconButtonStyle).apply {
             configureIconButton(this)
             setIconResource(R.drawable.ic_more_vert_24)
@@ -301,6 +390,15 @@ constructor(
                 if (customListener != null) {
                     customListener.onClick(view)
                 } else {
+                    val overflowItems =
+                        menuBuilder.children
+                            .filter {
+                                it is MenuItemImpl &&
+                                    it.isVisible &&
+                                    !it.requiresActionButton() &&
+                                    !it.requestsActionButton()
+                            }
+                            .toList()
                     showPopupMenu(view, overflowItems)
                 }
             }
@@ -310,7 +408,7 @@ constructor(
     private fun showPopupMenu(anchor: View, items: List<MenuItem>) {
         val popup = PopupMenu(context, anchor)
         val originalItems = mutableMapOf<Int, MenuItem>()
-        for (item in items) {
+        for (item in items.filter { it.isVisible }) {
             popup.menu.add(item.groupId, item.itemId, item.order, item.title).apply {
                 icon = item.icon
                 isEnabled = item.isEnabled

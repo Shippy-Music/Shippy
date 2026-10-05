@@ -125,7 +125,7 @@ internal class R16LibrarySearchFragment : Fragment(R.layout.fragment_r16_library
         playlistAdapter.addLoadStateListener(playlistLoadStateListener)
         artistAdapter.addLoadStateListener(artistLoadStateListener)
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.query.collect { query ->
                     val hasQuery = query.isNotBlank()
                     songRefreshComplete = false
@@ -153,24 +153,24 @@ internal class R16LibrarySearchFragment : Fragment(R.layout.fragment_r16_library
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.songs.collectLatest(songAdapter::submitData)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.playlists.collectLatest(playlistAdapter::submitData)
             }
         }
         viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.artists.collectLatest(artistAdapter::submitData)
             }
         }
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
         if (mediaBrowser != null) return
         mediaBrowser =
             MediaBrowserCompat(
@@ -182,12 +182,12 @@ internal class R16LibrarySearchFragment : Fragment(R.layout.fragment_r16_library
                 .also(MediaBrowserCompat::connect)
     }
 
-    override fun onStop() {
+    override fun onPause() {
         songAdapter.playbackAvailable = false
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
-        super.onStop()
+        super.onPause()
     }
 
     override fun onDestroyView() {

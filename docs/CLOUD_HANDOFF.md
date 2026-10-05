@@ -1,10 +1,16 @@
 # Shippy cloud handoff
 
-**Updated:** 2026-10-03
+**Updated:** 2026-10-05
 **Repository:** https://github.com/Shippy-Music/Shippy
 **Continuation branch:** `main`
 
 ## Baseline
+
+R17 Beta 2 (`0.1.0-beta.2-r17`, version code 88) is the current publication
+target. The owner authorized source synchronization and GitHub release
+publication on 2026-10-05. See the top of `STATUS.md` for R17 verification and
+`R17_DEVICE_CHECK.md` for pending physical acceptance. The October 3 baseline
+and August history below remain context for the earlier synchronization.
 
 The local application repository was `X:\shippy\shippy`, inside a larger
 workspace folder. GitHub already contained the R16 Beta 1 release baseline

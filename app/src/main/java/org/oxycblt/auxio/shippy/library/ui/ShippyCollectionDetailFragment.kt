@@ -27,6 +27,7 @@ import android.text.InputType
 import android.view.View
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.widget.SearchView
 import androidx.core.content.ContextCompat
@@ -45,7 +46,12 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import java.util.Locale
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.formatDurationMs
@@ -81,26 +87,25 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     private lateinit var tracks: RecyclerView
     private val headerAdapter =
         ShippyCollectionHeaderAdapter(
-            onPlay = {
-                currentState?.let { model.playAll(collectionId, it.rows, shuffled = false) }
-            },
-            onShuffle = {
-                currentState?.let { model.playAll(collectionId, it.rows, shuffled = true) }
-            },
+            onPlay = { model.playAll(collectionId, tracksAdapter.currentList, shuffled = false) },
+            onShuffle = { model.playAll(collectionId, tracksAdapter.currentList, shuffled = true) },
             onDownload = { currentState?.let { model.downloadAvailable(it.rows) } },
         )
-    private val tracksAdapter =
+    private val tracksAdapter: ShippyCollectionTrackAdapter =
         ShippyCollectionTrackAdapter(
             onClick = { row ->
-                if (selectedTrackIds.isEmpty()) model.play(collectionId, visibleRows, row)
+                if (selectedTrackIds.isEmpty())
+                    model.play(collectionId, tracksAdapter.currentList, row)
                 else model.toggleTrackSelection(row.track.id)
             },
             onMenu = { row -> ProviderTrackActionsSheet.show(parentFragmentManager, row.track) },
             onLongClick = { row -> model.toggleTrackSelection(row.track.id) },
         )
     private var currentState: ShippyCollectionDetailState? = null
-    private var visibleRows = emptyList<ShippyCollectionTrackRow>()
     private var currentQuery = ""
+    private var searchExpanded = false
+    private var projectionJob: Job? = null
+    private var searchBackCallback: OnBackPressedCallback? = null
     private var currentSort = CollectionSort.COLLECTION_ORDER
     private var trackDragHelper: ItemTouchHelper? = null
     private var trackDragAttached = false
@@ -143,6 +148,8 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         currentSort = readSortPreference()
+        currentQuery = savedInstanceState?.getString(STATE_QUERY) ?: currentQuery
+        searchExpanded = savedInstanceState?.getBoolean(STATE_SEARCH_EXPANDED) ?: searchExpanded
         toolbar = view.findViewById(R.id.shippy_collection_toolbar)
         tracks =
             view.findViewById<RecyclerView>(R.id.shippy_collection_scroll).also {
@@ -163,6 +170,15 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
             setOnMenuItemClickListener(::onToolbarItemSelected)
         }
         configureSearch()
+        searchBackCallback =
+            object : OnBackPressedCallback(searchExpanded) {
+                    override fun handleOnBackPressed() {
+                        toolbar.collapseActionView()
+                    }
+                }
+                .also {
+                    requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, it)
+                }
         requestLocalPermissionIfNeeded(savedInstanceState)
 
         viewLifecycleOwner.lifecycleScope.launch {
@@ -200,6 +216,8 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     }
 
     override fun onDestroyView() {
+        projectionJob?.cancel()
+        searchBackCallback = null
         trackDragHelper?.attachToRecyclerView(null)
         trackOrderEditing = false
         pendingTrackOrderRows = null
@@ -207,6 +225,12 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         tracks.adapter = null
         toolbar.setOnMenuItemClickListener(null)
         super.onDestroyView()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_QUERY, currentQuery)
+        outState.putBoolean(STATE_SEARCH_EXPANDED, searchExpanded)
     }
 
     private fun onToolbarItemSelected(item: android.view.MenuItem): Boolean {
@@ -257,20 +281,46 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
     }
 
     private fun configureSearch() {
-        val searchView =
-            toolbar.menu.findItem(R.id.action_search).actionView as? SearchView ?: return
-        searchView.queryHint = getString(R.string.lbl_search)
-        searchView.setOnQueryTextListener(
-            object : SearchView.OnQueryTextListener {
-                override fun onQueryTextSubmit(query: String?) = true
+        val searchItem = toolbar.menu.findItem(R.id.action_search)
+        val searchView = searchItem.actionView as? SearchView ?: return
+        searchItem.setOnActionExpandListener(
+            object : android.view.MenuItem.OnActionExpandListener {
+                override fun onMenuItemActionExpand(item: android.view.MenuItem): Boolean {
+                    searchExpanded = true
+                    searchBackCallback?.isEnabled = true
+                    return true
+                }
 
-                override fun onQueryTextChange(query: String?): Boolean {
-                    currentQuery = query.orEmpty()
-                    updateVisibleRows()
+                override fun onMenuItemActionCollapse(item: android.view.MenuItem): Boolean {
+                    searchExpanded = false
+                    searchBackCallback?.isEnabled = false
+                    searchView.setQuery("", false)
+                    searchView.clearFocus()
                     return true
                 }
             }
         )
+        searchView.queryHint = getString(R.string.lbl_search)
+        searchView.setOnQueryTextListener(
+            object : SearchView.OnQueryTextListener {
+                override fun onQueryTextSubmit(query: String?): Boolean {
+                    searchView.clearFocus()
+                    return true
+                }
+
+                override fun onQueryTextChange(query: String?): Boolean {
+                    currentQuery = query.orEmpty()
+                    updateVisibleRows(debounce = true)
+                    return true
+                }
+            }
+        )
+        if (searchExpanded || currentQuery.isNotEmpty()) {
+            val restoredQuery = currentQuery
+            searchItem.expandActionView()
+            searchView.setQuery(restoredQuery, false)
+            searchView.clearFocus()
+        }
     }
 
     private fun render(state: ShippyCollectionDetailState) {
@@ -355,32 +405,50 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
             getString(if (trackOrderEditing) R.string.lbl_done else R.string.lbl_edit_order)
     }
 
-    private fun updateVisibleRows() {
+    private fun updateVisibleRows(debounce: Boolean = false) {
+        projectionJob?.cancel()
         val state = currentState ?: return
+        // Repository emissions must not overwrite the adapter's in-progress drag order.
+        if (trackOrderEditing) return
         val query = currentQuery.trim().lowercase(Locale.getDefault())
-        val filtered =
-            if (query.isEmpty()) {
-                state.rows
-            } else {
-                state.rows.filter { row ->
-                    row.track.title.lowercase(Locale.getDefault()).contains(query) ||
-                        row.track.artists.any {
-                            it.lowercase(Locale.getDefault()).contains(query)
-                        } ||
-                        row.track.album?.lowercase(Locale.getDefault())?.contains(query) == true
-                }
+        val sort = currentSort
+        projectionJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                if (debounce && query.isNotEmpty()) delay(180)
+                val projected =
+                    withContext(Dispatchers.Default) {
+                        val filtered =
+                            if (query.isEmpty()) {
+                                state.rows
+                            } else {
+                                state.rows.filter { row ->
+                                    ensureActive()
+                                    row.track.title
+                                        .lowercase(Locale.getDefault())
+                                        .contains(query) ||
+                                        row.track.artists.any {
+                                            it.lowercase(Locale.getDefault()).contains(query)
+                                        } ||
+                                        row.track.album
+                                            ?.lowercase(Locale.getDefault())
+                                            ?.contains(query) == true
+                                }
+                            }
+                        ensureActive()
+                        when (sort) {
+                            CollectionSort.COLLECTION_ORDER -> filtered
+                            CollectionSort.TITLE -> filtered.sortedBy { it.track.title.lowercase() }
+                            CollectionSort.ARTIST ->
+                                filtered.sortedBy { it.track.artists.joinToString().lowercase() }
+                            CollectionSort.DURATION ->
+                                filtered.sortedByDescending {
+                                    it.track.durationMs ?: Long.MIN_VALUE
+                                }
+                        }
+                    }
+                tracksAdapter.submitList(projected)
+                updateTrackReordering(state)
             }
-        visibleRows =
-            when (currentSort) {
-                CollectionSort.COLLECTION_ORDER -> filtered
-                CollectionSort.TITLE -> filtered.sortedBy { it.track.title.lowercase() }
-                CollectionSort.ARTIST ->
-                    filtered.sortedBy { it.track.artists.joinToString().lowercase() }
-                CollectionSort.DURATION ->
-                    filtered.sortedByDescending { it.track.durationMs ?: Long.MIN_VALUE }
-            }
-        tracksAdapter.submitList(visibleRows)
-        updateTrackReordering(state)
     }
 
     private fun updateTrackReordering(state: ShippyCollectionDetailState) {
@@ -479,7 +547,8 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         val playlist = currentState as? ShippyCollectionDetailState.Playlist ?: return
         if (currentQuery.isNotBlank() || currentSort != CollectionSort.COLLECTION_ORDER) return
         trackOrderEditing = true
-        trackOrderStartRows = visibleRows
+        projectionJob?.cancel()
+        trackOrderStartRows = tracksAdapter.currentList.toList()
         pendingTrackOrderRows = null
         updateTrackReordering(playlist)
         updateSelectionToolbar()
@@ -493,6 +562,7 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
         if (trackOrderStartRows.isNotEmpty()) tracksAdapter.submitList(trackOrderStartRows)
         trackOrderStartRows = emptyList()
         updateSelectionToolbar()
+        updateVisibleRows()
     }
 
     private fun finishTrackOrderEditing() {
@@ -650,6 +720,8 @@ class ShippyCollectionDetailFragment : Fragment(R.layout.fragment_shippy_collect
 
     companion object {
         const val ARG_COLLECTION_ID = "collectionId"
+        private const val STATE_QUERY = "collectionQuery"
+        private const val STATE_SEARCH_EXPANDED = "collectionSearchExpanded"
         private const val COLLECTION_VIEW_PREFERENCES = "shippy_collection_view"
         private const val COLLECTION_SORT_PREFIX = "sort:"
 

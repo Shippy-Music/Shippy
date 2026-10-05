@@ -143,8 +143,9 @@ internal class R16QueueFragment : Fragment(R.layout.fragment_r16_queue) {
         renderLoading()
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onResume() {
+        super.onResume()
+        backCallback.isEnabled = true
         if (mediaBrowser != null) return
         mediaBrowser =
             MediaBrowserCompat(
@@ -156,7 +157,8 @@ internal class R16QueueFragment : Fragment(R.layout.fragment_r16_queue) {
                 .also(MediaBrowserCompat::connect)
     }
 
-    override fun onStop() {
+    override fun onPause() {
+        backCallback.isEnabled = false
         requestSerial++
         loading = false
         refreshCurrentPageWhenIdle = false
@@ -164,7 +166,7 @@ internal class R16QueueFragment : Fragment(R.layout.fragment_r16_queue) {
         mediaController = null
         mediaBrowser?.disconnect()
         mediaBrowser = null
-        super.onStop()
+        super.onPause()
     }
 
     override fun onDestroyView() {

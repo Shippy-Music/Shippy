@@ -22,6 +22,8 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import app.shippy.data.db.ShippyR16Database
+import app.shippy.data.db.dao.SYSTEM_COLLECTION_FILTER_PAGE
+import app.shippy.data.db.dao.SYSTEM_COLLECTION_FILTER_PLAYBACK
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -43,6 +45,21 @@ class R16PerformanceQueryPlanTest {
     @After
     fun tearDown() {
         database.close()
+    }
+
+    @Test
+    fun `active system substring queries restrict catalogue identity before display projection`() {
+        for (collection in listOf("LIKED", "LOCAL", "DOWNLOADS")) {
+            for (query in
+                listOf(SYSTEM_COLLECTION_FILTER_PAGE, SYSTEM_COLLECTION_FILTER_PLAYBACK)) {
+                val plan =
+                    explain(
+                        query.replace(":collectionId", "'$collection'").replace(":query", "'ack'")
+                    )
+                assertNoFullScan(plan, "r")
+                assertUsesIndex(plan, "sqlite_autoindex_recording_1")
+            }
+        }
     }
 
     @Test
